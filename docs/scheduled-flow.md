@@ -49,6 +49,9 @@ uv run prop-ev snapshot verify --snapshot-id 2026-02-11T16-44-54Z
 - Strategy outputs:
   - `data/odds_api/snapshots/<snapshot_id>/reports/strategy-report.json`
   - `data/odds_api/snapshots/<snapshot_id>/reports/strategy-report.md`
+  - `data/odds_api/snapshots/<snapshot_id>/reports/backtest-seed.jsonl`
+  - `data/odds_api/snapshots/<snapshot_id>/reports/backtest-results-template.csv`
+  - `data/odds_api/snapshots/<snapshot_id>/reports/backtest-readiness.json`
 - Playbook outputs:
   - `data/odds_api/snapshots/<snapshot_id>/reports/brief-input.json`
   - `data/odds_api/snapshots/<snapshot_id>/reports/brief-pass1.json`

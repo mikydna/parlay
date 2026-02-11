@@ -75,6 +75,15 @@ This allows free endpoints (like event listing) but makes paid endpoints cache-o
 Strategy reports are written to:
 - `data/odds_api/snapshots/<SNAPSHOT_ID>/reports/strategy-report.json`
 - `data/odds_api/snapshots/<SNAPSHOT_ID>/reports/strategy-report.md`
+- `data/odds_api/snapshots/<SNAPSHOT_ID>/reports/backtest-seed.jsonl`
+- `data/odds_api/snapshots/<SNAPSHOT_ID>/reports/backtest-results-template.csv`
+- `data/odds_api/snapshots/<SNAPSHOT_ID>/reports/backtest-readiness.json`
+
+Rebuild backtest artifacts for any snapshot:
+
+```bash
+uv run prop-ev strategy backtest-prep --snapshot-id <SNAPSHOT_ID> --selection eligible
+```
 
 Strategy context caches are written to:
 - `data/odds_api/snapshots/<SNAPSHOT_ID>/context/injuries.json`

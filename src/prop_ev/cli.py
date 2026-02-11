@@ -12,6 +12,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from prop_ev.backtest import ROW_SELECTIONS, write_backtest_artifacts
 from prop_ev.budget import current_month_utc
 from prop_ev.context_sources import (
     fetch_official_injury_links,
@@ -1131,6 +1132,12 @@ def _cmd_strategy_run(args: argparse.Namespace) -> int:
         report=report,
         top_n=args.top_n,
     )
+    backtest = write_backtest_artifacts(
+        snapshot_dir=snapshot_dir,
+        report=report,
+        selection="eligible",
+        top_n=0,
+    )
     summary = report.get("summary", {})
     health = (
         report.get("health_report", {}) if isinstance(report.get("health_report"), dict) else {}
@@ -1157,9 +1164,43 @@ def _cmd_strategy_run(args: argparse.Namespace) -> int:
     print(f"report_json={json_path}")
     print(f"report_md={md_path}")
     print(f"report_card={snapshot_dir / 'reports' / 'strategy-card.md'}")
+    print(f"backtest_seed_jsonl={backtest['seed_jsonl']}")
+    print(f"backtest_results_template_csv={backtest['results_template_csv']}")
+    print(f"backtest_readiness_json={backtest['readiness_json']}")
     print(f"identity_map={identity_summary['path']} entries={identity_summary['player_entries']}")
     print(f"injuries_context={injuries_path}")
     print(f"roster_context={roster_path}")
+    return 0
+
+
+def _cmd_strategy_backtest_prep(args: argparse.Namespace) -> int:
+    store = SnapshotStore(os.environ.get("PROP_EV_DATA_DIR", "data/odds_api"))
+    snapshot_id = args.snapshot_id or _latest_snapshot_id(store)
+    snapshot_dir = store.snapshot_dir(snapshot_id)
+    report_path = snapshot_dir / "reports" / "strategy-report.json"
+    if not report_path.exists():
+        raise CLIError(f"missing strategy report: {report_path}")
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    if not isinstance(report, dict):
+        raise CLIError(f"invalid strategy report payload: {report_path}")
+
+    result = write_backtest_artifacts(
+        snapshot_dir=snapshot_dir,
+        report=report,
+        selection=args.selection,
+        top_n=max(0, int(args.top_n)),
+    )
+    print(f"snapshot_id={snapshot_id}")
+    print(f"selection_mode={result['selection_mode']} top_n={result['top_n']}")
+    print(f"seed_rows={result['seed_rows']}")
+    print(f"backtest_seed_jsonl={result['seed_jsonl']}")
+    print(f"backtest_results_template_csv={result['results_template_csv']}")
+    print(f"backtest_readiness_json={result['readiness_json']}")
+    print(
+        "ready_for_backtest_seed={} ready_for_settlement={}".format(
+            result["ready_for_backtest_seed"], result["ready_for_settlement"]
+        )
+    )
     return 0
 
 
@@ -1864,6 +1905,16 @@ def _build_parser() -> argparse.ArgumentParser:
     strategy_run.add_argument("--offline", action="store_true")
     strategy_run.add_argument("--block-paid", action="store_true")
     strategy_run.add_argument("--refresh-context", action="store_true")
+
+    strategy_backtest_prep = strategy_subparsers.add_parser(
+        "backtest-prep", help="Write backtest seed/readiness artifacts for a snapshot"
+    )
+    strategy_backtest_prep.set_defaults(func=_cmd_strategy_backtest_prep)
+    strategy_backtest_prep.add_argument("--snapshot-id", default="")
+    strategy_backtest_prep.add_argument(
+        "--selection", choices=sorted(ROW_SELECTIONS), default="eligible"
+    )
+    strategy_backtest_prep.add_argument("--top-n", type=int, default=0)
 
     playbook = subparsers.add_parser("playbook", help="Run playbook briefs")
     playbook_subparsers = playbook.add_subparsers(dest="playbook_command")

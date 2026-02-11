@@ -107,3 +107,21 @@ def test_strategy_run_from_snapshot(local_data_dir: Path) -> None:
     )
     assert (snapshot_dir / "reports" / "strategy-report.json").exists()
     assert (snapshot_dir / "reports" / "strategy-report.md").exists()
+    assert (snapshot_dir / "reports" / "backtest-seed.jsonl").exists()
+    assert (snapshot_dir / "reports" / "backtest-readiness.json").exists()
+
+    assert (
+        main(
+            [
+                "strategy",
+                "backtest-prep",
+                "--snapshot-id",
+                snapshot_id,
+                "--selection",
+                "ranked",
+                "--top-n",
+                "1",
+            ]
+        )
+        == 0
+    )
