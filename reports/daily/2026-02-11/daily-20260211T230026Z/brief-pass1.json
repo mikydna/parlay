@@ -1,0 +1,96 @@
+{
+  "confidence_notes": [
+    "Tier A lines are preferred over Tier B by default.",
+    "Model probabilities are market-implied with injury/roster adjustments."
+  ],
+  "data_quality_flags": [
+    "Model uses market-implied fair probabilities with injury/roster/opponent adjustments.",
+    "Minutes/usage projection uses deterministic v0 rules, not learned distributions.",
+    "SGP/SGPx correlation uses deterministic haircut rules (v0)."
+  ],
+  "slate_summary": "8 games, 497 candidate lines, 329 eligible plays after gates.",
+  "top_plays_explained": [
+    {
+      "action": "LEAN",
+      "best_book": "fanduel",
+      "best_price": 102,
+      "edge_note": "Strong edge (+24.0% est.), Higher stake",
+      "ev": 0.239612,
+      "game": "IND @ BKN",
+      "kelly": 0.234914,
+      "market": "player_points",
+      "player": "Jay Huff",
+      "point": 13.5,
+      "side": "over",
+      "ticket": "Jay Huff OVER 13.5 points @ +102 (fanduel)",
+      "why": "Lean only: edge exists (EV 0.240) with non-clean injury status."
+    },
+    {
+      "action": "LEAN",
+      "best_book": "fanduel",
+      "best_price": -113,
+      "edge_note": "Strong edge (+21.8% est.), Higher stake",
+      "ev": 0.217681,
+      "game": "IND @ BKN",
+      "kelly": 0.24598,
+      "market": "player_points_rebounds_assists",
+      "player": "Kam Jones",
+      "point": 22.5,
+      "side": "over",
+      "ticket": "Kam Jones OVER 22.5 points+rebounds+assists @ -113 (fanduel)",
+      "why": "Lean only: edge exists (EV 0.218) with non-clean injury status."
+    },
+    {
+      "action": "LEAN",
+      "best_book": "draftkings",
+      "best_price": 130,
+      "edge_note": "Strong edge (+21.1% est.), Higher stake",
+      "ev": 0.211474,
+      "game": "IND @ BKN",
+      "kelly": 0.162673,
+      "market": "player_threes",
+      "player": "Kam Jones",
+      "point": 1.5,
+      "side": "over",
+      "ticket": "Kam Jones OVER 1.5 three-pointers @ +130 (draftkings)",
+      "why": "Lean only: edge exists (EV 0.211) with non-clean injury status."
+    },
+    {
+      "action": "LEAN",
+      "best_book": "fanduel",
+      "best_price": -104,
+      "edge_note": "Strong edge (+21.0% est.), Higher stake",
+      "ev": 0.209681,
+      "game": "WAS @ CLE",
+      "kelly": 0.218068,
+      "market": "player_points_rebounds_assists",
+      "player": "Jarrett Allen",
+      "point": 28.5,
+      "side": "over",
+      "ticket": "Jarrett Allen OVER 28.5 points+rebounds+assists @ -104 (fanduel)",
+      "why": "Lean only: edge exists (EV 0.210) with non-clean injury status."
+    },
+    {
+      "action": "LEAN",
+      "best_book": "fanduel",
+      "best_price": -104,
+      "edge_note": "Strong edge (+20.9% est.), Higher stake",
+      "ev": 0.20878,
+      "game": "IND @ BKN",
+      "kelly": 0.217131,
+      "market": "player_points",
+      "player": "Kam Jones",
+      "point": 13.5,
+      "side": "over",
+      "ticket": "Kam Jones OVER 13.5 points @ -104 (fanduel)",
+      "why": "Lean only: edge exists (EV 0.209) with non-clean injury status."
+    }
+  ],
+  "watchouts": [
+    "Carlton Carrington player_rebounds 2.5 (roster_gate)",
+    "Derrick Jones player_rebounds 2.5 (roster_gate)",
+    "Derrick Jones player_points 7.5 (roster_gate)",
+    "Jarace Walker player_rebounds 5.5 (injury_gate)",
+    "Derrick Jones player_points_rebounds_assists 12.5 (roster_gate)"
+  ]
+}
