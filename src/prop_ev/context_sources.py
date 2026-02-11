@@ -6,11 +6,14 @@ import hashlib
 import html
 import json
 import re
+import subprocess
+import tempfile
 import unicodedata
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 from urllib.parse import urljoin
+from zoneinfo import ZoneInfo
 
 import httpx
 
@@ -102,6 +105,63 @@ TEAM_NAME_ALIASES = {
     "washington": "washington wizards",
     "was": "washington wizards",
 }
+OFFICIAL_STATUS_TOKENS = {
+    "out",
+    "doubtful",
+    "questionable",
+    "probable",
+    "available",
+}
+OFFICIAL_TEAM_LABELS = {
+    "atlanta hawks",
+    "boston celtics",
+    "brooklyn nets",
+    "charlotte hornets",
+    "chicago bulls",
+    "cleveland cavaliers",
+    "dallas mavericks",
+    "denver nuggets",
+    "detroit pistons",
+    "golden state warriors",
+    "houston rockets",
+    "indiana pacers",
+    "los angeles clippers",
+    "los angeles lakers",
+    "memphis grizzlies",
+    "miami heat",
+    "milwaukee bucks",
+    "minnesota timberwolves",
+    "new orleans pelicans",
+    "new york knicks",
+    "oklahoma city thunder",
+    "orlando magic",
+    "philadelphia 76ers",
+    "phoenix suns",
+    "portland trail blazers",
+    "sacramento kings",
+    "san antonio spurs",
+    "toronto raptors",
+    "utah jazz",
+    "washington wizards",
+}
+OFFICIAL_HEADER_COLUMNS = {
+    "game date",
+    "game time",
+    "matchup",
+    "team",
+    "player name",
+    "current status",
+    "reason",
+}
+_DATE_LINE_RE = re.compile(r"^\d{2}/\d{2}/\d{4}$")
+_TIME_LINE_RE = re.compile(r"^\d{1,2}:\d{2}\s+\(ET\)$")
+_MATCHUP_LINE_RE = re.compile(r"^[A-Z]{2,4}@[A-Z]{2,4}$")
+_PLAYER_LINE_RE = re.compile(r"^[A-Za-z0-9'.\- ]+,\s*[A-Za-z0-9'.\- ]+$")
+_OFFICIAL_REPORT_URL_RE = re.compile(
+    r"(?P<date>\d{4}-\d{2}-\d{2})[_-](?P<hour>\d{1,2})(?:[-_:]?(?P<minute>\d{2}))?(?P<ampm>AM|PM)",
+    flags=re.IGNORECASE,
+)
+OFFICIAL_ET_ZONE = ZoneInfo("America/New_York")
 
 
 def now_utc() -> str:
@@ -138,17 +198,224 @@ def _parse_injury_status(note: str) -> str:
     value = note.lower().replace("-", " ")
     if "out for season" in value:
         return "out_for_season"
+    if "available" in value:
+        return "available"
     if re.search(r"\bout\b", value):
         return "out"
     if "doubtful" in value:
         return "doubtful"
     if "questionable" in value:
         return "questionable"
+    if "game time decision" in value:
+        return "questionable"
     if "probable" in value:
         return "probable"
     if "day to day" in value:
         return "day_to_day"
     return "unknown"
+
+
+def _official_pdf_sort_key(pdf_url: str) -> tuple[int, int, int, int, int, str]:
+    match = _OFFICIAL_REPORT_URL_RE.search(pdf_url)
+    if match is None:
+        return (0, 0, 0, 0, 0, pdf_url)
+    try:
+        year, month, day = [int(value) for value in match.group("date").split("-")]
+        hour = int(match.group("hour"))
+        minute = int(match.group("minute") or "0")
+    except ValueError:
+        return (0, 0, 0, 0, 0, pdf_url)
+    ampm = match.group("ampm").upper()
+    if hour == 12:
+        hour = 0
+    if ampm == "PM":
+        hour += 12
+    return (year, month, day, hour, minute, pdf_url)
+
+
+def _official_player_display_name(raw: str) -> str:
+    if "," not in raw:
+        return raw.strip()
+    last, first = [piece.strip() for piece in raw.split(",", 1)]
+    if not first or not last:
+        return raw.strip()
+    return f"{first} {last}".strip()
+
+
+def _is_official_header_line(token: str) -> bool:
+    lowered = token.strip().lower()
+    if not lowered:
+        return True
+    if lowered in OFFICIAL_HEADER_COLUMNS:
+        return True
+    if lowered.startswith("injury report:"):
+        return True
+    if lowered.startswith("page ") and " of " in lowered:
+        return True
+    if _DATE_LINE_RE.match(token):
+        return True
+    if _TIME_LINE_RE.match(token):
+        return True
+    return bool(_MATCHUP_LINE_RE.match(token))
+
+
+def _is_official_team_line(token: str) -> bool:
+    return canonical_team_name(token) in OFFICIAL_TEAM_LABELS
+
+
+def _is_official_player_line(token: str) -> bool:
+    return _PLAYER_LINE_RE.match(token) is not None
+
+
+def _extract_official_pdf_text(pdf_bytes: bytes) -> str:
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        pdf_path = Path(tmp_dir) / "official.pdf"
+        pdf_path.write_bytes(pdf_bytes)
+        proc = subprocess.run(
+            ["pdftotext", "-enc", "UTF-8", str(pdf_path), "-"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    if proc.returncode != 0:
+        stderr = proc.stderr.strip() or f"pdftotext failed with code {proc.returncode}"
+        raise RuntimeError(stderr)
+    return proc.stdout.replace("\x0c", "\n")
+
+
+def _parse_report_generated_at(text: str) -> str:
+    match = re.search(
+        r"Injury Report:\s*(\d{2})/(\d{2})/(\d{2,4})\s+(\d{1,2}):(\d{2})\s*(AM|PM)",
+        text,
+        flags=re.IGNORECASE,
+    )
+    if match is None:
+        return ""
+    month, day, year, hour, minute, ampm = match.groups()
+    try:
+        month_num = int(month)
+        day_num = int(day)
+        year_num = int(year)
+        hour_num = int(hour)
+        minute_num = int(minute)
+    except ValueError:
+        return ""
+    if year_num < 100:
+        year_num += 2000
+    if hour_num == 12:
+        hour_num = 0
+    if ampm.upper() == "PM":
+        hour_num += 12
+    try:
+        parsed = datetime(
+            year_num,
+            month_num,
+            day_num,
+            hour_num,
+            minute_num,
+            tzinfo=OFFICIAL_ET_ZONE,
+        )
+    except ValueError:
+        return ""
+    return parsed.astimezone(UTC).isoformat().replace("+00:00", "Z")
+
+
+def _parse_official_injury_text(text: str) -> dict[str, Any]:
+    tokens = [line.strip() for line in text.splitlines() if line.strip()]
+    rows: list[dict[str, Any]] = []
+    current_team = ""
+    pending_player = ""
+    pending_status = ""
+    pending_note_parts: list[str] = []
+    status_tokens = 0
+    orphan_status_tokens = 0
+    skipped_players = 0
+
+    def _flush_pending() -> None:
+        nonlocal pending_player, pending_status, pending_note_parts
+        if not pending_player or not pending_status:
+            pending_player = ""
+            pending_status = ""
+            pending_note_parts = []
+            return
+        player_display = _official_player_display_name(pending_player)
+        team_display = current_team
+        row = {
+            "player": player_display,
+            "player_official": pending_player,
+            "player_norm": normalize_person_name(player_display),
+            "team": team_display,
+            "team_norm": canonical_team_name(team_display),
+            "date_update": "",
+            "status_raw": pending_status,
+            "status": _parse_injury_status(pending_status),
+            "note": " ".join(pending_note_parts).strip(),
+            "source": "official_nba_pdf",
+        }
+        if row["player_norm"]:
+            rows.append(row)
+        pending_player = ""
+        pending_status = ""
+        pending_note_parts = []
+
+    for token in tokens:
+        normalized = token.strip()
+        lowered = normalized.lower()
+        if _is_official_header_line(normalized):
+            _flush_pending()
+            continue
+        if lowered == "not yet submitted":
+            _flush_pending()
+            continue
+        if _is_official_team_line(normalized):
+            _flush_pending()
+            current_team = normalized
+            continue
+        if lowered in OFFICIAL_STATUS_TOKENS:
+            if pending_player:
+                pending_status = normalized
+                status_tokens += 1
+            else:
+                orphan_status_tokens += 1
+            continue
+        if _is_official_player_line(normalized):
+            if pending_player and pending_status:
+                _flush_pending()
+            elif pending_player and not pending_status:
+                skipped_players += 1
+            pending_player = normalized
+            pending_status = ""
+            pending_note_parts = []
+            continue
+        if pending_player and pending_status:
+            pending_note_parts.append(normalized)
+
+    _flush_pending()
+    coverage = 0.0
+    if status_tokens > 0:
+        coverage = round(len(rows) / float(status_tokens), 4)
+    parse_status = "ok" if rows else "error"
+    parse_error = ""
+    if parse_status == "error":
+        parse_error = "no structured rows parsed from official PDF"
+    return {
+        "parse_status": parse_status,
+        "parse_error": parse_error,
+        "rows": rows,
+        "rows_count": len(rows),
+        "parse_coverage": coverage,
+        "parse_status_tokens": status_tokens,
+        "parse_orphan_status_tokens": orphan_status_tokens,
+        "parse_skipped_players": skipped_players,
+        "report_generated_at_utc": _parse_report_generated_at(text),
+    }
+
+
+def _parse_official_injury_pdf(pdf_bytes: bytes) -> dict[str, Any]:
+    text = _extract_official_pdf_text(pdf_bytes)
+    parsed = _parse_official_injury_text(text)
+    parsed["parse_extractor"] = "pdftotext"
+    return parsed
 
 
 def _extract_official_injury_pdfs(html_text: str, base_url: str) -> list[str]:
@@ -217,37 +484,70 @@ def fetch_official_injury_links(*, pdf_cache_dir: Path | None = None) -> dict[st
                 payload["error"] = "no injury-report PDFs found"
                 payload["pdf_links"] = []
                 payload["count"] = 0
+                payload["rows"] = []
+                payload["rows_count"] = 0
+                payload["parse_status"] = "error"
+                payload["parse_error"] = "no injury-report PDFs found"
                 last_error = payload["error"]
                 continue
             payload["status"] = "ok"
             payload["pdf_links"] = pdf_links
             payload["count"] = len(pdf_links)
-            payload["pdf_download_status"] = "skipped"
+            payload["selected_pdf_url"] = max(pdf_links, key=_official_pdf_sort_key)
+            payload["pdf_download_status"] = "error"
             payload["pdf_download_url"] = ""
             payload["pdf_cached_path"] = ""
             payload["pdf_latest_path"] = ""
             payload["pdf_sha256"] = ""
             payload["pdf_size_bytes"] = 0
             payload["pdf_cached_at_utc"] = ""
-            if pdf_cache_dir is not None:
-                errors: list[str] = []
-                for pdf_url in pdf_links:
-                    try:
-                        pdf_response = _http_get(pdf_url, timeout_s=20.0)
-                    except Exception as exc:  # pragma: no cover - network branch
-                        errors.append(f"{pdf_url}:{exc}")
-                        continue
-                    content = pdf_response.content
-                    if not content:
-                        errors.append(f"{pdf_url}:empty_pdf_content")
-                        continue
+            payload["rows"] = []
+            payload["rows_count"] = 0
+            payload["parse_status"] = "error"
+            payload["parse_error"] = "official PDF not downloaded"
+            payload["parse_coverage"] = 0.0
+            payload["parse_status_tokens"] = 0
+            payload["parse_orphan_status_tokens"] = 0
+            payload["parse_skipped_players"] = 0
+            payload["report_generated_at_utc"] = ""
+            payload["parse_extractor"] = "pdftotext"
+
+            errors: list[str] = []
+            ranked_links = sorted(pdf_links, key=_official_pdf_sort_key, reverse=True)
+            for pdf_url in ranked_links:
+                try:
+                    pdf_response = _http_get(pdf_url, timeout_s=20.0)
+                except Exception as exc:  # pragma: no cover - network branch
+                    errors.append(f"{pdf_url}:{exc}")
+                    continue
+                content = pdf_response.content
+                if not content:
+                    errors.append(f"{pdf_url}:empty_pdf_content")
+                    continue
+                try:
+                    parsed = _parse_official_injury_pdf(content)
+                except Exception as exc:  # pragma: no cover - external binary branch
+                    errors.append(f"{pdf_url}:parse_error:{exc}")
+                    continue
+                payload["selected_pdf_url"] = pdf_url
+                payload["pdf_download_status"] = "ok"
+                payload["pdf_download_url"] = pdf_url
+                if pdf_cache_dir is not None:
                     payload.update(
                         _cache_pdf(content, pdf_cache_dir=pdf_cache_dir, source_url=pdf_url)
                     )
-                    payload["pdf_download_errors"] = errors
-                    return payload
-                payload["pdf_download_status"] = "error"
+                payload.update(parsed)
                 payload["pdf_download_errors"] = errors
+                if str(payload.get("parse_status", "error")) == "ok":
+                    return payload
+                errors.append(
+                    f"{pdf_url}:parse_status:{payload.get('parse_status', 'error')}:"
+                    f"{payload.get('parse_error', '')}"
+                )
+
+            payload["status"] = "error"
+            payload["error"] = "official injury PDF download/parse failed"
+            payload["pdf_download_errors"] = errors
             return payload
         except Exception as exc:
             last_error = str(exc)
@@ -255,6 +555,10 @@ def fetch_official_injury_links(*, pdf_cache_dir: Path | None = None) -> dict[st
             payload["error"] = last_error
             payload["pdf_links"] = []
             payload["count"] = 0
+            payload["rows"] = []
+            payload["rows_count"] = 0
+            payload["parse_status"] = "error"
+            payload["parse_error"] = last_error
 
     return {
         "source": "official_nba",
@@ -266,6 +570,7 @@ def fetch_official_injury_links(*, pdf_cache_dir: Path | None = None) -> dict[st
         "error": last_error or "official injury report unavailable",
         "pdf_links": [],
         "count": 0,
+        "selected_pdf_url": "",
         "pdf_download_status": "error",
         "pdf_download_url": "",
         "pdf_cached_path": "",
@@ -273,6 +578,16 @@ def fetch_official_injury_links(*, pdf_cache_dir: Path | None = None) -> dict[st
         "pdf_sha256": "",
         "pdf_size_bytes": 0,
         "pdf_cached_at_utc": "",
+        "rows": [],
+        "rows_count": 0,
+        "parse_status": "error",
+        "parse_error": last_error or "official injury report unavailable",
+        "parse_coverage": 0.0,
+        "parse_status_tokens": 0,
+        "parse_orphan_status_tokens": 0,
+        "parse_skipped_players": 0,
+        "report_generated_at_utc": "",
+        "parse_extractor": "pdftotext",
     }
 
 

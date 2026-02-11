@@ -693,6 +693,31 @@ def _teams_in_scope_from_events(events: list[dict[str, Any]]) -> set[str]:
     return teams
 
 
+def _official_rows_count(official: dict[str, Any]) -> int:
+    rows = official.get("rows", [])
+    rows_count = len(rows) if isinstance(rows, list) else 0
+    raw_count = official.get("rows_count", rows_count)
+    if isinstance(raw_count, bool):
+        return rows_count
+    if isinstance(raw_count, (int, float)):
+        return max(0, int(raw_count))
+    if isinstance(raw_count, str):
+        try:
+            return max(0, int(raw_count.strip()))
+        except ValueError:
+            return rows_count
+    return rows_count
+
+
+def _official_source_ready(official: dict[str, Any]) -> bool:
+    if str(official.get("status", "")) != "ok":
+        return False
+    if _official_rows_count(official) <= 0:
+        return False
+    parse_status = str(official.get("parse_status", ""))
+    return parse_status in {"", "ok"}
+
+
 def _preflight_context_for_snapshot(
     *,
     store: SnapshotStore,
@@ -740,9 +765,8 @@ def _preflight_context_for_snapshot(
 
     official = injuries.get("official", {}) if isinstance(injuries, dict) else {}
     health_gates: list[str] = []
-    if require_official_injuries and not (
-        isinstance(official, dict) and official.get("status") == "ok"
-    ):
+    official_ready = _official_source_ready(official) if isinstance(official, dict) else False
+    if require_official_injuries and not official_ready:
         health_gates.append("official_injury_missing")
     injuries_stale = bool(injuries.get("stale", False)) if isinstance(injuries, dict) else True
     roster_stale = bool(roster.get("stale", False)) if isinstance(roster, dict) else True
@@ -934,16 +958,32 @@ def _cmd_strategy_health(args: argparse.Namespace) -> int:
     roster_fallback = _coerce_dict(roster_details.get("fallback"))
     roster_fallback_used = bool(roster_fallback)
     roster_fallback_ok = str(roster_fallback.get("status", "")) == "ok"
+    fallback_count_teams = int(roster_fallback.get("count_teams", 0) or 0)
+    fallback_covers_missing = (
+        roster_fallback_used
+        and roster_fallback_ok
+        and fallback_count_teams >= len(missing_roster_teams)
+    )
+    official_rows_count = _official_rows_count(official)
+    official_parse_status = str(official.get("parse_status", ""))
+    official_parse_coverage_raw = official.get("parse_coverage", 0.0)
+    if isinstance(official_parse_coverage_raw, (int, float)):
+        official_parse_coverage = float(official_parse_coverage_raw)
+    elif isinstance(official_parse_coverage_raw, str):
+        try:
+            official_parse_coverage = float(official_parse_coverage_raw.strip())
+        except ValueError:
+            official_parse_coverage = 0.0
+    else:
+        official_parse_coverage = 0.0
 
     injury_check_pass = (
-        str(official.get("status", "")) == "ok"
-        and int(official.get("count", 0)) > 0
-        and len(_coerce_list(official.get("pdf_links"))) > 0
+        _official_source_ready(official) and len(_coerce_list(official.get("pdf_links"))) > 0
     )
     roster_check_pass = (
         str(roster_details.get("status", "")) == "ok"
         and int(roster_details.get("count_teams", 0)) > 0
-        and not missing_roster_teams
+        and (not missing_roster_teams or fallback_covers_missing)
     )
     mapping_check_pass = (
         len(missing_event_mappings) == 0
@@ -991,6 +1031,9 @@ def _cmd_strategy_health(args: argparse.Namespace) -> int:
             "status": str(official.get("status", "missing")),
             "count": int(official.get("count", 0)),
             "pdf_links": len(_coerce_list(official.get("pdf_links"))),
+            "rows_count": official_rows_count,
+            "parse_status": official_parse_status,
+            "parse_coverage": official_parse_coverage,
         },
         "roster": {
             "pass": roster_check_pass,
@@ -999,6 +1042,7 @@ def _cmd_strategy_health(args: argparse.Namespace) -> int:
             "missing_roster_teams": missing_roster_teams,
             "fallback_used": roster_fallback_used,
             "fallback_status": str(roster_fallback.get("status", "")) if roster_fallback else "",
+            "fallback_covers_missing": fallback_covers_missing,
         },
         "event_mapping": {
             "pass": mapping_check_pass,
@@ -1031,7 +1075,12 @@ def _cmd_strategy_health(args: argparse.Namespace) -> int:
             "fetched_at_utc": str(official.get("fetched_at_utc", "")),
             "stale": bool(injuries.get("stale", False)) if isinstance(injuries, dict) else True,
             "pdf_download_status": str(official.get("pdf_download_status", "")),
+            "selected_pdf_url": str(official.get("selected_pdf_url", "")),
             "count": int(official.get("count", 0)),
+            "rows_count": official_rows_count,
+            "parse_status": official_parse_status,
+            "parse_coverage": official_parse_coverage,
+            "report_generated_at_utc": str(official.get("report_generated_at_utc", "")),
         },
         "roster": {
             "source": str(roster_details.get("source", "")),
@@ -1047,6 +1096,7 @@ def _cmd_strategy_health(args: argparse.Namespace) -> int:
                 "count_teams": (
                     int(roster_fallback.get("count_teams", 0)) if roster_fallback_ok else 0
                 ),
+                "covers_missing": fallback_covers_missing,
             },
         },
         "mapping": {

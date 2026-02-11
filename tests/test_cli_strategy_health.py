@@ -19,6 +19,8 @@ def _seed_snapshot(
     with_event_context: bool,
     injuries_fetched_at: str,
     roster_fetched_at: str,
+    missing_roster_teams: list[str] | None = None,
+    roster_fallback: dict[str, object] | None = None,
 ) -> Path:
     snapshot_dir = store.ensure_snapshot(snapshot_id)
     now_utc = _iso(datetime.now(UTC))
@@ -91,6 +93,21 @@ def _seed_snapshot(
             "fetched_at_utc": injuries_fetched_at,
             "pdf_links": ["https://example.com/injury.pdf"],
             "pdf_download_status": "ok",
+            "selected_pdf_url": "https://example.com/injury.pdf",
+            "parse_status": "ok",
+            "parse_coverage": 1.0,
+            "rows_count": 1,
+            "rows": [
+                {
+                    "player": "Someone Else",
+                    "player_norm": "someoneelse",
+                    "team": "Boston Celtics",
+                    "team_norm": "boston celtics",
+                    "status": "out",
+                    "note": "Injury/Illness - Knee",
+                    "source": "official_nba_pdf",
+                }
+            ],
         },
         "secondary": {"status": "ok", "rows": [], "count": 0},
     }
@@ -100,12 +117,14 @@ def _seed_snapshot(
         "status": "ok",
         "fetched_at_utc": roster_fetched_at,
         "count_teams": 2,
-        "missing_roster_teams": [],
+        "missing_roster_teams": missing_roster_teams or [],
         "teams": {
             "boston celtics": {"active": ["playera"], "inactive": [], "all": ["playera"]},
             "miami heat": {"active": [], "inactive": [], "all": []},
         },
     }
+    if roster_fallback:
+        roster_payload["fallback"] = roster_fallback
     (context_dir / "injuries.json").write_text(
         json.dumps(injuries_payload, sort_keys=True, indent=2) + "\n", encoding="utf-8"
     )
@@ -194,3 +213,35 @@ def test_strategy_health_degraded_when_context_is_stale(
     assert payload["exit_code"] == 1
     assert payload["counts"]["stale_inputs"] >= 2
     assert "stale_inputs" in payload["gates"]
+
+
+def test_strategy_health_degraded_when_roster_fallback_covers_scope(
+    local_data_dir: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    store = SnapshotStore(local_data_dir)
+    snapshot_id = "2026-02-11T10-50-00Z"
+    now_utc = _iso(datetime.now(UTC))
+    _seed_snapshot(
+        store=store,
+        snapshot_id=snapshot_id,
+        with_event_context=True,
+        injuries_fetched_at=now_utc,
+        roster_fetched_at=now_utc,
+        missing_roster_teams=["boston celtics", "miami heat"],
+        roster_fallback={
+            "source": "espn_team_rosters",
+            "status": "ok",
+            "count_teams": 2,
+            "fetched_at_utc": now_utc,
+        },
+    )
+
+    code = main(["strategy", "health", "--snapshot-id", snapshot_id, "--offline"])
+    payload = json.loads(capsys.readouterr().out)
+
+    assert code == 1
+    assert payload["status"] == "degraded"
+    assert payload["checks"]["roster"]["pass"] is True
+    assert payload["checks"]["roster"]["fallback_covers_missing"] is True
+    assert "roster_source_failed" not in payload["gates"]
+    assert "roster_fallback_used" in payload["gates"]

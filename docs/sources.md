@@ -12,7 +12,8 @@
 - A healthy official injury source requires:
   - official page fetch succeeds,
   - injury-report PDF link extraction is non-empty,
-  - cached metadata is valid.
+  - latest official PDF download succeeds,
+  - structured injury parse is non-empty (`rows_count > 0`, `parse_status = ok`).
 - Secondary injury feeds are fallbacks only and must be labeled as fallback provenance.
 - LLM/web search output is never an authoritative injury status source.
 
