@@ -1,0 +1,64 @@
+{
+  "brief_input_path": "data/odds_api/snapshots/daily-2026-02-11T20-24-42Z/reports/brief-input.json",
+  "brief_markdown_path": "data/odds_api/snapshots/daily-2026-02-11T20-24-42Z/reports/strategy-brief.md",
+  "brief_pass1_path": "data/odds_api/snapshots/daily-2026-02-11T20-24-42Z/reports/brief-pass1.json",
+  "brief_pdf_path": "data/odds_api/snapshots/daily-2026-02-11T20-24-42Z/reports/strategy-brief.pdf",
+  "brief_tex_path": "data/odds_api/snapshots/daily-2026-02-11T20-24-42Z/reports/strategy-brief.tex",
+  "generated_at_utc": "2026-02-11T20:26:15Z",
+  "latest": {
+    "latest.json": "data/odds_api/reports/latest/latest.json",
+    "strategy-brief.md": "data/odds_api/reports/latest/strategy-brief.md",
+    "strategy-brief.pdf": "data/odds_api/reports/latest/strategy-brief.pdf",
+    "strategy-brief.tex": "data/odds_api/reports/latest/strategy-brief.tex"
+  },
+  "llm": {
+    "budget": {
+      "cap_reached": false,
+      "cap_usd": 5.0,
+      "month": "2026-02",
+      "remaining_usd": 4.99204,
+      "request_count": 6,
+      "total_input_tokens": 17436,
+      "total_output_tokens": 3600,
+      "usage_path": "data/odds_api/llm_usage/usage-2026-02.jsonl",
+      "used_usd": 0.00796
+    },
+    "pass1": {
+      "attempts": 3,
+      "errors": [
+        "attempt_1:empty response text for task=playbook_pass1",
+        "attempt_2:empty response text for task=playbook_pass1",
+        "attempt_3:empty response text for task=playbook_pass1"
+      ],
+      "reason": "attempt_3:empty response text for task=playbook_pass1",
+      "status": "fallback"
+    },
+    "pass2": {
+      "attempts": 2,
+      "errors": [
+        "attempt_1:openai request transport error: The read operation timed out",
+        "attempt_2:empty response text for task=playbook_pass2"
+      ],
+      "reason": "attempt_2:empty response text for task=playbook_pass2",
+      "status": "fallback"
+    }
+  },
+  "model": "gpt-5-mini",
+  "odds_budget": {
+    "cap_credits": 450,
+    "cap_reached": false,
+    "month": "2026-02",
+    "provider_remaining": "209",
+    "remaining_credits": 160,
+    "usage_path": "data/odds_api/usage/usage-2026-02.jsonl",
+    "used_credits": 290
+  },
+  "pdf": {
+    "message": "pdf generated",
+    "pdf_path": "data/odds_api/snapshots/daily-2026-02-11T20-24-42Z/reports/strategy-brief.pdf",
+    "returncode": 0,
+    "status": "ok"
+  },
+  "schema_version": 1,
+  "snapshot_id": "daily-2026-02-11T20-24-42Z"
+}
