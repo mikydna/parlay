@@ -1,0 +1,22 @@
+[project]
+name = "nba-prop-ev"
+version = "0.1.0"
+description = "NBA props expected-value pipeline scaffolding"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = []
+
+[project.scripts]
+prop-ev = "prop_ev.cli:main"
+
+[build-system]
+requires = ["hatchling>=1.27.0"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/prop_ev"]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.2",
+]
