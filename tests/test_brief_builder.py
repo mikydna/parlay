@@ -2,6 +2,7 @@ from prop_ev.brief_builder import (
     build_brief_input,
     default_pass1,
     enforce_readability_labels,
+    enforce_snapshot_mode_labels,
     move_disclosures_to_end,
     normalize_pass2_markdown,
     render_fallback_markdown,
@@ -203,3 +204,24 @@ def test_move_disclosures_to_end_avoids_double_trailing_pagebreak() -> None:
     moved = move_disclosures_to_end(markdown)
     assert "<!-- pagebreak -->\n\n## Data Quality" in moved
     assert "<!-- pagebreak -->\n\n\n## Data Quality" not in moved
+
+
+def test_enforce_snapshot_mode_labels() -> None:
+    markdown = (
+        "# Strategy Brief\n\n"
+        "## Snapshot\n\n"
+        "- snapshot_id: `abc`\n"
+        "- generated_at_utc: `2026-02-11T00:00:00Z`\n"
+        "- source: `deterministic`\n\n"
+        "## What The Bet Is\n"
+    )
+    labeled = enforce_snapshot_mode_labels(
+        markdown,
+        llm_pass1_status="fallback",
+        llm_pass2_status="fallback",
+    )
+    assert "- source_data: `snapshot_inputs`" in labeled
+    assert "- scoring: `deterministic`" in labeled
+    assert "- narrative: `deterministic_fallback`" in labeled
+    assert "- llm_pass1_status: `fallback`" in labeled
+    assert "- llm_pass2_status: `fallback`" in labeled

@@ -1053,6 +1053,61 @@ def move_disclosures_to_end(markdown: str) -> str:
     return "\n".join(out).rstrip() + "\n"
 
 
+def enforce_snapshot_mode_labels(
+    markdown: str, *, llm_pass1_status: str, llm_pass2_status: str
+) -> str:
+    """Clarify source/scoring/narrative modes inside Snapshot section."""
+    lines = markdown.splitlines()
+    snapshot_idx: int | None = None
+    for idx, line in enumerate(lines):
+        if line.strip() == "## Snapshot":
+            snapshot_idx = idx
+            break
+    if snapshot_idx is None:
+        return markdown.rstrip() + "\n"
+
+    section_end = len(lines)
+    for idx in range(snapshot_idx + 1, len(lines)):
+        if lines[idx].strip().startswith("## "):
+            section_end = idx
+            break
+
+    section = lines[snapshot_idx + 1 : section_end]
+    filtered: list[str] = []
+    for row in section:
+        stripped = row.strip()
+        if stripped.startswith("- source:"):
+            continue
+        if stripped.startswith("- scoring:"):
+            continue
+        if stripped.startswith("- narrative:"):
+            continue
+        filtered.append(row)
+
+    narrative_mode = "llm" if llm_pass2_status == "ok" else "deterministic_fallback"
+    source_lines = [
+        "- source_data: `snapshot_inputs`",
+        "- scoring: `deterministic`",
+        f"- narrative: `{narrative_mode}`",
+    ]
+    if llm_pass1_status and llm_pass1_status != "ok":
+        source_lines.append(f"- llm_pass1_status: `{llm_pass1_status}`")
+    if llm_pass2_status and llm_pass2_status != "ok":
+        source_lines.append(f"- llm_pass2_status: `{llm_pass2_status}`")
+
+    insert_at = 0
+    for idx, row in enumerate(filtered):
+        stripped = row.strip()
+        if stripped.startswith("- snapshot_id:") or stripped.startswith("- generated_at_utc:"):
+            insert_at = idx + 1
+    new_section = filtered[:insert_at] + source_lines + filtered[insert_at:]
+    while len(new_section) >= 2 and not new_section[-1].strip() and not new_section[-2].strip():
+        new_section.pop()
+
+    merged = lines[: snapshot_idx + 1] + new_section + lines[section_end:]
+    return "\n".join(merged).rstrip() + "\n"
+
+
 def normalize_pass2_markdown(pass2_text: str, fallback_markdown: str) -> str:
     """Accept pass2 markdown only if required headings exist."""
     text = pass2_text.strip()

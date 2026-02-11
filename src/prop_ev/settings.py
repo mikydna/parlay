@@ -30,6 +30,7 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("OPENAI_API_KEY", "PROP_EV_OPENAI_API_KEY"),
     )
     openai_model: str = "gpt-5-mini"
+    openai_timeout_s: float = 60.0
     llm_monthly_cap_usd: float = 5.0
     openai_key_file_candidates: str = "OPENAI_KEY,OPENAI_KEY.ignore"
     playbook_live_window_pre_tip_h: int = 3

@@ -4,7 +4,7 @@ from pathlib import Path
 import httpx
 import pytest
 
-from prop_ev.llm_client import LLMClient, LLMClientError, _default_post
+from prop_ev.llm_client import LLMClient, LLMClientError, LLMResponseFormatError, _default_post
 from prop_ev.settings import Settings
 
 
@@ -120,3 +120,37 @@ def test_gpt5_payload_omits_temperature(tmp_path: Path, monkeypatch: pytest.Monk
     payload = captured["payload"]
     assert payload["model"] == "gpt-5-mini"
     assert "temperature" not in payload
+    assert payload.get("reasoning") == {"effort": "minimal"}
+
+
+def test_incomplete_response_raises_clear_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("ODDS_API_KEY", "odds-test")
+    monkeypatch.setenv("OPENAI_API_KEY", "openai-test")
+    settings = Settings(_env_file=None)
+
+    def fake_post(url: str, headers: dict[str, str], payload: dict, timeout: float) -> dict:
+        del url, headers, payload, timeout
+        return {
+            "id": "resp_test",
+            "status": "incomplete",
+            "incomplete_details": {"reason": "max_output_tokens"},
+            "output": [{"type": "reasoning", "summary": []}],
+            "usage": {"input_tokens": 1, "output_tokens": 1},
+        }
+
+    client = LLMClient(settings=settings, data_root=tmp_path / "data", post_fn=fake_post)
+    with pytest.raises(LLMResponseFormatError, match="status=incomplete"):
+        client.cached_completion(
+            task="playbook_pass1",
+            prompt_version="v1",
+            prompt="hello",
+            payload={"x": 1},
+            snapshot_id="snap-1",
+            model="gpt-5-mini",
+            max_output_tokens=120,
+            temperature=0.1,
+            refresh=True,
+            offline=False,
+        )

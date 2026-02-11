@@ -15,6 +15,7 @@ from prop_ev.brief_builder import (
     build_pass2_prompt,
     default_pass1,
     enforce_readability_labels,
+    enforce_snapshot_mode_labels,
     extract_json_object,
     move_disclosures_to_end,
     normalize_pass2_markdown,
@@ -351,6 +352,11 @@ def generate_brief_for_snapshot(
     markdown = enforce_readability_labels(markdown, top_n=top_n)
     markdown = append_game_cards_section(markdown, brief_input=brief_input)
     markdown = move_disclosures_to_end(markdown)
+    markdown = enforce_snapshot_mode_labels(
+        markdown,
+        llm_pass1_status=str(pass1_meta.get("status", "")),
+        llm_pass2_status=str(pass2_meta.get("status", "")),
+    )
     markdown_path = reports_dir / "strategy-brief.md"
     markdown_path.write_text(markdown, encoding="utf-8")
 

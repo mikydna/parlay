@@ -16,6 +16,7 @@ def test_settings_load_with_odds_api_key(monkeypatch: pytest.MonkeyPatch) -> Non
     assert settings.odds_api_timeout_s == 10.0
     assert settings.odds_api_sport_key == "basketball_nba"
     assert settings.openai_model == "gpt-5-mini"
+    assert settings.openai_timeout_s == 60.0
     assert settings.llm_monthly_cap_usd == 5.0
     assert settings.odds_monthly_cap_credits == 450
     assert settings.strategy_require_official_injuries is True

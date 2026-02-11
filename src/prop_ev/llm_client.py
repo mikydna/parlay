@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import time
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
@@ -145,22 +146,42 @@ def _estimate_cost_usd(input_tokens: int, output_tokens: int) -> float:
 def _default_post(
     url: str, headers: dict[str, str], payload: dict[str, Any], timeout: float
 ) -> dict[str, Any]:
-    try:
-        response = httpx.post(url, headers=headers, json=payload, timeout=timeout)
-        response.raise_for_status()
-    except httpx.HTTPStatusError as exc:
-        detail = exc.response.text.strip()
-        snippet = detail[-400:] if detail else ""
-        raise LLMClientError(
-            f"openai request failed: status={exc.response.status_code} detail={snippet}"
-        ) from exc
-    except httpx.HTTPError as exc:
-        raise LLMClientError(f"openai request transport error: {exc}") from exc
+    attempts = 3
+    for attempt in range(1, attempts + 1):
+        try:
+            response = httpx.post(url, headers=headers, json=payload, timeout=timeout)
+            response.raise_for_status()
+            data = response.json()
+            if not isinstance(data, dict):
+                raise LLMClientError("unexpected OpenAI response payload")
+            return data
+        except httpx.HTTPStatusError as exc:
+            status = exc.response.status_code
+            if status in {429, 500, 502, 503, 504} and attempt < attempts:
+                time.sleep(0.7 * attempt)
+                continue
+            detail = exc.response.text.strip()
+            snippet = detail[-400:] if detail else ""
+            raise LLMClientError(
+                f"openai request failed: status={exc.response.status_code} detail={snippet}"
+            ) from exc
+        except httpx.HTTPError as exc:
+            retryable = isinstance(
+                exc,
+                (
+                    httpx.ReadTimeout,
+                    httpx.ConnectTimeout,
+                    httpx.RemoteProtocolError,
+                    httpx.ReadError,
+                    httpx.ConnectError,
+                ),
+            )
+            if retryable and attempt < attempts:
+                time.sleep(0.7 * attempt)
+                continue
+            raise LLMClientError(f"openai request transport error: {exc}") from exc
 
-    data = response.json()
-    if not isinstance(data, dict):
-        raise LLMClientError("unexpected OpenAI response payload")
-    return data
+    raise LLMClientError("openai request failed after retries")
 
 
 def _parse_key_file(path: Path) -> str:
@@ -178,6 +199,10 @@ def _parse_key_file(path: Path) -> str:
 def _supports_temperature(model: str) -> bool:
     normalized = model.strip().lower()
     return not normalized.startswith("gpt-5")
+
+
+def _is_gpt5_model(model: str) -> bool:
+    return model.strip().lower().startswith("gpt-5")
 
 
 def resolve_openai_api_key(settings: Settings, root: Path | None = None) -> str:
@@ -349,17 +374,31 @@ class LLMClient:
             "input": prompt,
             "max_output_tokens": max_output_tokens,
         }
+        if _is_gpt5_model(model):
+            # Prevent reasoning-only incomplete responses for long prompts.
+            request_payload["reasoning"] = {"effort": "minimal"}
         if _supports_temperature(model):
             request_payload["temperature"] = temperature
         raw = self.post_fn(
             f"{OPENAI_BASE_URL}/responses",
             headers,
             request_payload,
-            max(10.0, float(self.settings.odds_api_timeout_s) * 2.0),
+            max(20.0, float(self.settings.openai_timeout_s)),
         )
         text = _extract_text(raw)
         if not text:
-            raise LLMResponseFormatError(f"empty response text for task={task}")
+            status = str(raw.get("status", "")).strip().lower()
+            response_id = str(raw.get("id", "")).strip()
+            incomplete = raw.get("incomplete_details")
+            detail_parts: list[str] = []
+            if status:
+                detail_parts.append(f"status={status}")
+            if response_id:
+                detail_parts.append(f"id={response_id}")
+            if incomplete is not None:
+                detail_parts.append(f"incomplete={incomplete}")
+            suffix = f" ({', '.join(detail_parts)})" if detail_parts else ""
+            raise LLMResponseFormatError(f"empty response text for task={task}{suffix}")
 
         input_tokens, output_tokens, total_tokens = _extract_usage(raw)
         cost_usd = _estimate_cost_usd(input_tokens, output_tokens)

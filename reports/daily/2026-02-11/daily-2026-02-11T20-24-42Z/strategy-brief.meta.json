@@ -4,7 +4,7 @@
   "brief_pass1_path": "data/odds_api/snapshots/daily-2026-02-11T20-24-42Z/reports/brief-pass1.json",
   "brief_pdf_path": "data/odds_api/snapshots/daily-2026-02-11T20-24-42Z/reports/strategy-brief.pdf",
   "brief_tex_path": "data/odds_api/snapshots/daily-2026-02-11T20-24-42Z/reports/strategy-brief.tex",
-  "generated_at_utc": "2026-02-11T20:26:15Z",
+  "generated_at_utc": "2026-02-11T20:36:29Z",
   "latest": {
     "latest.json": "data/odds_api/reports/latest/latest.json",
     "strategy-brief.md": "data/odds_api/reports/latest/strategy-brief.md",
@@ -16,31 +16,38 @@
       "cap_reached": false,
       "cap_usd": 5.0,
       "month": "2026-02",
-      "remaining_usd": 4.99204,
-      "request_count": 6,
-      "total_input_tokens": 17436,
-      "total_output_tokens": 3600,
+      "remaining_usd": 4.982662,
+      "request_count": 8,
+      "total_input_tokens": 47777,
+      "total_output_tokens": 5392,
       "usage_path": "data/odds_api/llm_usage/usage-2026-02.jsonl",
-      "used_usd": 0.00796
+      "used_usd": 0.017338
     },
     "pass1": {
-      "attempts": 3,
-      "errors": [
-        "attempt_1:empty response text for task=playbook_pass1",
-        "attempt_2:empty response text for task=playbook_pass1",
-        "attempt_3:empty response text for task=playbook_pass1"
-      ],
-      "reason": "attempt_3:empty response text for task=playbook_pass1",
-      "status": "fallback"
+      "attempts": 1,
+      "cache_key": "e1c0fe35b154b46c4d74e43233666d65282c003455b853ef1669ea85f379642e",
+      "cached": false,
+      "errors": [],
+      "status": "ok",
+      "usage": {
+        "cost_usd": 0.004413,
+        "input_tokens": 14863,
+        "output_tokens": 697,
+        "total_tokens": 15560
+      }
     },
     "pass2": {
-      "attempts": 2,
-      "errors": [
-        "attempt_1:openai request transport error: The read operation timed out",
-        "attempt_2:empty response text for task=playbook_pass2"
-      ],
-      "reason": "attempt_2:empty response text for task=playbook_pass2",
-      "status": "fallback"
+      "attempts": 1,
+      "cache_key": "b86cbdd71cc7745022a410a59f96cfbb5117e8cb18e8756a288e8d238f6a2c35",
+      "cached": false,
+      "errors": [],
+      "status": "ok",
+      "usage": {
+        "cost_usd": 0.004965,
+        "input_tokens": 15478,
+        "output_tokens": 1095,
+        "total_tokens": 16573
+      }
     }
   },
   "model": "gpt-5-mini",
