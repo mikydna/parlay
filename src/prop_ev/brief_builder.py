@@ -20,6 +20,7 @@ REQUIRED_PASS2_HEADINGS = [
     "## Snapshot",
     "## What The Bet Is",
     "## Executive Summary",
+    "## Analyst Take",
     "## Action Plan (GO / LEAN / NO-GO)",
     "## Data Quality",
     "## Confidence",
@@ -136,6 +137,18 @@ def _market_label(market: str) -> str:
 def _md_cell(value: Any) -> str:
     text = _to_str(value).replace("\n", " ").strip()
     return text.replace("|", "\\|")
+
+
+def _split_markdown_row(line: str) -> list[str] | None:
+    stripped = line.strip()
+    if not (stripped.startswith("|") and stripped.endswith("|")):
+        return None
+    placeholder = "__PIPE_PLACEHOLDER__"
+    normalized = stripped.replace("\\|", placeholder)
+    cells = [cell.strip().replace(placeholder, "|") for cell in normalized[1:-1].split("|")]
+    if not cells:
+        return None
+    return cells
 
 
 def _make_ticket(
@@ -672,6 +685,7 @@ def build_pass2_prompt(brief_input: dict[str, Any], pass1: dict[str, Any]) -> st
         "## Snapshot\n"
         "## What The Bet Is\n"
         "## Executive Summary\n"
+        "## Analyst Take\n"
         "## Action Plan (GO / LEAN / NO-GO)\n"
         "## Data Quality\n"
         "## Confidence\n\n"
@@ -933,6 +947,596 @@ def enforce_readability_labels(markdown: str, *, top_n: int) -> str:
     return "\n".join(lines).rstrip() + "\n"
 
 
+def _best_available_row(brief_input: dict[str, Any]) -> dict[str, Any] | None:
+    rows = (
+        brief_input.get("all_top_plays", [])
+        if isinstance(brief_input.get("all_top_plays"), list)
+        else []
+    )
+    if not rows:
+        rows = (
+            brief_input.get("top_plays", [])
+            if isinstance(brief_input.get("top_plays"), list)
+            else []
+        )
+
+    actionable: list[dict[str, Any]] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        action = _to_str(row.get("action_default", "")).upper()
+        if action not in {"GO", "LEAN"}:
+            continue
+        actionable.append(row)
+    if not actionable:
+        return None
+    actionable.sort(key=_play_rank_key)
+    return actionable[0]
+
+
+def render_best_available_section(brief_input: dict[str, Any]) -> str:
+    """Render a concise best-available recommendation block."""
+    best = _best_available_row(brief_input)
+    lines: list[str] = []
+    lines.append("## Best Available Bet Right Now")
+    lines.append("")
+    if best is None:
+        lines.append("- status: no actionable GO/LEAN play passed current gates.")
+        lines.append("- action: wait for injury/roster updates, then rerun.")
+        return "\n".join(lines).strip()
+
+    action = _to_str(best.get("action_default", "LEAN")).upper()
+    game = _to_str(best.get("game", ""))
+    ticket = _to_str(best.get("ticket", ""))
+    book = _to_str(best.get("best_book", ""))
+    price = _format_price(best.get("best_price"))
+    side = _to_str(best.get("recommended_side", "")).upper()
+    market = _market_label(_to_str(best.get("market", "")))
+    point = _format_number(best.get("point"))
+    ev = _to_float(best.get("best_ev"))
+    ev_text = f"{ev * 100.0:+.1f}% est." if ev is not None else "n/a"
+    why = _to_str(best.get("plain_reason", "")).strip()
+    caveat = (
+        "no GO passed clean gates in this snapshot; this is the highest-ranked LEAN."
+        if action == "LEAN"
+        else "meets clean GO gates in this snapshot."
+    )
+    lines.append(f"- **Decision:** **{action}** ({caveat})")
+    if ticket:
+        lines.append(f"- **Bet:** **{ticket}**")
+    lookup_parts = []
+    if game:
+        lookup_parts.append(f"`{game}`")
+    if market and point and side:
+        lookup_parts.append(f"`{side} {point} {market}`")
+    elif market and point:
+        lookup_parts.append(f"`{point} {market}`")
+    if book or price:
+        lookup_parts.append(f"`{book} {price}`".strip())
+    if lookup_parts:
+        lines.append("- **Lookup Line:** " + " | ".join(lookup_parts))
+    lines.append(f"- **Model Edge:** `{ev_text}`")
+    if why:
+        lines.append(f"- why: {why}")
+    return "\n".join(lines).strip()
+
+
+def upsert_best_available_section(markdown: str, *, brief_input: dict[str, Any]) -> str:
+    """Insert/replace Best Available section before Action Plan."""
+    lines = markdown.splitlines()
+    lines, _ = _extract_top_level_section(lines, "## Best Available Bet Right Now")
+
+    action_idx: int | None = None
+    for idx, line in enumerate(lines):
+        if line.strip() == "## Action Plan (GO / LEAN / NO-GO)":
+            action_idx = idx
+            break
+    if action_idx is None:
+        return markdown.rstrip() + "\n"
+
+    block = render_best_available_section(brief_input).splitlines()
+    merged = lines[:action_idx] + block + [""] + lines[action_idx:]
+    return "\n".join(merged).rstrip() + "\n"
+
+
+def strip_empty_go_placeholder_rows(markdown: str) -> str:
+    """Remove synthetic GO placeholder rows from Action Plan tables."""
+    lines = markdown.splitlines()
+    action_heading = "## Action Plan (GO / LEAN / NO-GO)"
+    start_idx: int | None = None
+    for idx, line in enumerate(lines):
+        if line.strip() == action_heading:
+            start_idx = idx
+            break
+    if start_idx is None:
+        return markdown.rstrip() + "\n"
+
+    end_idx = len(lines)
+    for idx in range(start_idx + 1, len(lines)):
+        if lines[idx].strip().startswith("## "):
+            end_idx = idx
+            break
+
+    section = lines[start_idx + 1 : end_idx]
+    filtered: list[str] = []
+    changed = False
+    for line in section:
+        stripped = line.strip()
+        cells = _split_markdown_row(stripped)
+        if cells is not None:
+            action = _to_str(cells[0]).strip().upper()
+            joined = " ".join(cells).lower()
+            if action == "GO":
+                game = _to_str(cells[1] if len(cells) > 1 else "").strip()
+                tier = _to_str(cells[2] if len(cells) > 2 else "").strip()
+                ticket = _to_str(cells[3] if len(cells) > 3 else "").strip()
+                edge_note = _to_str(cells[4] if len(cells) > 4 else "").strip()
+                why = _to_str(cells[5] if len(cells) > 5 else "").strip().lower()
+                dash_like = {"", "-", "--", "—"}
+                placeholder = (
+                    game in dash_like
+                    and tier in dash_like
+                    and ticket in dash_like
+                    and edge_note in dash_like
+                    and ("no plays" in why)
+                    and ("go" in why)
+                )
+                legacy_placeholder = "no plays meet a clean go threshold" in joined
+                if placeholder or legacy_placeholder:
+                    changed = True
+                    continue
+        if stripped.startswith("(") and (
+            "no go entries available from the input" in stripped.lower()
+        ):
+            changed = True
+            continue
+        if (
+            stripped.lower().startswith("note:")
+            and "go" in stripped.lower()
+            and "none" in stripped.lower()
+        ):
+            changed = True
+            continue
+        filtered.append(line)
+
+    if not changed:
+        return markdown.rstrip() + "\n"
+
+    normalized: list[str] = []
+    for line in filtered:
+        if not line.strip() and normalized and not normalized[-1].strip():
+            continue
+        normalized.append(line)
+
+    merged = lines[: start_idx + 1] + normalized + lines[end_idx:]
+    return "\n".join(merged).rstrip() + "\n"
+
+
+def build_analyst_web_prompt(brief_input: dict[str, Any], pass1: dict[str, Any]) -> str:
+    """Prompt for external evidence synthesis with web search enabled."""
+    summary = (
+        brief_input.get("summary", {}) if isinstance(brief_input.get("summary"), dict) else {}
+    )
+    top_rows = (
+        brief_input.get("top_plays", []) if isinstance(brief_input.get("top_plays"), list) else []
+    )
+    compact_rows: list[dict[str, Any]] = []
+    for row in top_rows[:8]:
+        if not isinstance(row, dict):
+            continue
+        compact_rows.append(
+            {
+                "game": _to_str(row.get("game", "")),
+                "player": _to_str(row.get("player", "")),
+                "market": _to_str(row.get("market", "")),
+                "point": row.get("point"),
+                "side": _to_str(row.get("recommended_side", "")),
+                "price": row.get("best_price"),
+                "book": _to_str(row.get("best_book", "")),
+                "best_ev": row.get("best_ev"),
+                "action": _to_str(row.get("action_default", "")),
+                "ticket": _to_str(row.get("ticket", "")),
+            }
+        )
+    compact_payload = {
+        "snapshot_id": _to_str(brief_input.get("snapshot_id", "")),
+        "summary": {
+            "events": summary.get("events", 0),
+            "candidate_lines": summary.get("candidate_lines", 0),
+            "eligible_lines": summary.get("eligible_lines", 0),
+            "tier_a_lines": summary.get("tier_a_lines", 0),
+            "tier_b_lines": summary.get("tier_b_lines", 0),
+        },
+        "gaps": brief_input.get("gaps", []) if isinstance(brief_input.get("gaps"), list) else [],
+        "top_plays": compact_rows,
+        "slate_summary": _to_str(pass1.get("slate_summary", "")),
+    }
+    return (
+        "You are the analyst of record for an NBA player-prop betting brief.\n"
+        "Use web search to find current evidence that supports or refutes the top model edges.\n"
+        "Do not fabricate sources, injuries, or news.\n"
+        "Return ONLY JSON with this schema:\n"
+        "{\n"
+        '  "analysis_summary": "string",\n'
+        '  "supporting_facts": [{"fact":"string","source_title":"string","source_url":"string"}],\n'
+        '  "refuting_facts": [{"fact":"string","source_title":"string","source_url":"string"}],\n'
+        '  "bottom_line": "string"\n'
+        "}\n"
+        "Rules:\n"
+        "1) Keep facts concrete and tied to specific players/games from input.\n"
+        "2) Include at least 2 supporting and 2 refuting facts when possible.\n"
+        "3) If evidence is weak/missing, say that explicitly in bottom_line.\n"
+        "4) Source URLs must be absolute URLs.\n\n"
+        f"COMPACT_INPUT_JSON:\n{json.dumps(compact_payload, sort_keys=True)}"
+    )
+
+
+def build_analyst_synthesis_prompt(
+    brief_input: dict[str, Any],
+    pass1: dict[str, Any],
+    web_sources: list[dict[str, str]],
+) -> str:
+    """Prompt to synthesize analyst take from deterministic data + web source list."""
+    summary = brief_input.get("summary", {}) if isinstance(brief_input.get("summary"), dict) else {}
+    top_rows = (
+        brief_input.get("top_plays", []) if isinstance(brief_input.get("top_plays"), list) else []
+    )
+    compact_rows: list[dict[str, Any]] = []
+    for row in top_rows[:8]:
+        if not isinstance(row, dict):
+            continue
+        compact_rows.append(
+            {
+                "game": _to_str(row.get("game", "")),
+                "player": _to_str(row.get("player", "")),
+                "ticket": _to_str(row.get("ticket", "")),
+                "best_ev": row.get("best_ev"),
+                "action": _to_str(row.get("action_default", "")),
+            }
+        )
+    compact_payload = {
+        "snapshot_id": _to_str(brief_input.get("snapshot_id", "")),
+        "summary": {
+            "events": summary.get("events", 0),
+            "eligible_lines": summary.get("eligible_lines", 0),
+            "tier_a_lines": summary.get("tier_a_lines", 0),
+            "tier_b_lines": summary.get("tier_b_lines", 0),
+        },
+        "slate_summary": _to_str(pass1.get("slate_summary", "")),
+        "top_plays": compact_rows,
+        "gaps": brief_input.get("gaps", []) if isinstance(brief_input.get("gaps"), list) else [],
+    }
+    trimmed_sources = [row for row in web_sources if isinstance(row, dict)][:6]
+    return (
+        "You are writing an analyst summary for non-technical readers.\n"
+        "Use ONLY the provided deterministic data and web source list.\n"
+        "Do not invent source URLs or claims.\n"
+        "Return ONLY JSON with this schema:\n"
+        "{\n"
+        '  "analysis_summary":"string",\n'
+        '  "supporting_facts":[{"fact":"string","source_title":"string","source_url":"string"}],\n'
+        '  "refuting_facts":[{"fact":"string","source_title":"string","source_url":"string"}],\n'
+        '  "bottom_line":"string"\n'
+        "}\n"
+        "Rules:\n"
+        "1) Supporting/refuting facts must each cite a source URL from WEB_SOURCES_JSON.\n"
+        "2) Prioritize web news evidence over deterministic model restatements.\n"
+        "3) Return at most 3 supporting and 3 refuting facts.\n"
+        "4) Avoid using deterministic snapshot ids as source_url.\n"
+        "5) If evidence quality is weak, say so in bottom_line.\n\n"
+        f"DETERMINISTIC_JSON:\n{json.dumps(compact_payload, sort_keys=True)}\n\n"
+        f"WEB_SOURCES_JSON:\n{json.dumps(trimmed_sources, sort_keys=True)}"
+    )
+
+
+def default_analyst_take(brief_input: dict[str, Any], pass1: dict[str, Any]) -> dict[str, Any]:
+    """Deterministic analyst fallback when web-search pass is unavailable."""
+    summary = brief_input.get("summary", {}) if isinstance(brief_input.get("summary"), dict) else {}
+    top_plays = (
+        brief_input.get("top_plays", []) if isinstance(brief_input.get("top_plays"), list) else []
+    )
+    gaps = brief_input.get("gaps", []) if isinstance(brief_input.get("gaps"), list) else []
+    top_games = ", ".join(
+        sorted(
+            {
+                _to_str(item.get("game", ""))
+                for item in top_plays
+                if isinstance(item, dict) and _to_str(item.get("game", ""))
+            }
+        )[:3]
+    )
+    summary_line = _to_str(pass1.get("slate_summary", ""))
+    if not summary_line:
+        events = summary.get("events", 0)
+        eligible_lines = summary.get("eligible_lines", 0)
+        summary_line = f"{events} games and {eligible_lines} eligible lines."
+    return {
+        "analysis_summary": (
+            f"Deterministic analyst view: {summary_line} Top concentration: {top_games or 'n/a'}."
+        ),
+        "supporting_facts": [],
+        "refuting_facts": [],
+        "bottom_line": (
+            "Web evidence was not available in this run. Treat this as model-only guidance and "
+            "re-check injuries/rosters before placing bets."
+            if gaps
+            else "Web evidence was not available in this run. Treat this as model-only guidance."
+        ),
+    }
+
+
+def _sanitize_analyst_fact_rows(rows: Any) -> list[dict[str, str]]:
+    clean: list[dict[str, str]] = []
+    if not isinstance(rows, list):
+        return clean
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        fact = _to_str(row.get("fact", "")).strip()
+        title = _to_str(row.get("source_title", "")).strip()
+        url = _to_str(row.get("source_url", "")).strip()
+        if not fact:
+            continue
+        clean.append({"fact": fact, "source_title": title, "source_url": url})
+    return clean
+
+
+def sanitize_analyst_take(
+    payload: dict[str, Any], *, brief_input: dict[str, Any], pass1: dict[str, Any]
+) -> dict[str, Any]:
+    """Sanitize web-analyst payload to a stable schema."""
+    fallback = default_analyst_take(brief_input, pass1)
+    if not isinstance(payload, dict):
+        return fallback
+    analysis_summary = _to_str(payload.get("analysis_summary", "")).strip()
+    bottom_line = _to_str(payload.get("bottom_line", "")).strip()
+    supporting = _sanitize_analyst_fact_rows(payload.get("supporting_facts"))
+    refuting = _sanitize_analyst_fact_rows(payload.get("refuting_facts"))
+    if not analysis_summary:
+        analysis_summary = _to_str(fallback.get("analysis_summary", ""))
+    if not bottom_line:
+        bottom_line = _to_str(fallback.get("bottom_line", ""))
+    return {
+        "analysis_summary": analysis_summary,
+        "supporting_facts": supporting,
+        "refuting_facts": refuting,
+        "bottom_line": bottom_line,
+    }
+
+
+def merge_analyst_take_sources(
+    analyst_take: dict[str, Any], web_sources: list[dict[str, str]]
+) -> dict[str, Any]:
+    """Backfill source title/url from web tool sources when model omits them."""
+    if not web_sources:
+        return analyst_take
+    merged = dict(analyst_take)
+    by_url: dict[str, dict[str, str]] = {}
+    for source in web_sources:
+        if not isinstance(source, dict):
+            continue
+        url = _to_str(source.get("url", "")).strip()
+        if not url:
+            continue
+        by_url[url] = {
+            "source_title": _to_str(source.get("title", "")).strip(),
+            "source_url": url,
+        }
+
+    def _fill(rows: Any) -> list[dict[str, str]]:
+        out: list[dict[str, str]] = []
+        for row in rows if isinstance(rows, list) else []:
+            if not isinstance(row, dict):
+                continue
+            url = _to_str(row.get("source_url", "")).strip()
+            title = _to_str(row.get("source_title", "")).strip()
+            if url and not title and url in by_url:
+                title = by_url[url]["source_title"]
+            out.append(
+                {
+                    "fact": _to_str(row.get("fact", "")).strip(),
+                    "source_title": title,
+                    "source_url": url,
+                }
+            )
+        return out
+
+    merged["supporting_facts"] = _fill(merged.get("supporting_facts"))
+    merged["refuting_facts"] = _fill(merged.get("refuting_facts"))
+    return merged
+
+
+def render_analyst_take_section(
+    analyst_take: dict[str, Any], *, mode: str, brief_input: dict[str, Any] | None = None
+) -> str:
+    """Render Analyst Take section as markdown."""
+    def _trim_sentences(text: str, *, max_sentences: int, max_chars: int) -> str:
+        raw = text.strip()
+        if not raw:
+            return raw
+        pieces = re.split(r"(?<=[.!?])\s+", raw)
+        selected = [piece for piece in pieces if piece.strip()][:max_sentences]
+        joined = " ".join(selected).strip()
+        if len(joined) > max_chars:
+            return joined[: max_chars - 3].rstrip() + "..."
+        return joined
+
+    def _rows(value: Any) -> list[dict[str, str]]:
+        out: list[dict[str, str]] = []
+        if not isinstance(value, list):
+            return out
+        for row in value:
+            if isinstance(row, dict):
+                out.append(
+                    {
+                        "fact": _to_str(row.get("fact", "")).strip(),
+                        "source_title": _to_str(row.get("source_title", "")).strip(),
+                        "source_url": _to_str(row.get("source_url", "")).strip(),
+                        "domain": _to_str(row.get("domain", "")).strip(),
+                    }
+                )
+        return out
+
+    def _source_label(row: dict[str, str]) -> str:
+        title = row.get("source_title", "").strip()
+        domain = row.get("domain", "").strip()
+        url = row.get("source_url", "").strip()
+        if not domain and url.startswith("http"):
+            domain = (
+                url.replace("https://", "")
+                .replace("http://", "")
+                .split("/", 1)[0]
+                .strip()
+                .lower()
+            )
+        if title and domain:
+            if domain in title.lower():
+                return title
+            return f"{title} ({domain})"
+        if title:
+            return title
+        if domain:
+            return domain
+        return "source"
+
+    supporting = _rows(analyst_take.get("supporting_facts"))
+    refuting = _rows(analyst_take.get("refuting_facts"))
+
+    def _is_external_url(url: str) -> bool:
+        lowered = url.strip().lower()
+        return lowered.startswith("https://") or lowered.startswith("http://")
+
+    external_supporting = [
+        row for row in supporting if _is_external_url(row.get("source_url", ""))
+    ]
+    external_refuting = [row for row in refuting if _is_external_url(row.get("source_url", ""))]
+    internal_supporting = [
+        row for row in supporting if not _is_external_url(row.get("source_url", ""))
+    ]
+    internal_refuting = [
+        row for row in refuting if not _is_external_url(row.get("source_url", ""))
+    ]
+
+    source_ids: dict[tuple[str, str], int] = {}
+    source_rows: list[dict[str, str]] = []
+
+    def _source_id(row: dict[str, str]) -> int:
+        url = row.get("source_url", "").strip()
+        label = _source_label(row)
+        key = (url, label)
+        if key not in source_ids:
+            source_ids[key] = len(source_rows) + 1
+            source_rows.append({"label": label, "url": url})
+        return source_ids[key]
+
+    lines: list[str] = []
+    lines.append("## Analyst Take")
+    lines.append("")
+    lines.append(f"- mode: `{mode}`")
+    lines.append("")
+    lines.append("### Read This First")
+    lines.append("")
+    lines.append(
+        _trim_sentences(
+            _to_str(analyst_take.get("analysis_summary", "")),
+            max_sentences=2,
+            max_chars=420,
+        )
+    )
+    lines.append("")
+    lines.append("### News Signals")
+    lines.append("")
+    if not external_supporting and not external_refuting:
+        lines.append("- No new external news signal was captured for this run.")
+        lines.append("- Treat this as model-only and verify injury/roster updates before betting.")
+    else:
+        if external_supporting:
+            lines.append("- Supports:")
+            for row in external_supporting:
+                fact = row.get("fact", "").strip()
+                if not fact:
+                    continue
+                sid = _source_id(row)
+                lines.append(f"  - [S{sid}] {fact}")
+        if external_refuting:
+            lines.append("- Refutes/Risks:")
+            for row in external_refuting:
+                fact = row.get("fact", "").strip()
+                if not fact:
+                    continue
+                sid = _source_id(row)
+                lines.append(f"  - [S{sid}] {fact}")
+
+    lines.append("")
+    lines.append("### Bottom Line")
+    lines.append("")
+    best_row = _best_available_row(brief_input or {})
+    if best_row is not None:
+        ticket = _to_str(best_row.get("ticket", "")).strip()
+        side = _to_str(best_row.get("recommended_side", "")).upper()
+        point = _format_number(best_row.get("point"))
+        market = _market_label(_to_str(best_row.get("market", "")))
+        game = _to_str(best_row.get("game", "")).strip()
+        book = _to_str(best_row.get("best_book", "")).strip()
+        price = _format_price(best_row.get("best_price"))
+        if ticket:
+            lines.append(f"- **Best Bet:** **{ticket}**")
+        lookup: list[str] = []
+        if game:
+            lookup.append(f"`{game}`")
+        if market and point and side:
+            lookup.append(f"`{side} {point} {market}`")
+        elif market and point:
+            lookup.append(f"`{point} {market}`")
+        if book or price:
+            lookup.append(f"`{book} {price}`".strip())
+        if lookup:
+            lines.append("- **Lookup Line:** " + " | ".join(lookup))
+    lines.append(
+        _trim_sentences(
+            _to_str(analyst_take.get("bottom_line", "")),
+            max_sentences=2,
+            max_chars=420,
+        )
+    )
+    lines.append("")
+    lines.append("### Source Index")
+    lines.append("")
+    if not source_rows:
+        lines.append("- none")
+    else:
+        for idx, row in enumerate(source_rows, start=1):
+            label = _to_str(row.get("label", "")).strip() or "source"
+            lines.append(f"- [S{idx}] {label}")
+    if internal_supporting or internal_refuting:
+        lines.append("- Deterministic model details are summarized in Snapshot/Action Plan.")
+    lines.append(
+        "- Full source URLs are stored in `brief-analyst.json` for audit/debug use."
+    )
+    return "\n".join(lines).strip()
+
+
+def upsert_analyst_take_section(markdown: str, analyst_section_markdown: str) -> str:
+    """Insert/replace Analyst Take section before Action Plan with page breaks."""
+    lines = markdown.splitlines()
+    lines, _ = _extract_top_level_section(lines, "## Pre-Bet Checklist")
+    lines, _ = _extract_top_level_section(lines, "## Analyst Take")
+
+    action_idx: int | None = None
+    for idx, line in enumerate(lines):
+        if line.strip() == "## Action Plan (GO / LEAN / NO-GO)":
+            action_idx = idx
+            break
+    if action_idx is None:
+        return markdown.rstrip() + "\n"
+
+    block = ["<!-- pagebreak -->", ""]
+    block.extend(analyst_section_markdown.splitlines())
+    block.extend(["", "<!-- pagebreak -->", ""])
+    merged = lines[:action_idx] + block + lines[action_idx:]
+    return "\n".join(merged).rstrip() + "\n"
+
+
 def strip_risks_and_watchouts_section(markdown: str) -> str:
     """Remove legacy risks/watchouts section from markdown output."""
     lines = markdown.splitlines()
@@ -1021,6 +1625,13 @@ def _ensure_pagebreak_before_heading(lines: list[str], heading: str) -> list[str
         return lines
 
     return lines[:target_idx] + ["<!-- pagebreak -->", ""] + lines[target_idx:]
+
+
+def ensure_pagebreak_before_action_plan(markdown: str) -> str:
+    """Guarantee a page break immediately before the Action Plan heading."""
+    lines = markdown.splitlines()
+    lines = _ensure_pagebreak_before_heading(lines, "## Action Plan (GO / LEAN / NO-GO)")
+    return "\n".join(lines).rstrip() + "\n"
 
 
 def move_disclosures_to_end(markdown: str) -> str:

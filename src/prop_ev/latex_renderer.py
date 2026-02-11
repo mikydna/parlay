@@ -8,6 +8,8 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
+INLINE_TOKEN_RE = re.compile(r"\*\*([^*]+)\*\*|`([^`]+)`|\[([^\]]+)\]\(([^)]+)\)")
+
 
 def escape_latex(text: str) -> str:
     """Escape special LaTeX characters."""
@@ -24,6 +26,32 @@ def escape_latex(text: str) -> str:
         "^": r"\textasciicircum{}",
     }
     return "".join(replacements.get(ch, ch) for ch in text)
+
+
+def _render_inline_markdown(text: str) -> str:
+    """Convert a small subset of inline markdown to LaTeX-safe inline text."""
+    rendered: list[str] = []
+    cursor = 0
+    for match in INLINE_TOKEN_RE.finditer(text):
+        start, end = match.span()
+        if start > cursor:
+            rendered.append(escape_latex(text[cursor:start]))
+        bold_text = match.group(1)
+        code_text = match.group(2)
+        link_label = match.group(3)
+        link_url = match.group(4)
+        if bold_text is not None:
+            rendered.append(rf"\textbf{{{_render_inline_markdown(bold_text)}}}")
+        elif code_text is not None:
+            rendered.append(rf"\texttt{{{escape_latex(code_text)}}}")
+        elif link_label is not None and link_url is not None:
+            rendered.append(
+                rf"\href{{{escape_latex(link_url)}}}{{{_render_inline_markdown(link_label)}}}"
+            )
+        cursor = end
+    if cursor < len(text):
+        rendered.append(escape_latex(text[cursor:]))
+    return "".join(rendered)
 
 
 def _split_table_row(line: str) -> list[str] | None:
@@ -72,12 +100,14 @@ def _render_table_latex(headers: list[str], rows: list[list[str]]) -> list[str]:
     colspec = _table_colspec(headers)
     lines.append(rf"\begin{{tabularx}}{{\textwidth}}{{|{colspec}|}}")
     lines.append(r"\hline")
-    header_row = " & ".join(rf"\textbf{{{escape_latex(cell)}}}" for cell in headers) + r" \\"
+    header_cells = [rf"\textbf{{{_render_inline_markdown(cell)}}}" for cell in headers]
+    header_row = " & ".join(header_cells) + r" \\"
     lines.append(header_row)
     lines.append(r"\hline")
     for row in rows:
         padded = row[: len(headers)] + [""] * max(0, len(headers) - len(row))
-        row_line = " & ".join(escape_latex(cell) for cell in padded[: len(headers)]) + r" \\"
+        row_cells = [_render_inline_markdown(cell) for cell in padded[: len(headers)]]
+        row_line = " & ".join(row_cells) + r" \\"
         lines.append(row_line)
         lines.append(r"\hline")
     lines.append(r"\end{tabularx}")
@@ -143,7 +173,7 @@ def markdown_to_latex(
             if in_list:
                 out.append(r"\end{itemize}")
                 in_list = False
-            out.append(rf"\section*{{{escape_latex(stripped[2:].strip())}}}")
+            out.append(rf"\section*{{{_render_inline_markdown(stripped[2:].strip())}}}")
             idx += 1
             continue
 
@@ -151,7 +181,7 @@ def markdown_to_latex(
             if in_list:
                 out.append(r"\end{itemize}")
                 in_list = False
-            out.append(rf"\subsection*{{{escape_latex(stripped[3:].strip())}}}")
+            out.append(rf"\subsection*{{{_render_inline_markdown(stripped[3:].strip())}}}")
             idx += 1
             continue
 
@@ -159,7 +189,7 @@ def markdown_to_latex(
             if in_list:
                 out.append(r"\end{itemize}")
                 in_list = False
-            out.append(rf"\subsubsection*{{{escape_latex(stripped[4:].strip())}}}")
+            out.append(rf"\subsubsection*{{{_render_inline_markdown(stripped[4:].strip())}}}")
             idx += 1
             continue
 
@@ -191,14 +221,14 @@ def markdown_to_latex(
             if not in_list:
                 out.append(r"\begin{itemize}")
                 in_list = True
-            out.append(rf"\item {escape_latex(stripped[2:].strip())}")
+            out.append(rf"\item {_render_inline_markdown(stripped[2:].strip())}")
             idx += 1
             continue
 
         if in_list:
             out.append(r"\end{itemize}")
             in_list = False
-        out.append(escape_latex(stripped))
+        out.append(_render_inline_markdown(stripped))
         idx += 1
 
     if in_list:

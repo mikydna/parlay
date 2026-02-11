@@ -10,19 +10,29 @@ from typing import Any
 
 from prop_ev.brief_builder import (
     append_game_cards_section,
+    build_analyst_synthesis_prompt,
+    build_analyst_web_prompt,
     build_brief_input,
     build_pass1_prompt,
     build_pass2_prompt,
+    default_analyst_take,
     default_pass1,
     enforce_readability_labels,
     enforce_snapshot_mode_labels,
+    ensure_pagebreak_before_action_plan,
     extract_json_object,
+    merge_analyst_take_sources,
     move_disclosures_to_end,
     normalize_pass2_markdown,
+    render_analyst_take_section,
     render_fallback_markdown,
+    sanitize_analyst_take,
     sanitize_pass1,
+    strip_empty_go_placeholder_rows,
     strip_risks_and_watchouts_section,
     strip_tier_b_view_section,
+    upsert_analyst_take_section,
+    upsert_best_available_section,
 )
 from prop_ev.budget import current_month_utc, llm_budget_status, odds_budget_status
 from prop_ev.latex_renderer import render_pdf_from_markdown, write_latex
@@ -341,6 +351,136 @@ def generate_brief_for_snapshot(
             "errors": pass2_errors,
         }
 
+    analyst_take = default_analyst_take(brief_input, pass1)
+    analyst_mode = "deterministic_fallback"
+    analyst_meta: dict[str, Any] = {"status": "fallback", "reason": "deterministic_default"}
+    analyst_prompt = build_analyst_web_prompt(brief_input, pass1)
+    analyst_payload = {
+        "brief_input": brief_input,
+        "pass1": pass1,
+        "task": "playbook_analyst_web",
+    }
+    analyst_errors: list[str] = []
+    analyst_attempts_run = 0
+    analyst_result: dict[str, Any] | None = None
+    analyst_web_source_count = 0
+    analyst_attempts = [
+        {
+            "prompt_version": "v1",
+            "request_options": {
+                "tools": [{"type": "web_search"}],
+                "tool_choice": "auto",
+                "reasoning": {"effort": "low"},
+                "include": ["web_search_call.action.sources"],
+            },
+            "max_output_tokens": 1200,
+        },
+        {
+            "prompt_version": "v1_retry1",
+            "request_options": {
+                "tools": [{"type": "web_search"}],
+                "tool_choice": "auto",
+                "reasoning": {"effort": "low"},
+            },
+            "max_output_tokens": 900,
+        },
+    ]
+    for idx, attempt in enumerate(analyst_attempts):
+        analyst_attempts_run = idx + 1
+        try:
+            result = llm.cached_completion(
+                task="playbook_analyst_web",
+                prompt_version=str(attempt["prompt_version"]),
+                prompt=analyst_prompt,
+                payload=analyst_payload,
+                snapshot_id=snapshot_id,
+                model=model,
+                max_output_tokens=int(attempt["max_output_tokens"]),
+                temperature=0.1,
+                refresh=llm_refresh if idx == 0 else True,
+                offline=llm_offline,
+                request_options=attempt["request_options"],
+            )
+            raw_web_sources = result.get("web_sources", [])
+            web_sources = raw_web_sources if isinstance(raw_web_sources, list) else []
+            parsed = extract_json_object(str(result.get("text", "")))
+            if not parsed:
+                if web_sources:
+                    synthesis_prompt = build_analyst_synthesis_prompt(
+                        brief_input,
+                        pass1,
+                        web_sources,
+                    )
+                    synth_result = llm.cached_completion(
+                        task="playbook_analyst_synthesis",
+                        prompt_version=f"{attempt['prompt_version']}_synth",
+                        prompt=synthesis_prompt,
+                        payload={
+                            "brief_input": brief_input,
+                            "pass1": pass1,
+                            "web_sources": web_sources,
+                            "task": "playbook_analyst_synthesis",
+                        },
+                        snapshot_id=snapshot_id,
+                        model=model,
+                        max_output_tokens=1100,
+                        temperature=0.1,
+                        refresh=llm_refresh if idx == 0 else True,
+                        offline=llm_offline,
+                    )
+                    synth_parsed = extract_json_object(str(synth_result.get("text", "")))
+                    if synth_parsed:
+                        analyst_take = sanitize_analyst_take(
+                            synth_parsed,
+                            brief_input=brief_input,
+                            pass1=pass1,
+                        )
+                        analyst_take = merge_analyst_take_sources(analyst_take, web_sources)
+                        analyst_mode = "llm_web"
+                        analyst_result = synth_result
+                        analyst_web_source_count = len(web_sources)
+                        break
+                    analyst_errors.append(f"attempt_{idx + 1}:synthesis_empty_or_unparseable_json")
+                analyst_errors.append(f"attempt_{idx + 1}:empty_or_unparseable_json")
+                continue
+            analyst_take = sanitize_analyst_take(parsed, brief_input=brief_input, pass1=pass1)
+            analyst_take = merge_analyst_take_sources(
+                analyst_take,
+                web_sources,
+            )
+            analyst_mode = "llm_web"
+            analyst_result = result
+            analyst_web_source_count = len(web_sources)
+            break
+        except (LLMBudgetExceededError, LLMOfflineCacheMissError) as exc:
+            analyst_errors.append(f"attempt_{idx + 1}:{exc}")
+            break
+        except LLMClientError as exc:
+            analyst_errors.append(f"attempt_{idx + 1}:{exc}")
+            continue
+
+    if analyst_result is not None:
+        analyst_meta = {
+            "status": "ok",
+            "mode": analyst_mode,
+            "cached": bool(analyst_result.get("cached", False)),
+            "cache_key": str(analyst_result.get("cache_key", "")),
+            "usage": analyst_result.get("usage", {}),
+            "web_source_count": analyst_web_source_count,
+            "attempts": analyst_attempts_run,
+            "errors": analyst_errors,
+        }
+    else:
+        analyst_meta = {
+            "status": "fallback",
+            "mode": analyst_mode,
+            "reason": analyst_errors[-1] if analyst_errors else "analyst_retry_exhausted",
+            "attempts": analyst_attempts_run,
+            "errors": analyst_errors,
+        }
+
+    analyst_path = _write_json(reports_dir / "brief-analyst.json", analyst_take)
+
     fallback_md = render_fallback_markdown(
         brief_input=brief_input,
         pass1=pass1,
@@ -349,7 +489,16 @@ def generate_brief_for_snapshot(
     markdown = normalize_pass2_markdown(pass2_text, fallback_md)
     markdown = strip_risks_and_watchouts_section(markdown)
     markdown = strip_tier_b_view_section(markdown)
+    markdown = strip_empty_go_placeholder_rows(markdown)
     markdown = enforce_readability_labels(markdown, top_n=top_n)
+    analyst_section = render_analyst_take_section(
+        analyst_take,
+        mode=analyst_mode,
+        brief_input=brief_input,
+    )
+    markdown = upsert_analyst_take_section(markdown, analyst_section)
+    markdown = upsert_best_available_section(markdown, brief_input=brief_input)
+    markdown = ensure_pagebreak_before_action_plan(markdown)
     markdown = append_game_cards_section(markdown, brief_input=brief_input)
     markdown = move_disclosures_to_end(markdown)
     markdown = enforce_snapshot_mode_labels(
@@ -382,12 +531,14 @@ def generate_brief_for_snapshot(
         "model": model,
         "brief_input_path": str(brief_input_path),
         "brief_pass1_path": str(pass1_path),
+        "brief_analyst_path": str(analyst_path),
         "brief_markdown_path": str(markdown_path),
         "brief_tex_path": str(tex_path),
         "brief_pdf_path": str(pdf_path),
         "llm": {
             "pass1": pass1_meta,
             "pass2": pass2_meta,
+            "analyst": analyst_meta,
             "budget": llm_budget_status(store.root, month_key, settings.llm_monthly_cap_usd),
         },
         "odds_budget": odds_budget_status(store.root, month_key, settings.odds_monthly_cap_credits),
@@ -404,6 +555,7 @@ def generate_brief_for_snapshot(
         "report_meta": str(meta_path),
         "brief_input": str(brief_input_path),
         "brief_pass1": str(pass1_path),
+        "brief_analyst": str(analyst_path),
         "llm_pass1_status": pass1_meta.get("status", ""),
         "llm_pass2_status": pass2_meta.get("status", ""),
         "pdf_status": pdf_result.get("status", ""),

@@ -143,6 +143,42 @@ def _estimate_cost_usd(input_tokens: int, output_tokens: int) -> float:
     return round(input_cost + output_cost, 6)
 
 
+def _extract_web_sources(payload: dict[str, Any]) -> list[dict[str, str]]:
+    output = payload.get("output", [])
+    if not isinstance(output, list):
+        return []
+
+    seen: set[tuple[str, str]] = set()
+    sources: list[dict[str, str]] = []
+    for item in output:
+        if not isinstance(item, dict):
+            continue
+        candidates: list[Any] = []
+        action = item.get("action")
+        if isinstance(action, dict):
+            action_sources = action.get("sources")
+            if isinstance(action_sources, list):
+                candidates.extend(action_sources)
+        item_sources = item.get("sources")
+        if isinstance(item_sources, list):
+            candidates.extend(item_sources)
+
+        for source in candidates:
+            if not isinstance(source, dict):
+                continue
+            url = str(source.get("url", "")).strip()
+            if not url:
+                continue
+            title = str(source.get("title", "")).strip()
+            domain = str(source.get("domain", "")).strip()
+            key = (url, title)
+            if key in seen:
+                continue
+            seen.add(key)
+            sources.append({"title": title, "url": url, "domain": domain})
+    return sources
+
+
 def _default_post(
     url: str, headers: dict[str, str], payload: dict[str, Any], timeout: float
 ) -> dict[str, Any]:
@@ -205,6 +241,20 @@ def _is_gpt5_model(model: str) -> bool:
     return model.strip().lower().startswith("gpt-5")
 
 
+def _has_web_search_tool(request_options: dict[str, Any] | None) -> bool:
+    if not isinstance(request_options, dict):
+        return False
+    tools = request_options.get("tools")
+    if not isinstance(tools, list):
+        return False
+    for tool in tools:
+        if not isinstance(tool, dict):
+            continue
+        if str(tool.get("type", "")).strip().lower().startswith("web_search"):
+            return True
+    return False
+
+
 def resolve_openai_api_key(settings: Settings, root: Path | None = None) -> str:
     """Resolve key from env first, then configured key files."""
     env_key = os.environ.get("OPENAI_API_KEY", "").strip()
@@ -257,12 +307,14 @@ class LLMClient:
         prompt_version: str,
         model: str,
         payload: dict[str, Any],
+        request_options: dict[str, Any] | None = None,
     ) -> str:
         object_for_hash = {
             "task": task,
             "prompt_version": prompt_version,
             "model": model,
             "payload": payload,
+            "request_options": request_options or {},
         }
         serialized = json.dumps(object_for_hash, sort_keys=True, separators=(",", ":"))
         return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
@@ -319,6 +371,7 @@ class LLMClient:
         temperature: float,
         refresh: bool,
         offline: bool,
+        request_options: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Run one model call with cache + budget enforcement."""
         cache_key = self._cache_key(
@@ -326,6 +379,7 @@ class LLMClient:
             prompt_version=prompt_version,
             model=model,
             payload=payload,
+            request_options=request_options,
         )
         cache_path = self._cache_path(cache_key)
         month = current_month_utc()
@@ -339,6 +393,7 @@ class LLMClient:
                 "text": str(cached_row.get("response_text", "")),
                 "usage": cached_row.get("usage", {}),
                 "source": "cache",
+                "web_sources": cached_row.get("web_sources", []),
             }
             self._append_usage(
                 month=month,
@@ -374,11 +429,15 @@ class LLMClient:
             "input": prompt,
             "max_output_tokens": max_output_tokens,
         }
-        if _is_gpt5_model(model):
+        if _is_gpt5_model(model) and not _has_web_search_tool(request_options):
             # Prevent reasoning-only incomplete responses for long prompts.
             request_payload["reasoning"] = {"effort": "minimal"}
         if _supports_temperature(model):
             request_payload["temperature"] = temperature
+        if isinstance(request_options, dict):
+            for key in ["tools", "tool_choice", "include", "reasoning"]:
+                if key in request_options:
+                    request_payload[key] = request_options[key]
         raw = self.post_fn(
             f"{OPENAI_BASE_URL}/responses",
             headers,
@@ -402,6 +461,7 @@ class LLMClient:
 
         input_tokens, output_tokens, total_tokens = _extract_usage(raw)
         cost_usd = _estimate_cost_usd(input_tokens, output_tokens)
+        web_sources = _extract_web_sources(raw)
         usage_row = {
             "input_tokens": input_tokens,
             "output_tokens": output_tokens,
@@ -416,7 +476,9 @@ class LLMClient:
             "prompt_version": prompt_version,
             "model": model,
             "payload": payload,
+            "request_options": request_options or {},
             "response_text": text,
+            "web_sources": web_sources,
             "usage": usage_row,
         }
         cache_path.write_text(
@@ -442,4 +504,5 @@ class LLMClient:
             "text": text,
             "usage": usage_row,
             "source": "live",
+            "web_sources": web_sources,
         }

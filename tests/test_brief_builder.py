@@ -1,13 +1,22 @@
 from prop_ev.brief_builder import (
+    build_analyst_web_prompt,
     build_brief_input,
+    default_analyst_take,
     default_pass1,
     enforce_readability_labels,
     enforce_snapshot_mode_labels,
+    ensure_pagebreak_before_action_plan,
+    merge_analyst_take_sources,
     move_disclosures_to_end,
     normalize_pass2_markdown,
+    render_analyst_take_section,
     render_fallback_markdown,
+    sanitize_analyst_take,
+    strip_empty_go_placeholder_rows,
     strip_risks_and_watchouts_section,
     strip_tier_b_view_section,
+    upsert_analyst_take_section,
+    upsert_best_available_section,
 )
 
 
@@ -146,6 +155,121 @@ def test_enforce_readability_labels_inserts_required_lines() -> None:
     markdown = "## Action Plan (GO / LEAN / NO-GO)\n\n| A | B |\n| --- | --- |\n| 1 | 2 |\n"
     labeled = enforce_readability_labels(markdown, top_n=5)
     assert "### Top 5 Across All Games" in labeled
+
+
+def test_strip_empty_go_placeholder_rows() -> None:
+    markdown = (
+        "## Action Plan (GO / LEAN / NO-GO)\n\n"
+        "| Action | Game | Tier | Ticket | Edge Note | Why |\n"
+        "| --- | --- | --- | --- | --- | --- |\n"
+        "| GO | — | — | — | — | No plays cleared as GO. |\n"
+        "| LEAN | WAS @ CLE | A | Example | Strong edge | Lean reason |\n"
+        "\n"
+        "Note: GO none in this run.\n"
+    )
+    cleaned = strip_empty_go_placeholder_rows(markdown)
+    assert "No plays cleared as GO" not in cleaned
+    assert "GO none in this run" not in cleaned
+    assert "| LEAN | WAS @ CLE | A | Example | Strong edge | Lean reason |" in cleaned
+
+
+def test_upsert_analyst_take_section() -> None:
+    markdown = (
+        "## Snapshot\n\n"
+        "## Action Plan (GO / LEAN / NO-GO)\n\n"
+        "| Action | Game | Tier | Ticket | Edge Note | Why |\n"
+    )
+    brief = build_brief_input(_sample_report(), top_n=5)
+    pass1 = default_pass1(brief)
+    fallback = default_analyst_take(brief, pass1)
+    section = render_analyst_take_section(
+        fallback,
+        mode="deterministic_fallback",
+        brief_input=brief,
+    )
+    patched = upsert_analyst_take_section(markdown, section)
+    assert "## Analyst Take" in patched
+    assert "## Pre-Bet Checklist" not in patched
+    assert "### News Signals" in patched
+    assert "### Model Context (Deterministic)" not in patched
+    assert "**Best Bet:**" in patched
+    assert "**Lookup Line:**" in patched
+    assert patched.index("## Analyst Take") < patched.index("## Action Plan (GO / LEAN / NO-GO)")
+
+
+def test_analyst_take_sanitize_and_merge_sources() -> None:
+    brief = build_brief_input(_sample_report(), top_n=5)
+    pass1 = default_pass1(brief)
+    payload = {
+        "analysis_summary": "Summary",
+        "supporting_facts": [{"fact": "Support fact", "source_title": "", "source_url": ""}],
+        "refuting_facts": [{"fact": "Refute fact", "source_title": "", "source_url": ""}],
+        "bottom_line": "Bottom line",
+    }
+    sanitized = sanitize_analyst_take(payload, brief_input=brief, pass1=pass1)
+    merged = merge_analyst_take_sources(
+        sanitized,
+        [{"title": "Example", "url": "https://example.com", "domain": "example.com"}],
+    )
+    assert merged["supporting_facts"][0]["source_url"] == ""
+    assert merged["refuting_facts"][0]["source_title"] == ""
+
+
+def test_merge_analyst_take_sources_backfills_title_only_for_matching_url() -> None:
+    analyst_take = {
+        "analysis_summary": "x",
+        "supporting_facts": [
+            {
+                "fact": "f",
+                "source_title": "",
+                "source_url": "https://example.com/a",
+            }
+        ],
+        "refuting_facts": [],
+        "bottom_line": "b",
+    }
+    merged = merge_analyst_take_sources(
+        analyst_take,
+        [{"title": "Example A", "url": "https://example.com/a", "domain": "example.com"}],
+    )
+    assert merged["supporting_facts"][0]["source_title"] == "Example A"
+
+
+def test_upsert_best_available_section() -> None:
+    brief = build_brief_input(_sample_report(), top_n=5)
+    markdown = (
+        "## Snapshot\n\n"
+        "## Analyst Take\n\n"
+        "text\n\n"
+        "## Action Plan (GO / LEAN / NO-GO)\n\n"
+        "| Action | Game | Tier | Ticket | Edge Note | Why |\n"
+    )
+    patched = upsert_best_available_section(markdown, brief_input=brief)
+    assert "## Best Available Bet Right Now" in patched
+    assert patched.index("## Best Available Bet Right Now") < patched.index(
+        "## Action Plan (GO / LEAN / NO-GO)"
+    )
+
+
+def test_ensure_pagebreak_before_action_plan() -> None:
+    markdown = (
+        "## Snapshot\n\n"
+        "## Best Available Bet Right Now\n\n"
+        "- line\n\n"
+        "## Action Plan (GO / LEAN / NO-GO)\n\n"
+        "| Action | Game |\n"
+    )
+    patched = ensure_pagebreak_before_action_plan(markdown)
+    assert "<!-- pagebreak -->\n\n## Action Plan (GO / LEAN / NO-GO)" in patched
+
+
+def test_build_analyst_web_prompt_contains_contract() -> None:
+    brief = build_brief_input(_sample_report(), top_n=5)
+    pass1 = default_pass1(brief)
+    prompt = build_analyst_web_prompt(brief, pass1)
+    assert "Return ONLY JSON" in prompt
+    assert "supporting_facts" in prompt
+    assert "refuting_facts" in prompt
 
 
 def test_strip_risks_and_watchouts_section() -> None:

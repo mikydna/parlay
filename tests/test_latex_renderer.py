@@ -39,6 +39,20 @@ def test_markdown_to_latex_pagebreak_marker() -> None:
     assert "\\newpage" in tex
 
 
+def test_markdown_to_latex_inline_bold_code_and_links() -> None:
+    markdown = (
+        "## Analyst Take\n\n"
+        "- **Best Bet:** **Jay Huff OVER 13.5 points @ +100 (fanduel)**\n"
+        "- Lookup: `IND @ BKN | OVER 13.5 points | fanduel +100`\n"
+        "- Source: [StatsArc](https://www.statsarc.com/a_b)\n"
+    )
+    tex = markdown_to_latex(markdown, title="NBA Strategy Brief")
+    assert "\\textbf{Best Bet:}" in tex
+    assert "\\textbf{Jay Huff OVER 13.5 points @ +100 (fanduel)}" in tex
+    assert "\\texttt{IND @ BKN | OVER 13.5 points | fanduel +100}" in tex
+    assert "\\href{https://www.statsarc.com/a\\_b}{StatsArc}" in tex
+
+
 def test_compile_pdf_missing_tool(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     tex_path = tmp_path / "brief.tex"
     tex_path.write_text(

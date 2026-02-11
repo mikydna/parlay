@@ -86,6 +86,7 @@ def test_generate_brief_writes_snapshot_and_latest(
 
     assert (reports_dir / "brief-input.json").exists()
     assert (reports_dir / "brief-pass1.json").exists()
+    assert (reports_dir / "brief-analyst.json").exists()
     assert (reports_dir / "strategy-brief.md").exists()
     assert (reports_dir / "strategy-brief.tex").exists()
     assert (reports_dir / "strategy-brief.meta.json").exists()
@@ -94,6 +95,13 @@ def test_generate_brief_writes_snapshot_and_latest(
     assert (latest_dir / "strategy-brief.md").exists()
     assert (latest_dir / "strategy-brief.tex").exists()
     markdown = (reports_dir / "strategy-brief.md").read_text(encoding="utf-8")
+    assert "## Analyst Take" in markdown
+    assert markdown.index("## Analyst Take") < markdown.index("## Action Plan (GO / LEAN / NO-GO)")
+    assert "## Best Available Bet Right Now" in markdown
+    assert markdown.index("## Best Available Bet Right Now") < markdown.index(
+        "## Action Plan (GO / LEAN / NO-GO)"
+    )
+    assert "<!-- pagebreak -->\n\n## Action Plan (GO / LEAN / NO-GO)" in markdown
     assert markdown.rfind("## Data Quality") > markdown.rfind("## Game Cards by Matchup")
     assert markdown.rfind("## Confidence") > markdown.rfind("## Data Quality")
     assert "<!-- pagebreak -->" in markdown
@@ -142,6 +150,7 @@ def test_generate_brief_pass1_retries_then_succeeds(
             return {
                 "text": (
                     "## Snapshot\n\n## What The Bet Is\n\n## Executive Summary\n\n"
+                    "## Analyst Take\n\n"
                     "## Action Plan (GO / LEAN / NO-GO)\n\n## Risks and Watchouts\n\n"
                     "## Tier B View (Single-Book Lines)\n\n## Data Quality\n\n## Confidence\n"
                 ),
@@ -165,5 +174,6 @@ def test_generate_brief_pass1_retries_then_succeeds(
     markdown = Path(result["report_markdown"]).read_text(encoding="utf-8")
     assert "## Risks and Watchouts" not in markdown
     assert "## Tier B View (Single-Book Lines)" not in markdown
+    assert "## Analyst Take" in markdown
     assert meta["llm"]["pass1"]["status"] == "ok"
     assert meta["llm"]["pass1"]["attempts"] == 2

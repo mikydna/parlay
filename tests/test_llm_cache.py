@@ -154,3 +154,71 @@ def test_incomplete_response_raises_clear_error(
             refresh=True,
             offline=False,
         )
+
+
+def test_web_sources_extracted_and_cached(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("ODDS_API_KEY", "odds-test")
+    monkeypatch.setenv("OPENAI_API_KEY", "openai-test")
+    settings = Settings(_env_file=None)
+
+    def fake_post(url: str, headers: dict[str, str], payload: dict, timeout: float) -> dict:
+        del url, headers, timeout
+        assert payload.get("tools") == [{"type": "web_search"}]
+        assert "reasoning" not in payload
+        output_text = (
+            '{"analysis_summary":"ok","supporting_facts":[],'
+            '"refuting_facts":[],"bottom_line":"ok"}'
+        )
+        return {
+            "output_text": output_text,
+            "output": [
+                {
+                    "type": "web_search_call",
+                    "action": {
+                        "sources": [
+                            {
+                                "title": "Source A",
+                                "url": "https://example.com/a",
+                                "domain": "example.com",
+                            }
+                        ]
+                    },
+                }
+            ],
+            "usage": {"input_tokens": 2, "output_tokens": 3, "total_tokens": 5},
+        }
+
+    client = LLMClient(settings=settings, data_root=tmp_path / "data", post_fn=fake_post)
+    first = client.cached_completion(
+        task="playbook_analyst_web",
+        prompt_version="v1",
+        prompt="hello",
+        payload={"x": 1},
+        snapshot_id="snap-1",
+        model="gpt-5-mini",
+        max_output_tokens=180,
+        temperature=0.1,
+        refresh=False,
+        offline=False,
+        request_options={"tools": [{"type": "web_search"}], "tool_choice": "auto"},
+    )
+    second = client.cached_completion(
+        task="playbook_analyst_web",
+        prompt_version="v1",
+        prompt="hello",
+        payload={"x": 1},
+        snapshot_id="snap-1",
+        model="gpt-5-mini",
+        max_output_tokens=180,
+        temperature=0.1,
+        refresh=False,
+        offline=False,
+        request_options={"tools": [{"type": "web_search"}], "tool_choice": "auto"},
+    )
+
+    assert first["cached"] is False
+    assert first["web_sources"][0]["url"] == "https://example.com/a"
+    assert second["cached"] is True
+    assert second["web_sources"][0]["title"] == "Source A"
