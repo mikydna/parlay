@@ -4,7 +4,12 @@ version = "0.1.0"
 description = "NBA props expected-value pipeline scaffolding"
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "httpx>=0.28.1",
+    "pydantic-settings>=2.12.0",
+    "python-dotenv>=1.2.1",
+    "tenacity>=9.1.4",
+]
 
 [project.scripts]
 prop-ev = "prop_ev.cli:main"
@@ -18,5 +23,22 @@ packages = ["src/prop_ev"]
 
 [dependency-groups]
 dev = [
+    "pre-commit>=4.5.1",
+    "pyright>=1.1.408",
     "pytest>=9.0.2",
+    "pytest-cov>=7.0.0",
+    "ruff>=0.15.0",
 ]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "C4", "W"]
+ignore = ["COM812", "ISC001"]
+
+[tool.pytest.ini_options]
+addopts = "-q"
+testpaths = ["tests"]
