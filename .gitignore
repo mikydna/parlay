@@ -7,6 +7,9 @@ __pycache__/
 build/
 dist/
 
+# Local data snapshots
+data/
+
 # Virtual env
 .venv/
 
@@ -26,3 +29,7 @@ htmlcov/
 
 # Pre-commit
 .pre-commit-cache/
+
+# Secrets (local only)
+*.ignore
+OPENAI_KEY

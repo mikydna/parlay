@@ -1,0 +1,29 @@
+{
+  "id": "event-1",
+  "bookmakers": [
+    {
+      "key": "book_a",
+      "last_update": "2026-02-11T15:00:00Z",
+      "markets": [
+        {
+          "key": "player_points",
+          "outcomes": [
+            {
+              "name": "Over",
+              "description": "Player A",
+              "price": -105,
+              "point": 22.5,
+              "link": "https://example.com/bet"
+            },
+            {
+              "name": "Under",
+              "description": "Player A",
+              "price": -115,
+              "point": 22.5
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

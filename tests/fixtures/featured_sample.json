@@ -1,0 +1,28 @@
+[
+  {
+    "id": "game-1",
+    "bookmakers": [
+      {
+        "key": "book_a",
+        "last_update": "2026-02-11T15:00:00Z",
+        "markets": [
+          {
+            "key": "spreads",
+            "outcomes": [
+              {
+                "name": "Home",
+                "price": -110,
+                "point": -4.5
+              },
+              {
+                "name": "Away",
+                "price": -110,
+                "point": 4.5
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+]

@@ -1,4 +1,4 @@
-"""Type and interface placeholders for The Odds API v4.
+"""Typed wrappers for The Odds API v4 client.
 
 Notes:
 - The Odds API v4 examples pass authentication using an `apiKey` query param.
@@ -8,6 +8,8 @@ Notes:
 
 from dataclasses import dataclass
 from typing import Any
+
+from prop_ev.odds_client import OddsAPIClient
 
 
 @dataclass(frozen=True)
@@ -32,12 +34,30 @@ class MarketKey:
 
 
 def list_events(*, sport_key: SportKey) -> list[dict[str, Any]]:
-    """List events for a sport.
+    """Backward-compatible placeholder function."""
+    raise NotImplementedError("use list_events_with_client")
 
-    This is intentionally unimplemented; network calls are added later.
-    """
 
-    raise NotImplementedError
+def list_events_with_client(
+    *,
+    client: OddsAPIClient,
+    sport_key: SportKey,
+    commence_from: str | None = None,
+    commence_to: str | None = None,
+) -> list[dict[str, Any]]:
+    """List events for a sport."""
+    response = client.list_events(
+        sport_key=sport_key.value,
+        commence_from=commence_from,
+        commence_to=commence_to,
+    )
+    if not isinstance(response.data, list):
+        return []
+    events: list[dict[str, Any]] = []
+    for row in response.data:
+        if isinstance(row, dict):
+            events.append(row)
+    return events
 
 
 def get_event_odds(
@@ -46,9 +66,26 @@ def get_event_odds(
     event_id: EventId,
     market_key: MarketKey,
 ) -> dict[str, Any]:
-    """Fetch odds for one event.
+    """Backward-compatible placeholder function."""
+    raise NotImplementedError("use get_event_odds_with_client")
 
-    This is intentionally unimplemented; network calls are added later.
-    """
 
-    raise NotImplementedError
+def get_event_odds_with_client(
+    *,
+    client: OddsAPIClient,
+    sport_key: SportKey,
+    event_id: EventId,
+    market_key: MarketKey,
+    regions: str = "us",
+) -> dict[str, Any]:
+    """Fetch odds for one event."""
+    response = client.get_event_odds(
+        sport_key=sport_key.value,
+        event_id=event_id.value,
+        markets=[market_key.value],
+        regions=regions,
+        bookmakers=None,
+    )
+    if isinstance(response.data, dict):
+        return response.data
+    return {}
