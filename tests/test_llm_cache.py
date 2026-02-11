@@ -156,9 +156,7 @@ def test_incomplete_response_raises_clear_error(
         )
 
 
-def test_web_sources_extracted_and_cached(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_web_sources_extracted_and_cached(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("ODDS_API_KEY", "odds-test")
     monkeypatch.setenv("OPENAI_API_KEY", "openai-test")
     settings = Settings(_env_file=None)
@@ -168,8 +166,7 @@ def test_web_sources_extracted_and_cached(
         assert payload.get("tools") == [{"type": "web_search"}]
         assert "reasoning" not in payload
         output_text = (
-            '{"analysis_summary":"ok","supporting_facts":[],'
-            '"refuting_facts":[],"bottom_line":"ok"}'
+            '{"analysis_summary":"ok","supporting_facts":[],"refuting_facts":[],"bottom_line":"ok"}'
         )
         return {
             "output_text": output_text,

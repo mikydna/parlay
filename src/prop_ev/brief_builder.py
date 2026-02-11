@@ -1114,9 +1114,7 @@ def strip_empty_go_placeholder_rows(markdown: str) -> str:
 
 def build_analyst_web_prompt(brief_input: dict[str, Any], pass1: dict[str, Any]) -> str:
     """Prompt for external evidence synthesis with web search enabled."""
-    summary = (
-        brief_input.get("summary", {}) if isinstance(brief_input.get("summary"), dict) else {}
-    )
+    summary = brief_input.get("summary", {}) if isinstance(brief_input.get("summary"), dict) else {}
     top_rows = (
         brief_input.get("top_plays", []) if isinstance(brief_input.get("top_plays"), list) else []
     )
@@ -1350,6 +1348,7 @@ def render_analyst_take_section(
     analyst_take: dict[str, Any], *, mode: str, brief_input: dict[str, Any] | None = None
 ) -> str:
     """Render Analyst Take section as markdown."""
+
     def _trim_sentences(text: str, *, max_sentences: int, max_chars: int) -> str:
         raw = text.strip()
         if not raw:
@@ -1383,11 +1382,7 @@ def render_analyst_take_section(
         url = row.get("source_url", "").strip()
         if not domain and url.startswith("http"):
             domain = (
-                url.replace("https://", "")
-                .replace("http://", "")
-                .split("/", 1)[0]
-                .strip()
-                .lower()
+                url.replace("https://", "").replace("http://", "").split("/", 1)[0].strip().lower()
             )
         if title and domain:
             if domain in title.lower():
@@ -1406,16 +1401,12 @@ def render_analyst_take_section(
         lowered = url.strip().lower()
         return lowered.startswith("https://") or lowered.startswith("http://")
 
-    external_supporting = [
-        row for row in supporting if _is_external_url(row.get("source_url", ""))
-    ]
+    external_supporting = [row for row in supporting if _is_external_url(row.get("source_url", ""))]
     external_refuting = [row for row in refuting if _is_external_url(row.get("source_url", ""))]
     internal_supporting = [
         row for row in supporting if not _is_external_url(row.get("source_url", ""))
     ]
-    internal_refuting = [
-        row for row in refuting if not _is_external_url(row.get("source_url", ""))
-    ]
+    internal_refuting = [row for row in refuting if not _is_external_url(row.get("source_url", ""))]
 
     source_ids: dict[tuple[str, str], int] = {}
     source_rows: list[dict[str, str]] = []
@@ -1510,9 +1501,7 @@ def render_analyst_take_section(
             lines.append(f"- [S{idx}] {label}")
     if internal_supporting or internal_refuting:
         lines.append("- Deterministic model details are summarized in Snapshot/Action Plan.")
-    lines.append(
-        "- Full source URLs are stored in `brief-analyst.json` for audit/debug use."
-    )
+    lines.append("- Full source URLs are stored in `brief-analyst.json` for audit/debug use.")
     return "\n".join(lines).strip()
 
 

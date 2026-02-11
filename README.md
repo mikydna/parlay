@@ -31,6 +31,7 @@ When `--bookmakers` is omitted, snapshot/playbook commands use this whitelist au
 uv run prop-ev --help
 uv run prop-ev snapshot slate --dry-run
 uv run prop-ev snapshot props --dry-run --max-events 10
+uv run prop-ev strategy health --offline
 uv run prop-ev playbook budget
 make ci
 ```
@@ -185,12 +186,17 @@ uv run prop-ev credits report --month 2026-02
 - Default no-bet gate:
   - if official injury source is missing, strategy mode becomes `watchlist_only`.
   - if quote timestamps are stale, strategy mode becomes `watchlist_only`.
+- Source health command:
+  - `uv run prop-ev strategy health --snapshot-id <SNAPSHOT_ID> --offline`
+  - returns strict exit codes: `0 healthy`, `1 degraded`, `2 broken`.
 - Tune via env vars:
   - `PROP_EV_STRATEGY_REQUIRE_OFFICIAL_INJURIES=true|false`
   - `PROP_EV_STRATEGY_REQUIRE_FRESH_CONTEXT=true|false`
   - `PROP_EV_STRATEGY_STALE_QUOTE_MINUTES=20`
   - `PROP_EV_CONTEXT_INJURIES_STALE_HOURS=6`
   - `PROP_EV_CONTEXT_ROSTER_STALE_HOURS=24`
+
+Source policy details and fallback rules are documented in `docs/sources.md`.
 
 ## Scheduled Runs
 
