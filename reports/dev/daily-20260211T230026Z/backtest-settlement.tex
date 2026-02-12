@@ -1,0 +1,858 @@
+\documentclass[10pt]{article}
+\usepackage[margin=1in,landscape]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage{hyperref}
+\usepackage{tabularx}
+\usepackage{array}
+\usepackage{ragged2e}
+\newcolumntype{Y}{>{\RaggedRight\arraybackslash}X}
+\renewcommand{\arraystretch}{1.05}
+\setlength{\parskip}{4pt}
+\setlength{\parindent}{0pt}
+\sloppy
+\begin{document}
+\begin{center}\LARGE\textbf{Backtest Settlement}\end{center}
+\vspace{0.5em}
+\section*{Backtest Settlement}
+
+\begin{itemize}
+\item snapshot\_id: \texttt{daily-20260211T230026Z}
+\item generated\_at\_utc: \texttt{2026-02-12T03:20:52Z}
+\item status: \texttt{partial}
+\item source: \texttt{nba\_live\_scoreboard\_boxscore}
+\end{itemize}
+
+\subsection*{Summary}
+
+\begin{tabularx}{\textwidth}{|l|l|l|l|l|l|l|l|l|}
+\hline
+\textbf{Total} & \textbf{Win} & \textbf{Loss} & \textbf{Push} & \textbf{Pending} & \textbf{Unresolved} & \textbf{Final Games} & \textbf{In Progress Games} & \textbf{Scheduled Games} \\
+\hline
+405 & 141 & 198 & 0 & 61 & 5 & 7 & 1 & 0 \\
+\hline
+\end{tabularx}
+
+
+\subsection*{Tickets}
+
+\begin{tabularx}{\textwidth}{|Y|Y|l|l|l|l|l|l|l|}
+\hline
+\textbf{Ticket} & \textbf{Game} & \textbf{Market} & \textbf{Side} & \textbf{Line} & \textbf{Actual} & \textbf{Result} & \textbf{Reason} & \textbf{Game Status} \\
+\hline
+Day'Ron Sharpe OVER 14.5 player\_points & Indiana Pacers @ Brooklyn Nets & player\_points & OVER & 14.50 & 19 & win & final\_settled & Final \\
+\hline
+Nolan Traore OVER 5.5 player\_assists & Indiana Pacers @ Brooklyn Nets & player\_assists & OVER & 5.50 & 8 & win & final\_settled & Final \\
+\hline
+Drake Powell OVER 11.5 player\_points\_rebounds\_assists & Indiana Pacers @ Brooklyn Nets & player\_points\_rebounds\_assists & OVER & 11.50 & 8 & loss & final\_settled & Final \\
+\hline
+Kelly Oubre Jr OVER 24.5 player\_points\_rebounds\_assists & New York Knicks @ Philadelphia 76ers & player\_points\_rebounds\_assists & OVER & 24.50 & 13 & loss & final\_settled & Final \\
+\hline
+Onyeka Okongwu OVER 24.5 player\_points\_rebounds\_assists & Atlanta Hawks @ Charlotte Hornets & player\_points\_rebounds\_assists & OVER & 24.50 & 21 & loss & final\_settled & Final \\
+\hline
+Danny Wolf OVER 14.5 player\_points & Indiana Pacers @ Brooklyn Nets & player\_points & OVER & 14.50 & 14 & loss & final\_settled & Final \\
+\hline
+Jay Huff OVER 13.5 player\_points & Indiana Pacers @ Brooklyn Nets & player\_points & OVER & 13.50 & 11 & loss & final\_settled & Final \\
+\hline
+Day'Ron Sharpe OVER 3.5 player\_assists & Indiana Pacers @ Brooklyn Nets & player\_assists & OVER & 3.50 & 5 & win & final\_settled & Final \\
+\hline
+Egor Demin OVER 12.5 player\_points & Indiana Pacers @ Brooklyn Nets & player\_points & OVER & 12.50 & 13 & win & final\_settled & Final \\
+\hline
+Nolan Traore OVER 12.5 player\_points & Indiana Pacers @ Brooklyn Nets & player\_points & OVER & 12.50 & 20 & win & final\_settled & Final \\
+\hline
+Egor Demin OVER 19.5 player\_points\_rebounds\_assists & Indiana Pacers @ Brooklyn Nets & player\_points\_rebounds\_assists & OVER & 19.50 & 23 & win & final\_settled & Final \\
+\hline
+Nolan Traore OVER 1.5 player\_threes & Indiana Pacers @ Brooklyn Nets & player\_threes & OVER & 1.50 & 2 & win & final\_settled & Final \\
+\hline
+Zaccharie Risacher OVER 1.5 player\_threes & Atlanta Hawks @ Charlotte Hornets & player\_threes & OVER & 1.50 & 1 & loss & final\_settled & Final \\
+\hline
+Drake Powell OVER 6.5 player\_points & Indiana Pacers @ Brooklyn Nets & player\_points & OVER & 6.50 & 6 & loss & final\_settled & Final \\
+\hline
+Dominick Barlow OVER 14.5 player\_points\_rebounds\_assists & New York Knicks @ Philadelphia 76ers & player\_points\_rebounds\_assists & OVER & 14.50 & 18 & win & final\_settled & Final \\
+\hline
+Dominick Barlow OVER 8.5 player\_points & New York Knicks @ Philadelphia 76ers & player\_points & OVER & 8.50 & 13 & win & final\_settled & Final \\
+\hline
+Kelly Oubre Jr OVER 2.5 player\_threes & New York Knicks @ Philadelphia 76ers & player\_threes & OVER & 2.50 & 0 & loss & final\_settled & Final \\
+\hline
+Jarace Walker OVER 2.5 player\_threes & Indiana Pacers @ Brooklyn Nets & player\_threes & OVER & 2.50 & 2 & loss & final\_settled & Final \\
+\hline
+Jarrett Allen OVER 28.5 player\_points\_rebounds\_assists & Washington Wizards @ Cleveland Cavaliers & player\_points\_rebounds\_assists & OVER & 28.50 & 31 & win & final\_settled & Final \\
+\hline
+VJ Edgecombe OVER 24.5 player\_points\_rebounds\_assists & New York Knicks @ Philadelphia 76ers & player\_points\_rebounds\_assists & OVER & 24.50 & 20 & loss & final\_settled & Final \\
+\hline
+Danny Wolf OVER 24.5 player\_points\_rebounds\_assists & Indiana Pacers @ Brooklyn Nets & player\_points\_rebounds\_assists & OVER & 24.50 & 22 & loss & final\_settled & Final \\
+\hline
+Kam Jones OVER 22.5 player\_points\_rebounds\_assists & Indiana Pacers @ Brooklyn Nets & player\_points\_rebounds\_assists & OVER & 22.50 & 19 & loss & final\_settled & Final \\
+\hline
+Tyrese Maxey OVER 42.5 player\_points\_rebounds\_assists & New York Knicks @ Philadelphia 76ers & player\_points\_rebounds\_assists & OVER & 42.50 & 36 & loss & final\_settled & Final \\
+\hline
+Day'Ron Sharpe OVER 29.5 player\_points\_rebounds\_assists & Indiana Pacers @ Brooklyn Nets & player\_points\_rebounds\_assists & OVER & 29.50 & 36 & win & final\_settled & Final \\
+\hline
+VJ Edgecombe OVER 25.5 player\_points\_rebounds\_assists & New York Knicks @ Philadelphia 76ers & player\_points\_rebounds\_assists & OVER & 25.50 & 20 & loss & final\_settled & Final \\
+\hline
+Kelly Oubre Jr OVER 17.5 player\_points & New York Knicks @ Philadelphia 76ers & player\_points & OVER & 17.50 & 2 & loss & final\_settled & Final \\
+\hline
+VJ Edgecombe OVER 16.5 player\_points & New York Knicks @ Philadelphia 76ers & player\_points & OVER & 16.50 & 14 & loss & final\_settled & Final \\
+\hline
+Jalen Johnson OVER 41.5 player\_points\_rebounds\_assists & Atlanta Hawks @ Charlotte Hornets & player\_points\_rebounds\_assists & OVER & 41.50 & 41 & loss & final\_settled & Final \\
+\hline
+Nolan Traore OVER 19.5 player\_points\_rebounds\_assists & Indiana Pacers @ Brooklyn Nets & player\_points\_rebounds\_assists & OVER & 19.50 & 30 & win & final\_settled & Final \\
+\hline
+VJ Edgecombe OVER 4.5 player\_assists & New York Knicks @ Philadelphia 76ers & player\_assists & OVER & 4.50 & 2 & loss & final\_settled & Final \\
+\hline
+Jarace Walker OVER 18.5 player\_points & Indiana Pacers @ Brooklyn Nets & player\_points & OVER & 18.50 & 23 & win & final\_settled & Final \\
+\hline
+Kam Jones OVER 13.5 player\_points & Indiana Pacers @ Brooklyn Nets & player\_points & OVER & 13.50 & 11 & loss & final\_settled & Final \\
+\hline
+Jalen Brunson OVER 36.5 player\_points\_rebounds\_assists & New York Knicks @ Philadelphia 76ers & player\_points\_rebounds\_assists & OVER & 36.50 & 16 & loss & final\_settled & Final \\
+\hline
+Josh Hart OVER 26.5 player\_points\_rebounds\_assists & New York Knicks @ Philadelphia 76ers & player\_points\_rebounds\_assists & OVER & 26.50 & 22 & loss & final\_settled & Final \\
+\hline
+Karl-Anthony Towns OVER 32.5 player\_points\_rebounds\_assists & New York Knicks @ Philadelphia 76ers & player\_points\_rebounds\_assists & OVER & 32.50 & 37 & win & final\_settled & Final \\
+\hline
+Ziaire Williams OVER 3.5 player\_rebounds & Indiana Pacers @ Brooklyn Nets & player\_rebounds & OVER & 3.50 & 5 & win & final\_settled & Final \\
+\hline
+Kam Jones OVER 1.5 player\_threes & Indiana Pacers @ Brooklyn Nets & player\_threes & OVER & 1.50 & 1 & loss & final\_settled & Final \\
+\hline
+Nickeil Alexander-Walker OVER 25.5 player\_points\_rebounds\_assists & Atlanta Hawks @ Charlotte Hornets & player\_points\_rebounds\_assists & OVER & 25.50 & 17 & loss & final\_settled & Final \\
+\hline
+Landry Shamet OVER 2.5 player\_threes & New York Knicks @ Philadelphia 76ers & player\_threes & OVER & 2.50 & 1 & loss & final\_settled & Final \\
+\hline
+VJ Edgecombe OVER 15.5 player\_points & New York Knicks @ Philadelphia 76ers & player\_points & OVER & 15.50 & 14 & loss & final\_settled & Final \\
+\hline
+Tyrese Maxey OVER 30.5 player\_points & New York Knicks @ Philadelphia 76ers & player\_points & OVER & 30.50 & 32 & win & final\_settled & Final \\
+\hline
+Tyrese Maxey OVER 3.5 player\_rebounds & New York Knicks @ Philadelphia 76ers & player\_rebounds & OVER & 3.50 & 2 & loss & final\_settled & Final \\
+\hline
+Egor Demin OVER 2.5 player\_threes & Indiana Pacers @ Brooklyn Nets & player\_threes & OVER & 2.50 & 3 & win & final\_settled & Final \\
+\hline
+Ben Sheppard OVER 10.5 player\_points & Indiana Pacers @ Brooklyn Nets & player\_points & OVER & 10.50 & 9 & loss & final\_settled & Final \\
+\hline
+Kam Jones OVER 21.5 player\_points\_rebounds\_assists & Indiana Pacers @ Brooklyn Nets & player\_points\_rebounds\_assists & OVER & 21.50 & 19 & loss & final\_settled & Final \\
+\hline
+Ziaire Williams OVER 9.5 player\_points & Indiana Pacers @ Brooklyn Nets & player\_points & OVER & 9.50 & 19 & win & final\_settled & Final \\
+\hline
+Tyrese Maxey OVER 41.5 player\_points\_rebounds\_assists & New York Knicks @ Philadelphia 76ers & player\_points\_rebounds\_assists & OVER & 41.50 & 36 & loss & final\_settled & Final \\
+\hline
+Nolan Traore OVER 11.5 player\_points & Indiana Pacers @ Brooklyn Nets & player\_points & OVER & 11.50 & 20 & win & final\_settled & Final \\
+\hline
+Kam Jones OVER 12.5 player\_points & Indiana Pacers @ Brooklyn Nets & player\_points & OVER & 12.50 & 11 & loss & final\_settled & Final \\
+\hline
+Egor Demin OVER 3.5 player\_assists & Indiana Pacers @ Brooklyn Nets & player\_assists & OVER & 3.50 & 5 & win & final\_settled & Final \\
+\hline
+Mikal Bridges OVER 22.5 player\_points\_rebounds\_assists & New York Knicks @ Philadelphia 76ers & player\_points\_rebounds\_assists & OVER & 22.50 & 33 & win & final\_settled & Final \\
+\hline
+Day'Ron Sharpe OVER 28.5 player\_points\_rebounds\_assists & Indiana Pacers @ Brooklyn Nets & player\_points\_rebounds\_assists & OVER & 28.50 & 36 & win & final\_settled & Final \\
+\hline
+C.J. McCollum OVER 22.5 player\_points\_rebounds\_assists & Atlanta Hawks @ Charlotte Hornets & player\_points\_rebounds\_assists & OVER & 22.50 & 31 & win & final\_settled & Final \\
+\hline
+Drake Powell OVER 2.5 player\_rebounds & Indiana Pacers @ Brooklyn Nets & player\_rebounds & OVER & 2.50 & 1 & loss & final\_settled & Final \\
+\hline
+Nolan Traore OVER 2.5 player\_rebounds & Indiana Pacers @ Brooklyn Nets & player\_rebounds & OVER & 2.50 & 2 & loss & final\_settled & Final \\
+\hline
+Zaccharie Risacher OVER 8.5 player\_points & Atlanta Hawks @ Charlotte Hornets & player\_points & OVER & 8.50 & 5 & loss & final\_settled & Final \\
+\hline
+Jaylon Tyson OVER 13.5 player\_points & Washington Wizards @ Cleveland Cavaliers & player\_points & OVER & 13.50 & 7 & loss & final\_settled & Final \\
+\hline
+Dyson Daniels OVER 22.5 player\_points\_rebounds\_assists & Atlanta Hawks @ Charlotte Hornets & player\_points\_rebounds\_assists & OVER & 22.50 & 28 & win & final\_settled & Final \\
+\hline
+Corey Kispert OVER 9.5 player\_points & Atlanta Hawks @ Charlotte Hornets & player\_points & OVER & 9.50 & 2 & loss & final\_settled & Final \\
+\hline
+Paul Reed Jr OVER 24.5 player\_points\_rebounds\_assists & Detroit Pistons @ Toronto Raptors & player\_points\_rebounds\_assists & OVER & 24.50 &  & unresolved & player\_not\_found & Final \\
+\hline
+C.J. McCollum OVER 3.5 player\_assists & Atlanta Hawks @ Charlotte Hornets & player\_assists & OVER & 3.50 & 8 & win & final\_settled & Final \\
+\hline
+Mikal Bridges OVER 21.5 player\_points\_rebounds\_assists & New York Knicks @ Philadelphia 76ers & player\_points\_rebounds\_assists & OVER & 21.50 & 33 & win & final\_settled & Final \\
+\hline
+Grant Williams OVER 18.5 player\_points\_rebounds\_assists & Atlanta Hawks @ Charlotte Hornets & player\_points\_rebounds\_assists & OVER & 18.50 & 20 & win & final\_settled & Final \\
+\hline
+Danny Wolf OVER 1.5 player\_threes & Indiana Pacers @ Brooklyn Nets & player\_threes & OVER & 1.50 & 2 & win & final\_settled & Final \\
+\hline
+Dominick Barlow OVER 5.5 player\_rebounds & New York Knicks @ Philadelphia 76ers & player\_rebounds & OVER & 5.50 & 4 & loss & final\_settled & Final \\
+\hline
+Kelly Oubre Jr OVER 5.5 player\_rebounds & New York Knicks @ Philadelphia 76ers & player\_rebounds & OVER & 5.50 & 7 & win & final\_settled & Final \\
+\hline
+VJ Edgecombe OVER 5.5 player\_rebounds & New York Knicks @ Philadelphia 76ers & player\_rebounds & OVER & 5.50 & 4 & loss & final\_settled & Final \\
+\hline
+Kelly Oubre Jr OVER 16.5 player\_points & New York Knicks @ Philadelphia 76ers & player\_points & OVER & 16.50 & 2 & loss & final\_settled & Final \\
+\hline
+Kyshawn George OVER 23.5 player\_points\_rebounds\_assists & Washington Wizards @ Cleveland Cavaliers & player\_points\_rebounds\_assists & OVER & 23.50 & 25 & win & final\_settled & Final \\
+\hline
+C.J. McCollum OVER 16.5 player\_points & Atlanta Hawks @ Charlotte Hornets & player\_points & OVER & 16.50 & 17 & win & final\_settled & Final \\
+\hline
+Donovan Mitchell OVER 3.5 player\_threes & Washington Wizards @ Cleveland Cavaliers & player\_threes & OVER & 3.50 & 2 & loss & final\_settled & Final \\
+\hline
+Jalen Brunson OVER 3.5 player\_rebounds & New York Knicks @ Philadelphia 76ers & player\_rebounds & OVER & 3.50 & 4 & win & final\_settled & Final \\
+\hline
+Danny Wolf OVER 7.5 player\_rebounds & Indiana Pacers @ Brooklyn Nets & player\_rebounds & OVER & 7.50 & 8 & win & final\_settled & Final \\
+\hline
+Josh Hart OVER 13.5 player\_points & New York Knicks @ Philadelphia 76ers & player\_points & OVER & 13.50 & 6 & loss & final\_settled & Final \\
+\hline
+Donovan Mitchell OVER 37.5 player\_points\_rebounds\_assists & Washington Wizards @ Cleveland Cavaliers & player\_points\_rebounds\_assists & OVER & 37.50 & 38 & win & final\_settled & Final \\
+\hline
+Jaylon Tyson OVER 21.5 player\_points\_rebounds\_assists & Washington Wizards @ Cleveland Cavaliers & player\_points\_rebounds\_assists & OVER & 21.50 & 13 & loss & final\_settled & Final \\
+\hline
+Jalen Johnson OVER 40.5 player\_points\_rebounds\_assists & Atlanta Hawks @ Charlotte Hornets & player\_points\_rebounds\_assists & OVER & 40.50 & 41 & win & final\_settled & Final \\
+\hline
+Mikal Bridges OVER 14.5 player\_points & New York Knicks @ Philadelphia 76ers & player\_points & OVER & 14.50 & 22 & win & final\_settled & Final \\
+\hline
+Nickeil Alexander-Walker OVER 18.5 player\_points & Atlanta Hawks @ Charlotte Hornets & player\_points & OVER & 18.50 & 10 & loss & final\_settled & Final \\
+\hline
+Karl-Anthony Towns OVER 2.5 player\_assists & New York Knicks @ Philadelphia 76ers & player\_assists & OVER & 2.50 & 5 & win & final\_settled & Final \\
+\hline
+Jay Huff OVER 5.5 player\_rebounds & Indiana Pacers @ Brooklyn Nets & player\_rebounds & OVER & 5.50 & 4 & loss & final\_settled & Final \\
+\hline
+Jalen Brunson OVER 26.5 player\_points & New York Knicks @ Philadelphia 76ers & player\_points & OVER & 26.50 & 8 & loss & final\_settled & Final \\
+\hline
+Caris LeVert OVER 12.5 player\_points\_rebounds\_assists & Detroit Pistons @ Toronto Raptors & player\_points\_rebounds\_assists & OVER & 12.50 & 12 & loss & final\_settled & Final \\
+\hline
+Donovan Mitchell OVER 27.5 player\_points & Washington Wizards @ Cleveland Cavaliers & player\_points & OVER & 27.50 & 30 & win & final\_settled & Final \\
+\hline
+Jarace Walker OVER 17.5 player\_points & Indiana Pacers @ Brooklyn Nets & player\_points & OVER & 17.50 & 23 & win & final\_settled & Final \\
+\hline
+Josh Hart OVER 5.5 player\_assists & New York Knicks @ Philadelphia 76ers & player\_assists & OVER & 5.50 & 9 & win & final\_settled & Final \\
+\hline
+Landry Shamet OVER 11.5 player\_points & New York Knicks @ Philadelphia 76ers & player\_points & OVER & 11.50 & 9 & loss & final\_settled & Final \\
+\hline
+Dyson Daniels OVER 10.5 player\_points & Atlanta Hawks @ Charlotte Hornets & player\_points & OVER & 10.50 & 21 & win & final\_settled & Final \\
+\hline
+Jalen Johnson OVER 22.5 player\_points & Atlanta Hawks @ Charlotte Hornets & player\_points & OVER & 22.50 & 19 & loss & final\_settled & Final \\
+\hline
+Onyeka Okongwu OVER 7.5 player\_rebounds & Atlanta Hawks @ Charlotte Hornets & player\_rebounds & OVER & 7.50 & 3 & loss & final\_settled & Final \\
+\hline
+Bilal Coulibaly OVER 10.5 player\_points & Washington Wizards @ Cleveland Cavaliers & player\_points & OVER & 10.50 & 13 & win & final\_settled & Final \\
+\hline
+Dennis Schroder OVER 14.5 player\_points\_rebounds\_assists & Washington Wizards @ Cleveland Cavaliers & player\_points\_rebounds\_assists & OVER & 14.50 & 12 & loss & final\_settled & Final \\
+\hline
+Landry Shamet OVER 15.5 player\_points\_rebounds\_assists & New York Knicks @ Philadelphia 76ers & player\_points\_rebounds\_assists & OVER & 15.50 & 15 & loss & final\_settled & Final \\
+\hline
+James Harden OVER 35.5 player\_points\_rebounds\_assists & Washington Wizards @ Cleveland Cavaliers & player\_points\_rebounds\_assists & OVER & 35.50 & 28 & loss & final\_settled & Final \\
+\hline
+Mikal Bridges OVER 3.5 player\_assists & New York Knicks @ Philadelphia 76ers & player\_assists & OVER & 3.50 & 6 & win & final\_settled & Final \\
+\hline
+Onyeka Okongwu OVER 14.5 player\_points & Atlanta Hawks @ Charlotte Hornets & player\_points & OVER & 14.50 & 18 & win & final\_settled & Final \\
+\hline
+Tre Johnson OVER 14.5 player\_points & Washington Wizards @ Cleveland Cavaliers & player\_points & OVER & 14.50 & 10 & loss & final\_settled & Final \\
+\hline
+Duncan Robinson OVER 11.5 player\_points & Detroit Pistons @ Toronto Raptors & player\_points & OVER & 11.50 & 13 & win & final\_settled & Final \\
+\hline
+Brandon Miller OVER 33.5 player\_points\_rebounds\_assists & Atlanta Hawks @ Charlotte Hornets & player\_points\_rebounds\_assists & OVER & 33.50 & 42 & win & final\_settled & Final \\
+\hline
+Ausar Thompson OVER 10.5 player\_points & Detroit Pistons @ Toronto Raptors & player\_points & OVER & 10.50 & 4 & loss & final\_settled & Final \\
+\hline
+Nickeil Alexander-Walker OVER 3.5 player\_rebounds & Atlanta Hawks @ Charlotte Hornets & player\_rebounds & OVER & 3.50 & 3 & loss & final\_settled & Final \\
+\hline
+Bilal Coulibaly OVER 17.5 player\_points\_rebounds\_assists & Washington Wizards @ Cleveland Cavaliers & player\_points\_rebounds\_assists & OVER & 17.50 & 15 & loss & final\_settled & Final \\
+\hline
+Dennis Schroder OVER 9.5 player\_points & Washington Wizards @ Cleveland Cavaliers & player\_points & OVER & 9.50 & 7 & loss & final\_settled & Final \\
+\hline
+Corey Kispert OVER 1.5 player\_threes & Atlanta Hawks @ Charlotte Hornets & player\_threes & OVER & 1.50 & 0 & loss & final\_settled & Final \\
+\hline
+Tyrese Maxey OVER 7.5 player\_assists & New York Knicks @ Philadelphia 76ers & player\_assists & OVER & 7.50 & 2 & loss & final\_settled & Final \\
+\hline
+Cade Cunningham OVER 25.5 player\_points & Detroit Pistons @ Toronto Raptors & player\_points & OVER & 25.50 & 28 & win & final\_settled & Final \\
+\hline
+Tobias Harris OVER 1.5 player\_threes & Detroit Pistons @ Toronto Raptors & player\_threes & OVER & 1.50 & 1 & loss & final\_settled & Final \\
+\hline
+LaMelo Ball OVER 36.5 player\_points\_rebounds\_assists & Atlanta Hawks @ Charlotte Hornets & player\_points\_rebounds\_assists & OVER & 36.50 & 34 & loss & final\_settled & Final \\
+\hline
+Tobias Harris OVER 2.5 player\_assists & Detroit Pistons @ Toronto Raptors & player\_assists & OVER & 2.50 & 0 & loss & final\_settled & Final \\
+\hline
+Egor Demin OVER 3.5 player\_rebounds & Indiana Pacers @ Brooklyn Nets & player\_rebounds & OVER & 3.50 & 5 & win & final\_settled & Final \\
+\hline
+Paul Reed Jr OVER 23.5 player\_points\_rebounds\_assists & Detroit Pistons @ Toronto Raptors & player\_points\_rebounds\_assists & OVER & 23.50 &  & unresolved & player\_not\_found & Final \\
+\hline
+Daniss Jenkins OVER 8.5 player\_points & Detroit Pistons @ Toronto Raptors & player\_points & OVER & 8.50 & 8 & loss & final\_settled & Final \\
+\hline
+Tobias Harris OVER 22.5 player\_points\_rebounds\_assists & Detroit Pistons @ Toronto Raptors & player\_points\_rebounds\_assists & OVER & 22.50 & 24 & win & final\_settled & Final \\
+\hline
+James Harden OVER 34.5 player\_points\_rebounds\_assists & Washington Wizards @ Cleveland Cavaliers & player\_points\_rebounds\_assists & OVER & 34.50 & 28 & loss & final\_settled & Final \\
+\hline
+Day'Ron Sharpe OVER 11.5 player\_rebounds & Indiana Pacers @ Brooklyn Nets & player\_rebounds & OVER & 11.50 & 12 & win & final\_settled & Final \\
+\hline
+Ausar Thompson OVER 18.5 player\_points\_rebounds\_assists & Detroit Pistons @ Toronto Raptors & player\_points\_rebounds\_assists & OVER & 18.50 & 12 & loss & final\_settled & Final \\
+\hline
+Cade Cunningham OVER 39.5 player\_points\_rebounds\_assists & Detroit Pistons @ Toronto Raptors & player\_points\_rebounds\_assists & OVER & 39.50 & 44 & win & final\_settled & Final \\
+\hline
+Paul Reed Jr OVER 2.5 player\_assists & Detroit Pistons @ Toronto Raptors & player\_assists & OVER & 2.50 &  & unresolved & player\_not\_found & Final \\
+\hline
+Sam Merrill OVER 10.5 player\_points & Washington Wizards @ Cleveland Cavaliers & player\_points & OVER & 10.50 & 32 & win & final\_settled & Final \\
+\hline
+Karl-Anthony Towns OVER 18.5 player\_points & New York Knicks @ Philadelphia 76ers & player\_points & OVER & 18.50 & 21 & win & final\_settled & Final \\
+\hline
+Caris LeVert OVER 7.5 player\_points & Detroit Pistons @ Toronto Raptors & player\_points & OVER & 7.50 & 9 & win & final\_settled & Final \\
+\hline
+Josh Green OVER 5.5 player\_points & Atlanta Hawks @ Charlotte Hornets & player\_points & OVER & 5.50 & 3 & loss & final\_settled & Final \\
+\hline
+Kyshawn George OVER 14.5 player\_points & Washington Wizards @ Cleveland Cavaliers & player\_points & OVER & 14.50 & 17 & win & final\_settled & Final \\
+\hline
+Jalen Brunson OVER 6.5 player\_assists & New York Knicks @ Philadelphia 76ers & player\_assists & OVER & 6.50 & 4 & loss & final\_settled & Final \\
+\hline
+Cade Cunningham OVER 40.5 player\_points\_rebounds\_assists & Detroit Pistons @ Toronto Raptors & player\_points\_rebounds\_assists & OVER & 40.50 & 44 & win & final\_settled & Final \\
+\hline
+Josh Hart OVER 12.5 player\_points & New York Knicks @ Philadelphia 76ers & player\_points & OVER & 12.50 & 6 & loss & final\_settled & Final \\
+\hline
+Will Riley OVER 13.5 player\_points & Washington Wizards @ Cleveland Cavaliers & player\_points & OVER & 13.50 & 4 & loss & final\_settled & Final \\
+\hline
+Nickeil Alexander-Walker OVER 17.5 player\_points & Atlanta Hawks @ Charlotte Hornets & player\_points & OVER & 17.50 & 10 & loss & final\_settled & Final \\
+\hline
+Onyeka Okongwu OVER 13.5 player\_points & Atlanta Hawks @ Charlotte Hornets & player\_points & OVER & 13.50 & 18 & win & final\_settled & Final \\
+\hline
+Duncan Robinson OVER 15.5 player\_points\_rebounds\_assists & Detroit Pistons @ Toronto Raptors & player\_points\_rebounds\_assists & OVER & 15.50 & 18 & win & final\_settled & Final \\
+\hline
+C.J. McCollum OVER 2.5 player\_threes & Atlanta Hawks @ Charlotte Hornets & player\_threes & OVER & 2.50 & 1 & loss & final\_settled & Final \\
+\hline
+Josh Hart OVER 1.5 player\_threes & New York Knicks @ Philadelphia 76ers & player\_threes & OVER & 1.50 & 1 & loss & final\_settled & Final \\
+\hline
+James Harden OVER 21.5 player\_points & Washington Wizards @ Cleveland Cavaliers & player\_points & OVER & 21.50 & 13 & loss & final\_settled & Final \\
+\hline
+Tre Johnson OVER 19.5 player\_points\_rebounds\_assists & Washington Wizards @ Cleveland Cavaliers & player\_points\_rebounds\_assists & OVER & 19.50 & 15 & loss & final\_settled & Final \\
+\hline
+Tidjane Salaun OVER 6.5 player\_points & Atlanta Hawks @ Charlotte Hornets & player\_points & OVER & 6.50 & 3 & loss & final\_settled & Final \\
+\hline
+Ziaire Williams OVER 1.5 player\_threes & Indiana Pacers @ Brooklyn Nets & player\_threes & OVER & 1.50 & 5 & win & final\_settled & Final \\
+\hline
+Will Riley OVER 2.5 player\_assists & Washington Wizards @ Cleveland Cavaliers & player\_assists & OVER & 2.50 & 2 & loss & final\_settled & Final \\
+\hline
+Will Riley OVER 18.5 player\_points\_rebounds\_assists & Washington Wizards @ Cleveland Cavaliers & player\_points\_rebounds\_assists & OVER & 18.50 & 10 & loss & final\_settled & Final \\
+\hline
+Ben Sheppard OVER 4.5 player\_rebounds & Indiana Pacers @ Brooklyn Nets & player\_rebounds & OVER & 4.50 & 1 & loss & final\_settled & Final \\
+\hline
+Kon Knueppel OVER 30.5 player\_points\_rebounds\_assists & Atlanta Hawks @ Charlotte Hornets & player\_points\_rebounds\_assists & OVER & 30.50 & 28 & loss & final\_settled & Final \\
+\hline
+Jarrett Allen OVER 16.5 player\_points & Washington Wizards @ Cleveland Cavaliers & player\_points & OVER & 16.50 & 21 & win & final\_settled & Final \\
+\hline
+Ryan Kalkbrenner OVER 17.5 player\_points\_rebounds\_assists & Atlanta Hawks @ Charlotte Hornets & player\_points\_rebounds\_assists & OVER & 17.50 & 12 & loss & final\_settled & Final \\
+\hline
+Grant Williams OVER 2.5 player\_assists & Atlanta Hawks @ Charlotte Hornets & player\_assists & OVER & 2.50 & 5 & win & final\_settled & Final \\
+\hline
+Bilal Coulibaly OVER 1.5 player\_threes & Washington Wizards @ Cleveland Cavaliers & player\_threes & OVER & 1.50 & 1 & loss & final\_settled & Final \\
+\hline
+Brandon Miller OVER 32.5 player\_points\_rebounds\_assists & Atlanta Hawks @ Charlotte Hornets & player\_points\_rebounds\_assists & OVER & 32.50 & 42 & win & final\_settled & Final \\
+\hline
+Tyrese Maxey OVER 3.5 player\_threes & New York Knicks @ Philadelphia 76ers & player\_threes & OVER & 3.50 & 3 & loss & final\_settled & Final \\
+\hline
+Grant Williams OVER 10.5 player\_points & Atlanta Hawks @ Charlotte Hornets & player\_points & OVER & 10.50 & 7 & loss & final\_settled & Final \\
+\hline
+Ryan Kalkbrenner OVER 9.5 player\_points & Atlanta Hawks @ Charlotte Hornets & player\_points & OVER & 9.50 & 5 & loss & final\_settled & Final \\
+\hline
+Kam Jones OVER 4.5 player\_assists & Indiana Pacers @ Brooklyn Nets & player\_assists & OVER & 4.50 & 6 & win & final\_settled & Final \\
+\hline
+Sion James OVER 3.5 player\_rebounds & Atlanta Hawks @ Charlotte Hornets & player\_rebounds & OVER & 3.50 & 3 & loss & final\_settled & Final \\
+\hline
+Kon Knueppel OVER 20.5 player\_points & Atlanta Hawks @ Charlotte Hornets & player\_points & OVER & 20.50 & 18 & loss & final\_settled & Final \\
+\hline
+Dennis Schroder OVER 8.5 player\_points & Washington Wizards @ Cleveland Cavaliers & player\_points & OVER & 8.50 & 7 & loss & final\_settled & Final \\
+\hline
+LaMelo Ball OVER 22.5 player\_points & Atlanta Hawks @ Charlotte Hornets & player\_points & OVER & 22.50 & 24 & win & final\_settled & Final \\
+\hline
+Paul Reed Jr OVER 11.5 player\_points & Detroit Pistons @ Toronto Raptors & player\_points & OVER & 11.50 &  & unresolved & player\_not\_found & Final \\
+\hline
+R.J. Barrett OVER 17.5 player\_points & Detroit Pistons @ Toronto Raptors & player\_points & OVER & 17.50 & 16 & loss & final\_settled & Final \\
+\hline
+Karl-Anthony Towns OVER 1.5 player\_threes & New York Knicks @ Philadelphia 76ers & player\_threes & OVER & 1.50 & 1 & loss & final\_settled & Final \\
+\hline
+LaMelo Ball OVER 5.5 player\_rebounds & Atlanta Hawks @ Charlotte Hornets & player\_rebounds & OVER & 5.50 & 4 & loss & final\_settled & Final \\
+\hline
+Landry Shamet OVER 2.5 player\_rebounds & New York Knicks @ Philadelphia 76ers & player\_rebounds & OVER & 2.50 & 1 & loss & final\_settled & Final \\
+\hline
+Tidjane Salaun OVER 4.5 player\_rebounds & Atlanta Hawks @ Charlotte Hornets & player\_rebounds & OVER & 4.50 & 4 & loss & final\_settled & Final \\
+\hline
+LaMelo Ball OVER 35.5 player\_points\_rebounds\_assists & Atlanta Hawks @ Charlotte Hornets & player\_points\_rebounds\_assists & OVER & 35.50 & 34 & loss & final\_settled & Final \\
+\hline
+Danny Wolf OVER 2.5 player\_assists & Indiana Pacers @ Brooklyn Nets & player\_assists & OVER & 2.50 & 0 & loss & final\_settled & Final \\
+\hline
+Jarrett Allen OVER 15.5 player\_points & Washington Wizards @ Cleveland Cavaliers & player\_points & OVER & 15.50 & 21 & win & final\_settled & Final \\
+\hline
+Ausar Thompson OVER 2.5 player\_assists & Detroit Pistons @ Toronto Raptors & player\_assists & OVER & 2.50 & 4 & win & final\_settled & Final \\
+\hline
+Brandon Ingram OVER 29.5 player\_points\_rebounds\_assists & Detroit Pistons @ Toronto Raptors & player\_points\_rebounds\_assists & OVER & 29.50 & 13 & loss & final\_settled & Final \\
+\hline
+Brandon Miller OVER 23.5 player\_points & Atlanta Hawks @ Charlotte Hornets & player\_points & OVER & 23.50 & 31 & win & final\_settled & Final \\
+\hline
+Jalen Johnson OVER 7.5 player\_assists & Atlanta Hawks @ Charlotte Hornets & player\_assists & OVER & 7.50 & 9 & win & final\_settled & Final \\
+\hline
+Jay Huff OVER 1.5 player\_threes & Indiana Pacers @ Brooklyn Nets & player\_threes & OVER & 1.50 & 0 & loss & final\_settled & Final \\
+\hline
+Kyshawn George OVER 4.5 player\_rebounds & Washington Wizards @ Cleveland Cavaliers & player\_rebounds & OVER & 4.50 & 5 & win & final\_settled & Final \\
+\hline
+Justin Champagnie OVER 9.5 player\_points & Washington Wizards @ Cleveland Cavaliers & player\_points & OVER & 9.50 & 12 & win & final\_settled & Final \\
+\hline
+Kon Knueppel OVER 4.5 player\_assists & Atlanta Hawks @ Charlotte Hornets & player\_assists & OVER & 4.50 & 4 & loss & final\_settled & Final \\
+\hline
+Brandon Miller OVER 3.5 player\_threes & Atlanta Hawks @ Charlotte Hornets & player\_threes & OVER & 3.50 & 5 & win & final\_settled & Final \\
+\hline
+Brandon Miller OVER 5.5 player\_rebounds & Atlanta Hawks @ Charlotte Hornets & player\_rebounds & OVER & 5.50 & 9 & win & final\_settled & Final \\
+\hline
+Will Riley OVER 12.5 player\_points & Washington Wizards @ Cleveland Cavaliers & player\_points & OVER & 12.50 & 4 & loss & final\_settled & Final \\
+\hline
+Tobias Harris OVER 14.5 player\_points & Detroit Pistons @ Toronto Raptors & player\_points & OVER & 14.50 & 12 & loss & final\_settled & Final \\
+\hline
+Cade Cunningham OVER 8.5 player\_assists & Detroit Pistons @ Toronto Raptors & player\_assists & OVER & 8.50 & 9 & win & final\_settled & Final \\
+\hline
+Donovan Mitchell OVER 4.5 player\_rebounds & Washington Wizards @ Cleveland Cavaliers & player\_rebounds & OVER & 4.50 & 3 & loss & final\_settled & Final \\
+\hline
+Brandon Ingram OVER 20.5 player\_points & Detroit Pistons @ Toronto Raptors & player\_points & OVER & 20.50 & 13 & loss & final\_settled & Final \\
+\hline
+Cade Cunningham OVER 5.5 player\_rebounds & Detroit Pistons @ Toronto Raptors & player\_rebounds & OVER & 5.50 & 7 & win & final\_settled & Final \\
+\hline
+VJ Edgecombe OVER 1.5 player\_threes & New York Knicks @ Philadelphia 76ers & player\_threes & OVER & 1.50 & 0 & loss & final\_settled & Final \\
+\hline
+Scottie Barnes OVER 31.5 player\_points\_rebounds\_assists & Detroit Pistons @ Toronto Raptors & player\_points\_rebounds\_assists & OVER & 31.50 & 29 & loss & final\_settled & Final \\
+\hline
+Kam Jones OVER 3.5 player\_rebounds & Indiana Pacers @ Brooklyn Nets & player\_rebounds & OVER & 3.50 & 2 & loss & final\_settled & Final \\
+\hline
+Sandro Mamukelashvili OVER 20.5 player\_points\_rebounds\_assists & Detroit Pistons @ Toronto Raptors & player\_points\_rebounds\_assists & OVER & 20.50 & 14 & loss & final\_settled & Final \\
+\hline
+Mikal Bridges OVER 3.5 player\_rebounds & New York Knicks @ Philadelphia 76ers & player\_rebounds & OVER & 3.50 & 5 & win & final\_settled & Final \\
+\hline
+Brandon Miller OVER 22.5 player\_points & Atlanta Hawks @ Charlotte Hornets & player\_points & OVER & 22.50 & 31 & win & final\_settled & Final \\
+\hline
+Kyshawn George OVER 4.5 player\_assists & Washington Wizards @ Cleveland Cavaliers & player\_assists & OVER & 4.50 & 3 & loss & final\_settled & Final \\
+\hline
+Dennis Schroder OVER 2.5 player\_rebounds & Washington Wizards @ Cleveland Cavaliers & player\_rebounds & OVER & 2.50 & 3 & win & final\_settled & Final \\
+\hline
+Sion James OVER 5.5 player\_points & Atlanta Hawks @ Charlotte Hornets & player\_points & OVER & 5.50 & 3 & loss & final\_settled & Final \\
+\hline
+Ja'Kobe Walter OVER 6.5 player\_points & Detroit Pistons @ Toronto Raptors & player\_points & OVER & 6.50 & 3 & loss & final\_settled & Final \\
+\hline
+R.J. Barrett OVER 26.5 player\_points\_rebounds\_assists & Detroit Pistons @ Toronto Raptors & player\_points\_rebounds\_assists & OVER & 26.50 & 23 & loss & final\_settled & Final \\
+\hline
+Ryan Kalkbrenner OVER 8.5 player\_points & Atlanta Hawks @ Charlotte Hornets & player\_points & OVER & 8.50 & 5 & loss & final\_settled & Final \\
+\hline
+Brandon Miller OVER 3.5 player\_assists & Atlanta Hawks @ Charlotte Hornets & player\_assists & OVER & 3.50 & 2 & loss & final\_settled & Final \\
+\hline
+Immanuel Quickley OVER 24.5 player\_points\_rebounds\_assists & Detroit Pistons @ Toronto Raptors & player\_points\_rebounds\_assists & OVER & 24.50 & 25 & win & final\_settled & Final \\
+\hline
+Onyeka Okongwu OVER 2.5 player\_assists & Atlanta Hawks @ Charlotte Hornets & player\_assists & OVER & 2.50 & 0 & loss & final\_settled & Final \\
+\hline
+Dennis Schroder OVER 3.5 player\_assists & Washington Wizards @ Cleveland Cavaliers & player\_assists & OVER & 3.50 & 2 & loss & final\_settled & Final \\
+\hline
+Danny Wolf OVER 6.5 player\_rebounds & Indiana Pacers @ Brooklyn Nets & player\_rebounds & OVER & 6.50 & 8 & win & final\_settled & Final \\
+\hline
+Karl-Anthony Towns OVER 10.5 player\_rebounds & New York Knicks @ Philadelphia 76ers & player\_rebounds & OVER & 10.50 & 11 & win & final\_settled & Final \\
+\hline
+Josh Green OVER 2.5 player\_rebounds & Atlanta Hawks @ Charlotte Hornets & player\_rebounds & OVER & 2.50 & 0 & loss & final\_settled & Final \\
+\hline
+Jaylon Tyson OVER 2.5 player\_assists & Washington Wizards @ Cleveland Cavaliers & player\_assists & OVER & 2.50 & 1 & loss & final\_settled & Final \\
+\hline
+Jalen Brunson OVER 2.5 player\_threes & New York Knicks @ Philadelphia 76ers & player\_threes & OVER & 2.50 & 2 & loss & final\_settled & Final \\
+\hline
+Jalen Johnson OVER 1.5 player\_threes & Atlanta Hawks @ Charlotte Hornets & player\_threes & OVER & 1.50 & 1 & loss & final\_settled & Final \\
+\hline
+Josh Hart OVER 7.5 player\_rebounds & New York Knicks @ Philadelphia 76ers & player\_rebounds & OVER & 7.50 & 7 & loss & final\_settled & Final \\
+\hline
+C.J. McCollum OVER 2.5 player\_rebounds & Atlanta Hawks @ Charlotte Hornets & player\_rebounds & OVER & 2.50 & 6 & win & final\_settled & Final \\
+\hline
+Immanuel Quickley OVER 15.5 player\_points & Detroit Pistons @ Toronto Raptors & player\_points & OVER & 15.50 & 18 & win & final\_settled & Final \\
+\hline
+Scottie Barnes OVER 18.5 player\_points & Detroit Pistons @ Toronto Raptors & player\_points & OVER & 18.50 & 17 & loss & final\_settled & Final \\
+\hline
+Mitchell Robinson OVER 14.5 player\_points\_rebounds\_assists & New York Knicks @ Philadelphia 76ers & player\_points\_rebounds\_assists & OVER & 14.50 & 17 & win & final\_settled & Final \\
+\hline
+Ausar Thompson OVER 6.5 player\_rebounds & Detroit Pistons @ Toronto Raptors & player\_rebounds & OVER & 6.50 & 4 & loss & final\_settled & Final \\
+\hline
+LaMelo Ball OVER 7.5 player\_assists & Atlanta Hawks @ Charlotte Hornets & player\_assists & OVER & 7.50 & 6 & loss & final\_settled & Final \\
+\hline
+Paul Reed Jr OVER 9.5 player\_rebounds & Detroit Pistons @ Toronto Raptors & player\_rebounds & OVER & 9.50 &  & unresolved & player\_not\_found & Final \\
+\hline
+Jamal Shead OVER 4.5 player\_assists & Detroit Pistons @ Toronto Raptors & player\_assists & OVER & 4.50 & 3 & loss & final\_settled & Final \\
+\hline
+Caris LeVert OVER 2.5 player\_assists & Detroit Pistons @ Toronto Raptors & player\_assists & OVER & 2.50 & 1 & loss & final\_settled & Final \\
+\hline
+Will Riley OVER 1.5 player\_threes & Washington Wizards @ Cleveland Cavaliers & player\_threes & OVER & 1.50 & 0 & loss & final\_settled & Final \\
+\hline
+Jarace Walker OVER 5.5 player\_rebounds & Indiana Pacers @ Brooklyn Nets & player\_rebounds & OVER & 5.50 & 5 & loss & final\_settled & Final \\
+\hline
+VJ Edgecombe OVER 4.5 player\_rebounds & New York Knicks @ Philadelphia 76ers & player\_rebounds & OVER & 4.50 & 4 & loss & final\_settled & Final \\
+\hline
+Justin Champagnie OVER 7.5 player\_rebounds & Washington Wizards @ Cleveland Cavaliers & player\_rebounds & OVER & 7.50 & 8 & win & final\_settled & Final \\
+\hline
+Sandro Mamukelashvili OVER 12.5 player\_points & Detroit Pistons @ Toronto Raptors & player\_points & OVER & 12.50 & 7 & loss & final\_settled & Final \\
+\hline
+R.J. Barrett OVER 25.5 player\_points\_rebounds\_assists & Detroit Pistons @ Toronto Raptors & player\_points\_rebounds\_assists & OVER & 25.50 & 23 & loss & final\_settled & Final \\
+\hline
+Donovan Mitchell OVER 5.5 player\_assists & Washington Wizards @ Cleveland Cavaliers & player\_assists & OVER & 5.50 & 5 & loss & final\_settled & Final \\
+\hline
+Sam Merrill OVER 2.5 player\_threes & Washington Wizards @ Cleveland Cavaliers & player\_threes & OVER & 2.50 & 9 & win & final\_settled & Final \\
+\hline
+Dominick Barlow OVER 4.5 player\_rebounds & New York Knicks @ Philadelphia 76ers & player\_rebounds & OVER & 4.50 & 4 & loss & final\_settled & Final \\
+\hline
+Tre Johnson OVER 2.5 player\_assists & Washington Wizards @ Cleveland Cavaliers & player\_assists & OVER & 2.50 & 2 & loss & final\_settled & Final \\
+\hline
+Tobias Harris OVER 5.5 player\_rebounds & Detroit Pistons @ Toronto Raptors & player\_rebounds & OVER & 5.50 & 12 & win & final\_settled & Final \\
+\hline
+Mitchell Robinson OVER 4.5 player\_points & New York Knicks @ Philadelphia 76ers & player\_points & OVER & 4.50 & 11 & win & final\_settled & Final \\
+\hline
+Jarrett Allen OVER 10.5 player\_rebounds & Washington Wizards @ Cleveland Cavaliers & player\_rebounds & OVER & 10.50 & 9 & loss & final\_settled & Final \\
+\hline
+Nickeil Alexander-Walker OVER 3.5 player\_assists & Atlanta Hawks @ Charlotte Hornets & player\_assists & OVER & 3.50 & 4 & win & final\_settled & Final \\
+\hline
+Grant Williams OVER 5.5 player\_rebounds & Atlanta Hawks @ Charlotte Hornets & player\_rebounds & OVER & 5.50 & 8 & win & final\_settled & Final \\
+\hline
+Jalen Johnson OVER 9.5 player\_rebounds & Atlanta Hawks @ Charlotte Hornets & player\_rebounds & OVER & 9.50 & 13 & win & final\_settled & Final \\
+\hline
+Jamal Shead OVER 5.5 player\_points & Detroit Pistons @ Toronto Raptors & player\_points & OVER & 5.50 & 0 & loss & final\_settled & Final \\
+\hline
+Ben Sheppard OVER 1.5 player\_threes & Indiana Pacers @ Brooklyn Nets & player\_threes & OVER & 1.50 & 3 & win & final\_settled & Final \\
+\hline
+Tre Johnson OVER 2.5 player\_threes & Washington Wizards @ Cleveland Cavaliers & player\_threes & OVER & 2.50 & 1 & loss & final\_settled & Final \\
+\hline
+Bilal Coulibaly OVER 2.5 player\_assists & Washington Wizards @ Cleveland Cavaliers & player\_assists & OVER & 2.50 & 2 & loss & final\_settled & Final \\
+\hline
+Jalen Brunson OVER 5.5 player\_assists & New York Knicks @ Philadelphia 76ers & player\_assists & OVER & 5.50 & 4 & loss & final\_settled & Final \\
+\hline
+Nickeil Alexander-Walker OVER 2.5 player\_threes & Atlanta Hawks @ Charlotte Hornets & player\_threes & OVER & 2.50 & 1 & loss & final\_settled & Final \\
+\hline
+Bilal Coulibaly OVER 4.5 player\_rebounds & Washington Wizards @ Cleveland Cavaliers & player\_rebounds & OVER & 4.50 & 0 & loss & final\_settled & Final \\
+\hline
+Kelly Oubre Jr OVER 1.5 player\_threes & New York Knicks @ Philadelphia 76ers & player\_threes & OVER & 1.50 & 0 & loss & final\_settled & Final \\
+\hline
+James Harden OVER 2.5 player\_threes & Washington Wizards @ Cleveland Cavaliers & player\_threes & OVER & 2.50 & 1 & loss & final\_settled & Final \\
+\hline
+Sandro Mamukelashvili OVER 2.5 player\_assists & Detroit Pistons @ Toronto Raptors & player\_assists & OVER & 2.50 & 1 & loss & final\_settled & Final \\
+\hline
+Duncan Robinson OVER 1.5 player\_assists & Detroit Pistons @ Toronto Raptors & player\_assists & OVER & 1.50 & 1 & loss & final\_settled & Final \\
+\hline
+James Harden OVER 7.5 player\_assists & Washington Wizards @ Cleveland Cavaliers & player\_assists & OVER & 7.50 & 11 & win & final\_settled & Final \\
+\hline
+Zaccharie Risacher OVER 2.5 player\_rebounds & Atlanta Hawks @ Charlotte Hornets & player\_rebounds & OVER & 2.50 & 3 & win & final\_settled & Final \\
+\hline
+Immanuel Quickley OVER 4.5 player\_rebounds & Detroit Pistons @ Toronto Raptors & player\_rebounds & OVER & 4.50 & 2 & loss & final\_settled & Final \\
+\hline
+Sion James OVER 2.5 player\_assists & Atlanta Hawks @ Charlotte Hornets & player\_assists & OVER & 2.50 & 3 & win & final\_settled & Final \\
+\hline
+Dyson Daniels OVER 5.5 player\_assists & Atlanta Hawks @ Charlotte Hornets & player\_assists & OVER & 5.50 & 4 & loss & final\_settled & Final \\
+\hline
+Brandon Ingram OVER 3.5 player\_assists & Detroit Pistons @ Toronto Raptors & player\_assists & OVER & 3.50 & 0 & loss & final\_settled & Final \\
+\hline
+Kon Knueppel OVER 3.5 player\_threes & Atlanta Hawks @ Charlotte Hornets & player\_threes & OVER & 3.50 & 4 & win & final\_settled & Final \\
+\hline
+Ben Sheppard OVER 3.5 player\_rebounds & Indiana Pacers @ Brooklyn Nets & player\_rebounds & OVER & 3.50 & 1 & loss & final\_settled & Final \\
+\hline
+Dyson Daniels OVER 5.5 player\_rebounds & Atlanta Hawks @ Charlotte Hornets & player\_rebounds & OVER & 5.50 & 3 & loss & final\_settled & Final \\
+\hline
+Cade Cunningham OVER 1.5 player\_threes & Detroit Pistons @ Toronto Raptors & player\_threes & OVER & 1.50 & 6 & win & final\_settled & Final \\
+\hline
+R.J. Barrett OVER 5.5 player\_rebounds & Detroit Pistons @ Toronto Raptors & player\_rebounds & OVER & 5.50 & 3 & loss & final\_settled & Final \\
+\hline
+Sandro Mamukelashvili OVER 11.5 player\_points & Detroit Pistons @ Toronto Raptors & player\_points & OVER & 11.50 & 7 & loss & final\_settled & Final \\
+\hline
+Ja'Kobe Walter OVER 2.5 player\_rebounds & Detroit Pistons @ Toronto Raptors & player\_rebounds & OVER & 2.50 & 3 & win & final\_settled & Final \\
+\hline
+Scottie Barnes OVER 17.5 player\_points & Detroit Pistons @ Toronto Raptors & player\_points & OVER & 17.50 & 17 & loss & final\_settled & Final \\
+\hline
+Mitchell Robinson OVER 9.5 player\_rebounds & New York Knicks @ Philadelphia 76ers & player\_rebounds & OVER & 9.50 & 6 & loss & final\_settled & Final \\
+\hline
+Duncan Robinson OVER 2.5 player\_rebounds & Detroit Pistons @ Toronto Raptors & player\_rebounds & OVER & 2.50 & 4 & win & final\_settled & Final \\
+\hline
+Kelly Oubre Jr OVER 4.5 player\_rebounds & New York Knicks @ Philadelphia 76ers & player\_rebounds & OVER & 4.50 & 7 & win & final\_settled & Final \\
+\hline
+Onyeka Okongwu OVER 1.5 player\_threes & Atlanta Hawks @ Charlotte Hornets & player\_threes & OVER & 1.50 & 3 & win & final\_settled & Final \\
+\hline
+R.J. Barrett OVER 3.5 player\_assists & Detroit Pistons @ Toronto Raptors & player\_assists & OVER & 3.50 & 4 & win & final\_settled & Final \\
+\hline
+Immanuel Quickley OVER 2.5 player\_threes & Detroit Pistons @ Toronto Raptors & player\_threes & OVER & 2.50 & 4 & win & final\_settled & Final \\
+\hline
+Duncan Robinson OVER 2.5 player\_threes & Detroit Pistons @ Toronto Raptors & player\_threes & OVER & 2.50 & 2 & loss & final\_settled & Final \\
+\hline
+Mikal Bridges OVER 1.5 player\_threes & New York Knicks @ Philadelphia 76ers & player\_threes & OVER & 1.50 & 1 & loss & final\_settled & Final \\
+\hline
+Jaylon Tyson OVER 5.5 player\_rebounds & Washington Wizards @ Cleveland Cavaliers & player\_rebounds & OVER & 5.50 & 5 & loss & final\_settled & Final \\
+\hline
+Sam Merrill OVER 2.5 player\_rebounds & Washington Wizards @ Cleveland Cavaliers & player\_rebounds & OVER & 2.50 & 5 & win & final\_settled & Final \\
+\hline
+James Harden OVER 4.5 player\_rebounds & Washington Wizards @ Cleveland Cavaliers & player\_rebounds & OVER & 4.50 & 4 & loss & final\_settled & Final \\
+\hline
+Jalen Brunson OVER 2.5 player\_rebounds & New York Knicks @ Philadelphia 76ers & player\_rebounds & OVER & 2.50 & 4 & win & final\_settled & Final \\
+\hline
+Tre Johnson OVER 2.5 player\_rebounds & Washington Wizards @ Cleveland Cavaliers & player\_rebounds & OVER & 2.50 & 3 & win & final\_settled & Final \\
+\hline
+Daniss Jenkins OVER 2.5 player\_assists & Detroit Pistons @ Toronto Raptors & player\_assists & OVER & 2.50 & 1 & loss & final\_settled & Final \\
+\hline
+LaMelo Ball OVER 3.5 player\_threes & Atlanta Hawks @ Charlotte Hornets & player\_threes & OVER & 3.50 & 7 & win & final\_settled & Final \\
+\hline
+Matas Buzelis OVER 16.5 player\_points & Chicago Bulls @ Boston Celtics & player\_points & OVER & 16.50 & 15 & loss & final\_settled & Final \\
+\hline
+Scottie Barnes OVER 8.5 player\_rebounds & Detroit Pistons @ Toronto Raptors & player\_rebounds & OVER & 8.50 & 7 & loss & final\_settled & Final \\
+\hline
+Will Riley OVER 3.5 player\_rebounds & Washington Wizards @ Cleveland Cavaliers & player\_rebounds & OVER & 3.50 & 4 & win & final\_settled & Final \\
+\hline
+Sandro Mamukelashvili OVER 6.5 player\_rebounds & Detroit Pistons @ Toronto Raptors & player\_rebounds & OVER & 6.50 & 6 & loss & final\_settled & Final \\
+\hline
+Ryan Kalkbrenner OVER 6.5 player\_rebounds & Atlanta Hawks @ Charlotte Hornets & player\_rebounds & OVER & 6.50 & 6 & loss & final\_settled & Final \\
+\hline
+Jaden Ivey OVER 11.5 player\_points & Chicago Bulls @ Boston Celtics & player\_points & OVER & 11.50 & 10 & loss & final\_settled & Final \\
+\hline
+Anfernee Simons OVER 17.5 player\_points & Chicago Bulls @ Boston Celtics & player\_points & OVER & 17.50 & 7 & loss & final\_settled & Final \\
+\hline
+Kon Knueppel OVER 5.5 player\_rebounds & Atlanta Hawks @ Charlotte Hornets & player\_rebounds & OVER & 5.50 & 6 & win & final\_settled & Final \\
+\hline
+Ausar Thompson OVER 5.5 player\_rebounds & Detroit Pistons @ Toronto Raptors & player\_rebounds & OVER & 5.50 & 4 & loss & final\_settled & Final \\
+\hline
+Matas Buzelis OVER 24.5 player\_points\_rebounds\_assists & Chicago Bulls @ Boston Celtics & player\_points\_rebounds\_assists & OVER & 24.50 & 27 & win & final\_settled & Final \\
+\hline
+Mitchell Robinson OVER 8.5 player\_rebounds & New York Knicks @ Philadelphia 76ers & player\_rebounds & OVER & 8.50 & 6 & loss & final\_settled & Final \\
+\hline
+Justin Champagnie OVER 6.5 player\_rebounds & Washington Wizards @ Cleveland Cavaliers & player\_rebounds & OVER & 6.50 & 8 & win & final\_settled & Final \\
+\hline
+Jaylon Tyson OVER 1.5 player\_threes & Washington Wizards @ Cleveland Cavaliers & player\_threes & OVER & 1.50 & 0 & loss & final\_settled & Final \\
+\hline
+Jarrett Allen OVER 1.5 player\_assists & Washington Wizards @ Cleveland Cavaliers & player\_assists & OVER & 1.50 & 1 & loss & final\_settled & Final \\
+\hline
+Collin Sexton OVER 16.5 player\_points & Chicago Bulls @ Boston Celtics & player\_points & OVER & 16.50 & 15 & loss & final\_settled & Final \\
+\hline
+Collin Sexton OVER 24.5 player\_points\_rebounds\_assists & Chicago Bulls @ Boston Celtics & player\_points\_rebounds\_assists & OVER & 24.50 & 19 & loss & final\_settled & Final \\
+\hline
+Jaden Ivey OVER 3.5 player\_assists & Chicago Bulls @ Boston Celtics & player\_assists & OVER & 3.50 & 4 & win & final\_settled & Final \\
+\hline
+Brandon Ingram OVER 5.5 player\_rebounds & Detroit Pistons @ Toronto Raptors & player\_rebounds & OVER & 5.50 & 0 & loss & final\_settled & Final \\
+\hline
+Jaden Ivey OVER 18.5 player\_points\_rebounds\_assists & Chicago Bulls @ Boston Celtics & player\_points\_rebounds\_assists & OVER & 18.50 & 17 & loss & final\_settled & Final \\
+\hline
+Grant Williams OVER 1.5 player\_threes & Atlanta Hawks @ Charlotte Hornets & player\_threes & OVER & 1.50 & 0 & loss & final\_settled & Final \\
+\hline
+R.J. Barrett OVER 1.5 player\_threes & Detroit Pistons @ Toronto Raptors & player\_threes & OVER & 1.50 & 1 & loss & final\_settled & Final \\
+\hline
+Anfernee Simons OVER 24.5 player\_points\_rebounds\_assists & Chicago Bulls @ Boston Celtics & player\_points\_rebounds\_assists & OVER & 24.50 & 13 & loss & final\_settled & Final \\
+\hline
+Kyshawn George OVER 1.5 player\_threes & Washington Wizards @ Cleveland Cavaliers & player\_threes & OVER & 1.50 & 1 & loss & final\_settled & Final \\
+\hline
+Immanuel Quickley OVER 4.5 player\_assists & Detroit Pistons @ Toronto Raptors & player\_assists & OVER & 4.50 & 5 & win & final\_settled & Final \\
+\hline
+Dennis Schroder OVER 0.5 player\_threes & Washington Wizards @ Cleveland Cavaliers & player\_threes & OVER & 0.50 & 1 & win & final\_settled & Final \\
+\hline
+Anfernee Simons OVER 3.5 player\_threes & Chicago Bulls @ Boston Celtics & player\_threes & OVER & 3.50 & 1 & loss & final\_settled & Final \\
+\hline
+Brandon Ingram OVER 1.5 player\_threes & Detroit Pistons @ Toronto Raptors & player\_threes & OVER & 1.50 & 1 & loss & final\_settled & Final \\
+\hline
+Caris LeVert OVER 1.5 player\_rebounds & Detroit Pistons @ Toronto Raptors & player\_rebounds & OVER & 1.50 & 2 & win & final\_settled & Final \\
+\hline
+Matas Buzelis OVER 2.5 player\_threes & Chicago Bulls @ Boston Celtics & player\_threes & OVER & 2.50 & 3 & win & final\_settled & Final \\
+\hline
+Patrick Williams OVER 8.5 player\_points & Chicago Bulls @ Boston Celtics & player\_points & OVER & 8.50 & 12 & win & final\_settled & Final \\
+\hline
+John Collins OVER 14.5 player\_points & Los Angeles Clippers @ Houston Rockets & player\_points & OVER & 14.50 & 12 & pending & in\_progress\_pending & Q4 1:23 \\
+\hline
+Sandro Mamukelashvili OVER 1.5 player\_threes & Detroit Pistons @ Toronto Raptors & player\_threes & OVER & 1.50 & 1 & loss & final\_settled & Final \\
+\hline
+Alperen Sengun OVER 19.5 player\_points & Los Angeles Clippers @ Houston Rockets & player\_points & OVER & 19.50 & 13 & pending & in\_progress\_pending & Q4 1:23 \\
+\hline
+Scottie Barnes OVER 4.5 player\_assists & Detroit Pistons @ Toronto Raptors & player\_assists & OVER & 4.50 & 5 & win & final\_settled & Final \\
+\hline
+Sandro Mamukelashvili OVER 5.5 player\_rebounds & Detroit Pistons @ Toronto Raptors & player\_rebounds & OVER & 5.50 & 6 & win & final\_settled & Final \\
+\hline
+Jaden Ivey OVER 3.5 player\_rebounds & Chicago Bulls @ Boston Celtics & player\_rebounds & OVER & 3.50 & 3 & loss & final\_settled & Final \\
+\hline
+Kobe Sanders OVER 5.5 player\_points & Los Angeles Clippers @ Houston Rockets & player\_points & OVER & 5.50 & 3 & pending & in\_progress\_pending & Q4 1:23 \\
+\hline
+Sion James OVER 0.5 player\_threes & Atlanta Hawks @ Charlotte Hornets & player\_threes & OVER & 0.50 & 1 & win & final\_settled & Final \\
+\hline
+Anfernee Simons OVER 3.5 player\_assists & Chicago Bulls @ Boston Celtics & player\_assists & OVER & 3.50 & 1 & loss & final\_settled & Final \\
+\hline
+Brook Lopez OVER 8.5 player\_points & Los Angeles Clippers @ Houston Rockets & player\_points & OVER & 8.50 & 15 & pending & in\_progress\_pending & Q4 1:23 \\
+\hline
+Justin Champagnie OVER 0.5 player\_threes & Washington Wizards @ Cleveland Cavaliers & player\_threes & OVER & 0.50 & 2 & win & final\_settled & Final \\
+\hline
+Josh Green OVER 0.5 player\_threes & Atlanta Hawks @ Charlotte Hornets & player\_threes & OVER & 0.50 & 1 & win & final\_settled & Final \\
+\hline
+Kris Dunn OVER 15.5 player\_points\_rebounds\_assists & Los Angeles Clippers @ Houston Rockets & player\_points\_rebounds\_assists & OVER & 15.50 & 24 & pending & in\_progress\_pending & Q4 1:23 \\
+\hline
+Immanuel Quickley OVER 3.5 player\_rebounds & Detroit Pistons @ Toronto Raptors & player\_rebounds & OVER & 3.50 & 2 & loss & final\_settled & Final \\
+\hline
+Amen Thompson OVER 28.5 player\_points\_rebounds\_assists & Los Angeles Clippers @ Houston Rockets & player\_points\_rebounds\_assists & OVER & 28.50 & 23 & pending & in\_progress\_pending & Q4 1:23 \\
+\hline
+Brook Lopez OVER 3.5 player\_rebounds & Los Angeles Clippers @ Houston Rockets & player\_rebounds & OVER & 3.50 & 1 & pending & in\_progress\_pending & Q4 1:23 \\
+\hline
+Kawhi Leonard OVER 6.5 player\_rebounds & Los Angeles Clippers @ Houston Rockets & player\_rebounds & OVER & 6.50 & 11 & pending & in\_progress\_pending & Q4 1:23 \\
+\hline
+Anfernee Simons OVER 3.5 player\_rebounds & Chicago Bulls @ Boston Celtics & player\_rebounds & OVER & 3.50 & 5 & win & final\_settled & Final \\
+\hline
+Kawhi Leonard OVER 37.5 player\_points\_rebounds\_assists & Los Angeles Clippers @ Houston Rockets & player\_points\_rebounds\_assists & OVER & 37.50 & 39 & pending & in\_progress\_pending & Q4 1:23 \\
+\hline
+Kevin Durant OVER 2.5 player\_threes & Los Angeles Clippers @ Houston Rockets & player\_threes & OVER & 2.50 & 3 & pending & in\_progress\_pending & Q4 1:23 \\
+\hline
+Reed Sheppard OVER 2.5 player\_threes & Los Angeles Clippers @ Houston Rockets & player\_threes & OVER & 2.50 & 5 & pending & in\_progress\_pending & Q4 1:23 \\
+\hline
+Kobe Sanders OVER 10.5 player\_points\_rebounds\_assists & Los Angeles Clippers @ Houston Rockets & player\_points\_rebounds\_assists & OVER & 10.50 & 5 & pending & in\_progress\_pending & Q4 1:23 \\
+\hline
+Yanic Konan Niederhauser OVER 5.5 player\_points & Los Angeles Clippers @ Houston Rockets & player\_points & OVER & 5.50 & 0 & pending & in\_progress\_pending & Q4 1:23 \\
+\hline
+Patrick Williams OVER 3.5 player\_rebounds & Chicago Bulls @ Boston Celtics & player\_rebounds & OVER & 3.50 & 3 & loss & final\_settled & Final \\
+\hline
+Amen Thompson OVER 15.5 player\_points & Los Angeles Clippers @ Houston Rockets & player\_points & OVER & 15.50 & 12 & pending & in\_progress\_pending & Q4 1:23 \\
+\hline
+Brook Lopez OVER 1.5 player\_threes & Los Angeles Clippers @ Houston Rockets & player\_threes & OVER & 1.50 & 3 & pending & in\_progress\_pending & Q4 1:23 \\
+\hline
+John Collins OVER 1.5 player\_threes & Los Angeles Clippers @ Houston Rockets & player\_threes & OVER & 1.50 & 0 & pending & in\_progress\_pending & Q4 1:23 \\
+\hline
+Collin Sexton OVER 4.5 player\_assists & Chicago Bulls @ Boston Celtics & player\_assists & OVER & 4.50 & 1 & loss & final\_settled & Final \\
+\hline
+Brook Lopez OVER 14.5 player\_points\_rebounds\_assists & Los Angeles Clippers @ Houston Rockets & player\_points\_rebounds\_assists & OVER & 14.50 & 19 & pending & in\_progress\_pending & Q4 1:23 \\
+\hline
+Tari Eason OVER 19.5 player\_points\_rebounds\_assists & Los Angeles Clippers @ Houston Rockets & player\_points\_rebounds\_assists & OVER & 19.50 & 18 & pending & in\_progress\_pending & Q4 1:23 \\
+\hline
+Clint Capela OVER 4.5 player\_points & Los Angeles Clippers @ Houston Rockets & player\_points & OVER & 4.50 & 3 & pending & in\_progress\_pending & Q4 1:23 \\
+\hline
+Reed Sheppard OVER 2.5 player\_rebounds & Los Angeles Clippers @ Houston Rockets & player\_rebounds & OVER & 2.50 & 2 & pending & in\_progress\_pending & Q4 1:23 \\
+\hline
+Matas Buzelis OVER 5.5 player\_rebounds & Chicago Bulls @ Boston Celtics & player\_rebounds & OVER & 5.50 & 8 & win & final\_settled & Final \\
+\hline
+Jabari Smith Jr OVER 22.5 player\_points\_rebounds\_assists & Los Angeles Clippers @ Houston Rockets & player\_points\_rebounds\_assists & OVER & 22.50 & 27 & pending & in\_progress\_pending & Q4 1:23 \\
+\hline
+Jaden Ivey OVER 1.5 player\_threes & Chicago Bulls @ Boston Celtics & player\_threes & OVER & 1.50 & 1 & loss & final\_settled & Final \\
+\hline
+Kevin Durant OVER 33.5 player\_points\_rebounds\_assists & Los Angeles Clippers @ Houston Rockets & player\_points\_rebounds\_assists & OVER & 33.50 & 32 & pending & in\_progress\_pending & Q4 1:23 \\
+\hline
+Kris Dunn OVER 7.5 player\_points & Los Angeles Clippers @ Houston Rockets & player\_points & OVER & 7.50 & 16 & pending & in\_progress\_pending & Q4 1:23 \\
+\hline
+Kawhi Leonard OVER 26.5 player\_points & Los Angeles Clippers @ Houston Rockets & player\_points & OVER & 26.50 & 24 & pending & in\_progress\_pending & Q4 1:23 \\
+\hline
+Collin Sexton OVER 1.5 player\_threes & Chicago Bulls @ Boston Celtics & player\_threes & OVER & 1.50 & 1 & loss & final\_settled & Final \\
+\hline
+Kobe Sanders OVER 2.5 player\_rebounds & Los Angeles Clippers @ Houston Rockets & player\_rebounds & OVER & 2.50 & 1 & pending & in\_progress\_pending & Q4 1:23 \\
+\hline
+Jabari Smith Jr OVER 23.5 player\_points\_rebounds\_assists & Los Angeles Clippers @ Houston Rockets & player\_points\_rebounds\_assists & OVER & 23.50 & 27 & pending & in\_progress\_pending & Q4 1:23 \\
+\hline
+John Collins OVER 21.5 player\_points\_rebounds\_assists & Los Angeles Clippers @ Houston Rockets & player\_points\_rebounds\_assists & OVER & 21.50 & 18 & pending & in\_progress\_pending & Q4 1:23 \\
+\hline
+Brook Lopez OVER 13.5 player\_points\_rebounds\_assists & Los Angeles Clippers @ Houston Rockets & player\_points\_rebounds\_assists & OVER & 13.50 & 19 & pending & in\_progress\_pending & Q4 1:23 \\
+\hline
+John Collins OVER 22.5 player\_points\_rebounds\_assists & Los Angeles Clippers @ Houston Rockets & player\_points\_rebounds\_assists & OVER & 22.50 & 18 & pending & in\_progress\_pending & Q4 1:23 \\
+\hline
+Reed Sheppard OVER 16.5 player\_points\_rebounds\_assists & Los Angeles Clippers @ Houston Rockets & player\_points\_rebounds\_assists & OVER & 16.50 & 23 & pending & in\_progress\_pending & Q4 1:23 \\
+\hline
+Jabari Smith Jr OVER 14.5 player\_points & Los Angeles Clippers @ Houston Rockets & player\_points & OVER & 14.50 & 16 & pending & in\_progress\_pending & Q4 1:23 \\
+\hline
+Reed Sheppard OVER 12.5 player\_points & Los Angeles Clippers @ Houston Rockets & player\_points & OVER & 12.50 & 17 & pending & in\_progress\_pending & Q4 1:23 \\
+\hline
+Kawhi Leonard OVER 4.5 player\_assists & Los Angeles Clippers @ Houston Rockets & player\_assists & OVER & 4.50 & 4 & pending & in\_progress\_pending & Q4 1:23 \\
+\hline
+Alperen Sengun OVER 33.5 player\_points\_rebounds\_assists & Los Angeles Clippers @ Houston Rockets & player\_points\_rebounds\_assists & OVER & 33.50 & 28 & pending & in\_progress\_pending & Q4 1:23 \\
+\hline
+Amen Thompson OVER 5.5 player\_assists & Los Angeles Clippers @ Houston Rockets & player\_assists & OVER & 5.50 & 5 & pending & in\_progress\_pending & Q4 1:23 \\
+\hline
+Reed Sheppard OVER 17.5 player\_points\_rebounds\_assists & Los Angeles Clippers @ Houston Rockets & player\_points\_rebounds\_assists & OVER & 17.50 & 23 & pending & in\_progress\_pending & Q4 1:23 \\
+\hline
+Yanic Konan Niederhauser OVER 4.5 player\_rebounds & Los Angeles Clippers @ Houston Rockets & player\_rebounds & OVER & 4.50 & 3 & pending & in\_progress\_pending & Q4 1:23 \\
+\hline
+Alperen Sengun OVER 9.5 player\_rebounds & Los Angeles Clippers @ Houston Rockets & player\_rebounds & OVER & 9.50 & 9 & pending & in\_progress\_pending & Q4 1:23 \\
+\hline
+Tari Eason OVER 11.5 player\_points & Los Angeles Clippers @ Houston Rockets & player\_points & OVER & 11.50 & 13 & pending & in\_progress\_pending & Q4 1:23 \\
+\hline
+Reed Sheppard OVER 2.5 player\_assists & Los Angeles Clippers @ Houston Rockets & player\_assists & OVER & 2.50 & 4 & pending & in\_progress\_pending & Q4 1:23 \\
+\hline
+Jabari Smith Jr OVER 2.5 player\_threes & Los Angeles Clippers @ Houston Rockets & player\_threes & OVER & 2.50 & 2 & pending & in\_progress\_pending & Q4 1:23 \\
+\hline
+Kevin Durant OVER 24.5 player\_points & Los Angeles Clippers @ Houston Rockets & player\_points & OVER & 24.50 & 20 & pending & in\_progress\_pending & Q4 1:23 \\
+\hline
+Myles Turner OVER 12.5 player\_points & Milwaukee Bucks @ Orlando Magic & player\_points & OVER & 12.50 & 5 & loss & final\_settled & Final \\
+\hline
+Jabari Smith Jr OVER 13.5 player\_points & Los Angeles Clippers @ Houston Rockets & player\_points & OVER & 13.50 & 16 & pending & in\_progress\_pending & Q4 1:23 \\
+\hline
+Reed Sheppard OVER 11.5 player\_points & Los Angeles Clippers @ Houston Rockets & player\_points & OVER & 11.50 & 17 & pending & in\_progress\_pending & Q4 1:23 \\
+\hline
+Kris Dunn OVER 2.5 player\_rebounds & Los Angeles Clippers @ Houston Rockets & player\_rebounds & OVER & 2.50 & 2 & pending & in\_progress\_pending & Q4 1:23 \\
+\hline
+Kevin Durant OVER 5.5 player\_rebounds & Los Angeles Clippers @ Houston Rockets & player\_rebounds & OVER & 5.50 & 7 & pending & in\_progress\_pending & Q4 1:23 \\
+\hline
+A.J. Green OVER 11.5 player\_points & Milwaukee Bucks @ Orlando Magic & player\_points & OVER & 11.50 & 6 & loss & final\_settled & Final \\
+\hline
+Jaylen Brown OVER 41.5 player\_points\_rebounds\_assists & Chicago Bulls @ Boston Celtics & player\_points\_rebounds\_assists & OVER & 41.50 & 32 & loss & final\_settled & Final \\
+\hline
+Alperen Sengun OVER 34.5 player\_points\_rebounds\_assists & Los Angeles Clippers @ Houston Rockets & player\_points\_rebounds\_assists & OVER & 34.50 & 28 & pending & in\_progress\_pending & Q4 1:23 \\
+\hline
+Bobby Portis OVER 1.5 player\_threes & Milwaukee Bucks @ Orlando Magic & player\_threes & OVER & 1.50 & 0 & loss & final\_settled & Final \\
+\hline
+Jabari Smith Jr OVER 6.5 player\_rebounds & Los Angeles Clippers @ Houston Rockets & player\_rebounds & OVER & 6.50 & 11 & pending & in\_progress\_pending & Q4 1:23 \\
+\hline
+Kris Dunn OVER 4.5 player\_assists & Los Angeles Clippers @ Houston Rockets & player\_assists & OVER & 4.50 & 6 & pending & in\_progress\_pending & Q4 1:23 \\
+\hline
+Clint Capela OVER 3.5 player\_points & Los Angeles Clippers @ Houston Rockets & player\_points & OVER & 3.50 & 3 & pending & in\_progress\_pending & Q4 1:23 \\
+\hline
+Josh Okogie OVER 5.5 player\_points & Los Angeles Clippers @ Houston Rockets & player\_points & OVER & 5.50 & 0 & pending & in\_progress\_pending & Q4 1:23 \\
+\hline
+Collin Sexton OVER 2.5 player\_rebounds & Chicago Bulls @ Boston Celtics & player\_rebounds & OVER & 2.50 & 3 & win & final\_settled & Final \\
+\hline
+Kevin Porter Jr. OVER 34.5 player\_points\_rebounds\_assists & Milwaukee Bucks @ Orlando Magic & player\_points\_rebounds\_assists & OVER & 34.50 & 39 & win & final\_settled & Final \\
+\hline
+Kawhi Leonard OVER 2.5 player\_threes & Los Angeles Clippers @ Houston Rockets & player\_threes & OVER & 2.50 & 1 & pending & in\_progress\_pending & Q4 1:23 \\
+\hline
+Nikola Vucevic OVER 14.5 player\_points & Chicago Bulls @ Boston Celtics & player\_points & OVER & 14.50 & 19 & win & final\_settled & Final \\
+\hline
+Matas Buzelis OVER 1.5 player\_assists & Chicago Bulls @ Boston Celtics & player\_assists & OVER & 1.50 & 4 & win & final\_settled & Final \\
+\hline
+Anfernee Simons OVER 2.5 player\_rebounds & Chicago Bulls @ Boston Celtics & player\_rebounds & OVER & 2.50 & 5 & win & final\_settled & Final \\
+\hline
+Clint Capela OVER 5.5 player\_rebounds & Los Angeles Clippers @ Houston Rockets & player\_rebounds & OVER & 5.50 & 5 & pending & in\_progress\_pending & Q4 1:23 \\
+\hline
+Payton Pritchard OVER 27.5 player\_points\_rebounds\_assists & Chicago Bulls @ Boston Celtics & player\_points\_rebounds\_assists & OVER & 27.50 & 39 & win & final\_settled & Final \\
+\hline
+John Collins OVER 1.5 player\_assists & Los Angeles Clippers @ Houston Rockets & player\_assists & OVER & 1.50 & 1 & pending & in\_progress\_pending & Q4 1:23 \\
+\hline
+Neemias Queta OVER 8.5 player\_points & Chicago Bulls @ Boston Celtics & player\_points & OVER & 8.50 & 8 & loss & final\_settled & Final \\
+\hline
+Alperen Sengun OVER 5.5 player\_assists & Los Angeles Clippers @ Houston Rockets & player\_assists & OVER & 5.50 & 6 & pending & in\_progress\_pending & Q4 1:23 \\
+\hline
+Kyle Kuzma OVER 22.5 player\_points\_rebounds\_assists & Milwaukee Bucks @ Orlando Magic & player\_points\_rebounds\_assists & OVER & 22.50 & 24 & win & final\_settled & Final \\
+\hline
+Brook Lopez OVER 1.5 player\_assists & Los Angeles Clippers @ Houston Rockets & player\_assists & OVER & 1.50 & 3 & pending & in\_progress\_pending & Q4 1:23 \\
+\hline
+Derrick White OVER 17.5 player\_points & Chicago Bulls @ Boston Celtics & player\_points & OVER & 17.50 & 9 & loss & final\_settled & Final \\
+\hline
+John Collins OVER 5.5 player\_rebounds & Los Angeles Clippers @ Houston Rockets & player\_rebounds & OVER & 5.50 & 5 & pending & in\_progress\_pending & Q4 1:23 \\
+\hline
+Jaylen Brown OVER 29.5 player\_points & Chicago Bulls @ Boston Celtics & player\_points & OVER & 29.50 & 24 & loss & final\_settled & Final \\
+\hline
+Myles Turner OVER 19.5 player\_points\_rebounds\_assists & Milwaukee Bucks @ Orlando Magic & player\_points\_rebounds\_assists & OVER & 19.50 & 15 & loss & final\_settled & Final \\
+\hline
+Tari Eason OVER 1.5 player\_threes & Los Angeles Clippers @ Houston Rockets & player\_threes & OVER & 1.50 & 2 & pending & in\_progress\_pending & Q4 1:23 \\
+\hline
+Payton Pritchard OVER 17.5 player\_points & Chicago Bulls @ Boston Celtics & player\_points & OVER & 17.50 & 26 & win & final\_settled & Final \\
+\hline
+Kyle Kuzma OVER 14.5 player\_points & Milwaukee Bucks @ Orlando Magic & player\_points & OVER & 14.50 & 15 & win & final\_settled & Final \\
+\hline
+Bobby Portis OVER 13.5 player\_points & Milwaukee Bucks @ Orlando Magic & player\_points & OVER & 13.50 & 4 & loss & final\_settled & Final \\
+\hline
+Neemias Queta OVER 17.5 player\_points\_rebounds\_assists & Chicago Bulls @ Boston Celtics & player\_points\_rebounds\_assists & OVER & 17.50 & 15 & loss & final\_settled & Final \\
+\hline
+A.J. Green OVER 3.5 player\_threes & Milwaukee Bucks @ Orlando Magic & player\_threes & OVER & 3.50 & 2 & loss & final\_settled & Final \\
+\hline
+Kevin Porter Jr. OVER 1.5 player\_threes & Milwaukee Bucks @ Orlando Magic & player\_threes & OVER & 1.50 & 1 & loss & final\_settled & Final \\
+\hline
+Amen Thompson OVER 6.5 player\_rebounds & Los Angeles Clippers @ Houston Rockets & player\_rebounds & OVER & 6.50 & 6 & pending & in\_progress\_pending & Q4 1:23 \\
+\hline
+Kevin Porter Jr. OVER 20.5 player\_points & Milwaukee Bucks @ Orlando Magic & player\_points & OVER & 20.50 & 18 & loss & final\_settled & Final \\
+\hline
+Kyle Kuzma OVER 2.5 player\_assists & Milwaukee Bucks @ Orlando Magic & player\_assists & OVER & 2.50 & 2 & loss & final\_settled & Final \\
+\hline
+Jalen Suggs OVER 2.5 player\_threes & Milwaukee Bucks @ Orlando Magic & player\_threes & OVER & 2.50 & 4 & win & final\_settled & Final \\
+\hline
+Sam Hauser OVER 9.5 player\_points & Chicago Bulls @ Boston Celtics & player\_points & OVER & 9.50 & 12 & win & final\_settled & Final \\
+\hline
+Kevin Porter Jr. OVER 5.5 player\_rebounds & Milwaukee Bucks @ Orlando Magic & player\_rebounds & OVER & 5.50 & 10 & win & final\_settled & Final \\
+\hline
+Derrick White OVER 5.5 player\_assists & Chicago Bulls @ Boston Celtics & player\_assists & OVER & 5.50 & 9 & win & final\_settled & Final \\
+\hline
+Tari Eason OVER 5.5 player\_rebounds & Los Angeles Clippers @ Houston Rockets & player\_rebounds & OVER & 5.50 & 2 & pending & in\_progress\_pending & Q4 1:23 \\
+\hline
+Nikola Vucevic OVER 1.5 player\_threes & Chicago Bulls @ Boston Celtics & player\_threes & OVER & 1.50 & 4 & win & final\_settled & Final \\
+\hline
+Kevin Durant OVER 3.5 player\_assists & Los Angeles Clippers @ Houston Rockets & player\_assists & OVER & 3.50 & 5 & pending & in\_progress\_pending & Q4 1:23 \\
+\hline
+Kevin Porter Jr. OVER 7.5 player\_assists & Milwaukee Bucks @ Orlando Magic & player\_assists & OVER & 7.50 & 11 & win & final\_settled & Final \\
+\hline
+Myles Turner OVER 5.5 player\_rebounds & Milwaukee Bucks @ Orlando Magic & player\_rebounds & OVER & 5.50 & 8 & win & final\_settled & Final \\
+\hline
+Bobby Portis OVER 6.5 player\_rebounds & Milwaukee Bucks @ Orlando Magic & player\_rebounds & OVER & 6.50 & 2 & loss & final\_settled & Final \\
+\hline
+Paolo Banchero OVER 1.5 player\_threes & Milwaukee Bucks @ Orlando Magic & player\_threes & OVER & 1.50 & 2 & win & final\_settled & Final \\
+\hline
+Desmond Bane OVER 17.5 player\_points & Milwaukee Bucks @ Orlando Magic & player\_points & OVER & 17.50 & 31 & win & final\_settled & Final \\
+\hline
+\end{tabularx}
+
+
+In-progress and scheduled games remain \texttt{pending} until final boxscores are available.
+\end{document}

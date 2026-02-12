@@ -1,0 +1,31 @@
+{
+  "artifacts": {
+    "csv": "data/odds_api/snapshots/daily-20260211T230026Z/reports/backtest-settlement.csv",
+    "json": "data/odds_api/snapshots/daily-20260211T230026Z/reports/backtest-settlement.json",
+    "md": "data/odds_api/snapshots/daily-20260211T230026Z/reports/backtest-settlement.md",
+    "meta": "data/odds_api/snapshots/daily-20260211T230026Z/reports/backtest-settlement.meta.json",
+    "pdf": "data/odds_api/snapshots/daily-20260211T230026Z/reports/backtest-settlement.pdf",
+    "tex": "data/odds_api/snapshots/daily-20260211T230026Z/reports/backtest-settlement.tex"
+  },
+  "counts": {
+    "final_games": 7,
+    "in_progress_games": 1,
+    "loss": 198,
+    "pending": 61,
+    "push": 0,
+    "scheduled_games": 0,
+    "total": 405,
+    "unresolved": 5,
+    "win": 141
+  },
+  "exit_code": 1,
+  "generated_at_utc": "2026-02-12T03:20:52Z",
+  "pdf": {
+    "message": "pdf generated",
+    "pdf_path": "data/odds_api/snapshots/daily-20260211T230026Z/reports/backtest-settlement.pdf",
+    "returncode": 0,
+    "status": "ok"
+  },
+  "snapshot_id": "daily-20260211T230026Z",
+  "status": "partial"
+}
