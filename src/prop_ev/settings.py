@@ -40,6 +40,7 @@ class Settings(BaseSettings):
     strategy_require_official_injuries: bool = True
     strategy_require_fresh_context: bool = True
     strategy_stale_quote_minutes: int = 20
+    strategy_default_id: str = "v0"
     context_injuries_stale_hours: float = 6.0
     context_roster_stale_hours: float = 24.0
     data_dir: str = "data/odds_api"

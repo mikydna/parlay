@@ -97,6 +97,20 @@ def test_build_backtest_seed_rows_filters_by_selection() -> None:
     assert ranked_rows[0]["selection_mode"] == "ranked"
 
 
+def test_ticket_key_stable_across_price_and_book() -> None:
+    report_a = _sample_report()
+    report_b = _sample_report()
+    report_b["candidates"][0]["selected_book"] = "draftkings"
+    report_b["candidates"][0]["selected_price"] = -125
+
+    rows_a = build_backtest_seed_rows(report=report_a, selection="eligible", top_n=0)
+    rows_b = build_backtest_seed_rows(report=report_b, selection="eligible", top_n=0)
+
+    assert len(rows_a) == 1
+    assert len(rows_b) == 1
+    assert rows_a[0]["ticket_key"] == rows_b[0]["ticket_key"]
+
+
 def test_write_backtest_artifacts(tmp_path: Path) -> None:
     snapshot_dir = tmp_path / "data" / "odds_api" / "snapshots" / "snap-1"
     (snapshot_dir / "reports").mkdir(parents=True, exist_ok=True)

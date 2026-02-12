@@ -39,6 +39,13 @@ from prop_ev.playbook import budget_snapshot, compute_live_window, generate_brie
 from prop_ev.settings import Settings
 from prop_ev.settlement import settle_snapshot
 from prop_ev.storage import SnapshotStore, make_snapshot_id, request_hash
+from prop_ev.strategies import get_strategy, list_strategies
+from prop_ev.strategies.base import (
+    StrategyInputs,
+    StrategyRunConfig,
+    decorate_report,
+    normalize_strategy_id,
+)
 from prop_ev.strategy import build_strategy_report, load_jsonl, write_strategy_reports
 
 
@@ -133,6 +140,13 @@ def _env_float(name: str, default: float) -> float:
         return float(raw)
     except ValueError:
         return default
+
+
+def _resolve_strategy_id(raw: str, *, default_id: str) -> str:
+    requested = raw.strip() if isinstance(raw, str) else ""
+    candidate = requested or default_id.strip() or "v0"
+    plugin = get_strategy(candidate)
+    return normalize_strategy_id(plugin.info.id)
 
 
 def _quota_from_headers(headers: dict[str, str]) -> dict[str, str]:
@@ -1257,9 +1271,23 @@ def _write_discovery_execution_reports(
     )
 
 
-def _cmd_strategy_run(args: argparse.Namespace) -> int:
-    store = SnapshotStore(os.environ.get("PROP_EV_DATA_DIR", "data/odds_api"))
-    snapshot_id = args.snapshot_id or _latest_snapshot_id(store)
+def _load_strategy_inputs(
+    *,
+    store: SnapshotStore,
+    snapshot_id: str,
+    offline: bool,
+    block_paid: bool,
+    refresh_context: bool,
+) -> tuple[
+    Path,
+    dict[str, Any],
+    list[dict[str, Any]],
+    dict[str, dict[str, str]],
+    list[dict[str, Any]],
+    dict[str, Any],
+    dict[str, Any],
+    dict[str, Any],
+]:
     snapshot_dir = store.snapshot_dir(snapshot_id)
     manifest = store.load_manifest(snapshot_id)
     derived_path = snapshot_dir / "derived" / "event_props.jsonl"
@@ -1269,20 +1297,14 @@ def _cmd_strategy_run(args: argparse.Namespace) -> int:
     rows = load_jsonl(derived_path)
     event_context = _load_event_context(store, snapshot_id, manifest)
     slate_rows = _load_slate_rows(store, snapshot_id)
-    if not slate_rows and not args.offline and not bool(getattr(args, "block_paid", False)):
+    if not slate_rows and not offline and not block_paid:
         _hydrate_slate_for_strategy(store, snapshot_id, manifest)
         manifest = store.load_manifest(snapshot_id)
         event_context = _load_event_context(store, snapshot_id, manifest)
         slate_rows = _load_slate_rows(store, snapshot_id)
 
-    require_official_injuries = _env_bool("PROP_EV_STRATEGY_REQUIRE_OFFICIAL_INJURIES", True)
-    allow_secondary_injuries = _allow_secondary_injuries_override(
-        cli_flag=bool(getattr(args, "allow_secondary_injuries", False))
-    )
-    stale_quote_minutes = _env_int("PROP_EV_STRATEGY_STALE_QUOTE_MINUTES", 20)
     injuries_stale_hours = _env_float("PROP_EV_CONTEXT_INJURIES_STALE_HOURS", 6.0)
     roster_stale_hours = _env_float("PROP_EV_CONTEXT_ROSTER_STALE_HOURS", 24.0)
-    require_fresh_context = _env_bool("PROP_EV_STRATEGY_REQUIRE_FRESH_CONTEXT", True)
     reference_dir = store.root / "reference"
     reference_injuries = reference_dir / "injuries" / "latest.json"
     today_key = _utc_now().strftime("%Y-%m-%d")
@@ -1297,8 +1319,8 @@ def _cmd_strategy_run(args: argparse.Namespace) -> int:
     official_pdf_dir = context_dir / "official_injury_pdf"
     injuries = load_or_fetch_context(
         cache_path=injuries_path,
-        offline=args.offline,
-        refresh=args.refresh_context,
+        offline=offline,
+        refresh=refresh_context,
         fetcher=lambda: {
             "fetched_at_utc": _iso(_utc_now()),
             "official": fetch_official_injury_links(pdf_cache_dir=official_pdf_dir),
@@ -1310,12 +1332,56 @@ def _cmd_strategy_run(args: argparse.Namespace) -> int:
     )
     roster = load_or_fetch_context(
         cache_path=roster_path,
-        offline=args.offline,
-        refresh=args.refresh_context,
+        offline=offline,
+        refresh=refresh_context,
         fetcher=lambda: fetch_roster_context(teams_in_scope=teams_in_scope),
         fallback_paths=[reference_roster_daily, reference_roster_latest],
         write_through_paths=[reference_roster_daily, reference_roster_latest],
         stale_after_hours=roster_stale_hours,
+    )
+    update_identity_map(
+        path=identity_map_path,
+        rows=rows,
+        roster=roster if isinstance(roster, dict) else None,
+        event_context=event_context,
+    )
+    player_identity_map = load_identity_map(identity_map_path)
+    return (
+        snapshot_dir,
+        manifest,
+        rows,
+        event_context,
+        slate_rows,
+        injuries,
+        roster,
+        player_identity_map,
+    )
+
+
+def _cmd_strategy_run(args: argparse.Namespace) -> int:
+    store = SnapshotStore(os.environ.get("PROP_EV_DATA_DIR", "data/odds_api"))
+    snapshot_id = args.snapshot_id or _latest_snapshot_id(store)
+    require_official_injuries = _env_bool("PROP_EV_STRATEGY_REQUIRE_OFFICIAL_INJURIES", True)
+    allow_secondary_injuries = _allow_secondary_injuries_override(
+        cli_flag=bool(getattr(args, "allow_secondary_injuries", False))
+    )
+    stale_quote_minutes = _env_int("PROP_EV_STRATEGY_STALE_QUOTE_MINUTES", 20)
+    require_fresh_context = _env_bool("PROP_EV_STRATEGY_REQUIRE_FRESH_CONTEXT", True)
+    (
+        snapshot_dir,
+        manifest,
+        rows,
+        event_context,
+        slate_rows,
+        injuries,
+        roster,
+        player_identity_map,
+    ) = _load_strategy_inputs(
+        store=store,
+        snapshot_id=snapshot_id,
+        offline=bool(args.offline),
+        block_paid=bool(getattr(args, "block_paid", False)),
+        refresh_context=bool(args.refresh_context),
     )
     official = _coerce_dict(injuries.get("official")) if isinstance(injuries, dict) else {}
     secondary = _coerce_dict(injuries.get("secondary")) if isinstance(injuries, dict) else {}
@@ -1328,39 +1394,49 @@ def _cmd_strategy_run(args: argparse.Namespace) -> int:
     if secondary_override_active:
         print("note=official_injury_missing_using_secondary_override")
 
-    identity_summary = update_identity_map(
-        path=identity_map_path,
-        rows=rows,
-        roster=roster if isinstance(roster, dict) else None,
-        event_context=event_context,
+    strategy_requested = str(getattr(args, "strategy", "v0"))
+    plugin = get_strategy(strategy_requested)
+    config = StrategyRunConfig(
+        top_n=int(args.top_n),
+        min_ev=float(args.min_ev),
+        allow_tier_b=bool(args.allow_tier_b),
+        require_official_injuries=bool(effective_require_official),
+        stale_quote_minutes=int(stale_quote_minutes),
+        require_fresh_context=bool(require_fresh_context),
     )
-    player_identity_map = load_identity_map(identity_map_path)
-    report = build_strategy_report(
+    inputs = StrategyInputs(
         snapshot_id=snapshot_id,
         manifest=manifest,
         rows=rows,
-        top_n=args.top_n,
-        injuries=injuries,
-        roster=roster,
-        event_context=event_context,
+        injuries=injuries if isinstance(injuries, dict) else None,
+        roster=roster if isinstance(roster, dict) else None,
+        event_context=event_context if isinstance(event_context, dict) else None,
         slate_rows=slate_rows,
-        player_identity_map=player_identity_map,
-        min_ev=args.min_ev,
-        allow_tier_b=args.allow_tier_b,
-        require_official_injuries=effective_require_official,
-        stale_quote_minutes=stale_quote_minutes,
-        require_fresh_context=require_fresh_context,
+        player_identity_map=player_identity_map if isinstance(player_identity_map, dict) else None,
     )
+    result = plugin.run(inputs=inputs, config=config)
+    report = decorate_report(result.report, strategy=plugin.info, config=result.config)
+    strategy_id = normalize_strategy_id(plugin.info.id)
+    write_canonical_raw = getattr(args, "write_canonical", None)
+    if write_canonical_raw is None:
+        write_canonical = bool(strategy_id == "v0")
+    else:
+        write_canonical = bool(write_canonical_raw)
+
     json_path, md_path = write_strategy_reports(
         snapshot_dir=snapshot_dir,
         report=report,
         top_n=args.top_n,
+        strategy_id=strategy_id,
+        write_canonical=write_canonical,
     )
     backtest = write_backtest_artifacts(
         snapshot_dir=snapshot_dir,
         report=report,
         selection="eligible",
         top_n=0,
+        strategy_id=strategy_id,
+        write_canonical=write_canonical,
     )
     summary = report.get("summary", {})
     health = (
@@ -1384,16 +1460,348 @@ def _cmd_strategy_run(args: argparse.Namespace) -> int:
             summary.get("eligible_lines", 0),
         )
     )
+    print(f"strategy_id={strategy_id}")
     print(f"health_gates={','.join(health_gates) if health_gates else 'none'}")
     print(f"report_json={json_path}")
     print(f"report_md={md_path}")
-    print(f"report_card={snapshot_dir / 'reports' / 'strategy-card.md'}")
+    card = snapshot_dir / "reports" / "strategy-card.md"
+    if not write_canonical:
+        card = card.with_name(f"{card.stem}.{strategy_id}{card.suffix}")
+    print(f"report_card={card}")
     print(f"backtest_seed_jsonl={backtest['seed_jsonl']}")
     print(f"backtest_results_template_csv={backtest['results_template_csv']}")
     print(f"backtest_readiness_json={backtest['readiness_json']}")
-    print(f"identity_map={identity_summary['path']} entries={identity_summary['player_entries']}")
-    print(f"injuries_context={injuries_path}")
-    print(f"roster_context={roster_path}")
+    reference_dir = store.root / "reference"
+    identity_map_path = reference_dir / "player_identity_map.json"
+    identity_map = load_identity_map(identity_map_path)
+    entries = (
+        len(identity_map.get("players", {})) if isinstance(identity_map.get("players"), dict) else 0
+    )
+    print(f"identity_map={identity_map_path} entries={entries}")
+    print(f"injuries_context={snapshot_dir / 'context' / 'injuries.json'}")
+    print(f"roster_context={snapshot_dir / 'context' / 'roster.json'}")
+    return 0
+
+
+def _cmd_strategy_ls(args: argparse.Namespace) -> int:
+    del args
+    for plugin in list_strategies():
+        strategy_id = normalize_strategy_id(plugin.info.id)
+        print(f"{strategy_id}\t{plugin.info.description}")
+    return 0
+
+
+def _parse_strategy_ids(raw: str) -> list[str]:
+    values = [item.strip() for item in (raw or "").split(",") if item.strip()]
+    seen: set[str] = set()
+    parsed: list[str] = []
+    for value in values:
+        normalized = normalize_strategy_id(value)
+        if normalized in seen:
+            continue
+        seen.add(normalized)
+        parsed.append(normalized)
+    return parsed
+
+
+def _ranked_key(row: dict[str, Any]) -> tuple[str, str, str, float, str]:
+    event_id = str(row.get("event_id", "")).strip()
+    player = str(row.get("player", "")).strip()
+    market = str(row.get("market", "")).strip()
+    point_raw = row.get("point")
+    point = float(point_raw) if isinstance(point_raw, (int, float)) else 0.0
+    side = str(row.get("recommended_side", "")).strip().lower()
+    return (event_id, player, market, point, side)
+
+
+def _render_strategy_compare_markdown(report: dict[str, Any]) -> str:
+    summary = report.get("summary", {}) if isinstance(report.get("summary"), dict) else {}
+    rows = report.get("strategies", []) if isinstance(report.get("strategies"), list) else []
+    overlap = (
+        report.get("ranked_overlap", {}) if isinstance(report.get("ranked_overlap"), dict) else {}
+    )
+
+    lines: list[str] = []
+    lines.append("# Strategy Compare")
+    lines.append("")
+    lines.append(f"- snapshot_id: `{summary.get('snapshot_id', '')}`")
+    lines.append(f"- strategies: `{summary.get('strategy_count', 0)}`")
+    lines.append(f"- ranked_top_n: `{summary.get('top_n', 0)}`")
+    lines.append("")
+
+    if rows:
+        lines.append("| Strategy | Mode | Eligible | Candidate | TierA | TierB | Gates |")
+        lines.append("| --- | --- | --- | --- | --- | --- | --- |")
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            lines.append(
+                "| {} | {} | {} | {} | {} | {} | {} |".format(
+                    row.get("strategy_id", ""),
+                    row.get("strategy_mode", ""),
+                    row.get("eligible_lines", 0),
+                    row.get("candidate_lines", 0),
+                    row.get("tier_a_lines", 0),
+                    row.get("tier_b_lines", 0),
+                    row.get("health_gate_count", 0),
+                )
+            )
+        lines.append("")
+
+    lines.append("## Ranked Overlap")
+    lines.append("")
+    lines.append(f"- intersection_all: `{overlap.get('intersection_all', 0)}`")
+    lines.append(f"- union_all: `{overlap.get('union_all', 0)}`")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def _cmd_strategy_compare(args: argparse.Namespace) -> int:
+    store = SnapshotStore(os.environ.get("PROP_EV_DATA_DIR", "data/odds_api"))
+    snapshot_id = args.snapshot_id or _latest_snapshot_id(store)
+
+    strategy_ids = _parse_strategy_ids(getattr(args, "strategies", ""))
+    if len(strategy_ids) < 2:
+        raise CLIError("compare requires --strategies with at least 2 unique ids")
+
+    require_official_injuries = _env_bool("PROP_EV_STRATEGY_REQUIRE_OFFICIAL_INJURIES", True)
+    stale_quote_minutes = _env_int("PROP_EV_STRATEGY_STALE_QUOTE_MINUTES", 20)
+    require_fresh_context = _env_bool("PROP_EV_STRATEGY_REQUIRE_FRESH_CONTEXT", True)
+
+    (
+        snapshot_dir,
+        manifest,
+        rows,
+        event_context,
+        slate_rows,
+        injuries,
+        roster,
+        player_identity_map,
+    ) = _load_strategy_inputs(
+        store=store,
+        snapshot_id=snapshot_id,
+        offline=bool(args.offline),
+        block_paid=bool(getattr(args, "block_paid", False)),
+        refresh_context=bool(args.refresh_context),
+    )
+
+    base_config = StrategyRunConfig(
+        top_n=int(args.top_n),
+        min_ev=float(args.min_ev),
+        allow_tier_b=bool(args.allow_tier_b),
+        require_official_injuries=bool(require_official_injuries),
+        stale_quote_minutes=int(stale_quote_minutes),
+        require_fresh_context=bool(require_fresh_context),
+    )
+    inputs = StrategyInputs(
+        snapshot_id=snapshot_id,
+        manifest=manifest,
+        rows=rows,
+        injuries=injuries if isinstance(injuries, dict) else None,
+        roster=roster if isinstance(roster, dict) else None,
+        event_context=event_context if isinstance(event_context, dict) else None,
+        slate_rows=slate_rows,
+        player_identity_map=player_identity_map if isinstance(player_identity_map, dict) else None,
+    )
+
+    compare_rows: list[dict[str, Any]] = []
+    ranked_sets: dict[str, set[tuple[str, str, str, float, str]]] = {}
+    for requested in strategy_ids:
+        plugin = get_strategy(requested)
+        result = plugin.run(inputs=inputs, config=base_config)
+        report = decorate_report(result.report, strategy=plugin.info, config=result.config)
+        strategy_id = normalize_strategy_id(report.get("strategy_id", plugin.info.id))
+
+        write_strategy_reports(
+            snapshot_dir=snapshot_dir,
+            report=report,
+            top_n=int(args.top_n),
+            strategy_id=strategy_id,
+            write_canonical=False,
+        )
+        write_backtest_artifacts(
+            snapshot_dir=snapshot_dir,
+            report=report,
+            selection="eligible",
+            top_n=0,
+            strategy_id=strategy_id,
+            write_canonical=False,
+        )
+
+        summary = report.get("summary", {}) if isinstance(report.get("summary"), dict) else {}
+        compare_rows.append(
+            {
+                "strategy_id": strategy_id,
+                "strategy_mode": str(report.get("strategy_mode", "")),
+                "candidate_lines": int(summary.get("candidate_lines", 0)),
+                "eligible_lines": int(summary.get("eligible_lines", 0)),
+                "tier_a_lines": int(summary.get("tier_a_lines", 0)),
+                "tier_b_lines": int(summary.get("tier_b_lines", 0)),
+                "health_gate_count": int(summary.get("health_gate_count", 0)),
+            }
+        )
+
+        ranked = (
+            report.get("ranked_plays", []) if isinstance(report.get("ranked_plays"), list) else []
+        )
+        ranked_sets[strategy_id] = {
+            _ranked_key(row)
+            for row in ranked
+            if isinstance(row, dict) and str(row.get("event_id", "")).strip()
+        }
+
+    intersection: set[tuple[str, str, str, float, str]] | None = None
+    union: set[tuple[str, str, str, float, str]] = set()
+    for keys in ranked_sets.values():
+        union |= keys
+        intersection = keys if intersection is None else (intersection & keys)
+    intersection_count = len(intersection or set())
+
+    compare_report = {
+        "generated_at_utc": _iso(_utc_now()),
+        "summary": {
+            "snapshot_id": snapshot_id,
+            "strategy_count": len(strategy_ids),
+            "top_n": int(args.top_n),
+        },
+        "strategies": sorted(compare_rows, key=lambda row: row.get("strategy_id", "")),
+        "ranked_overlap": {
+            "intersection_all": intersection_count,
+            "union_all": len(union),
+        },
+    }
+    reports_dir = snapshot_dir / "reports"
+    reports_dir.mkdir(parents=True, exist_ok=True)
+    json_path = reports_dir / "strategy-compare.json"
+    md_path = reports_dir / "strategy-compare.md"
+    json_path.write_text(
+        json.dumps(compare_report, sort_keys=True, indent=2) + "\n", encoding="utf-8"
+    )
+    md_path.write_text(_render_strategy_compare_markdown(compare_report), encoding="utf-8")
+
+    print(f"snapshot_id={snapshot_id}")
+    print(f"strategies={','.join(strategy_ids)}")
+    print(f"compare_json={json_path}")
+    print(f"compare_md={md_path}")
+    return 0
+
+
+def _render_backtest_summary_markdown(report: dict[str, Any]) -> str:
+    summary = report.get("summary", {}) if isinstance(report.get("summary"), dict) else {}
+    rows = report.get("strategies", []) if isinstance(report.get("strategies"), list) else []
+    winner = report.get("winner", {}) if isinstance(report.get("winner"), dict) else {}
+
+    lines: list[str] = []
+    lines.append("# Backtest Summary")
+    lines.append("")
+    lines.append(f"- snapshot_id: `{summary.get('snapshot_id', '')}`")
+    lines.append(f"- strategies: `{summary.get('strategy_count', 0)}`")
+    lines.append(f"- min_graded: `{summary.get('min_graded', 0)}`")
+    lines.append(f"- bin_size: `{summary.get('bin_size', '')}`")
+    lines.append("")
+
+    if rows:
+        lines.append("| Strategy | Graded | ROI | W | L | P | Brier |")
+        lines.append("| --- | --- | --- | --- | --- | --- | --- |")
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            lines.append(
+                "| {} | {} | {} | {} | {} | {} | {} |".format(
+                    row.get("strategy_id", ""),
+                    row.get("rows_graded", 0),
+                    row.get("roi", ""),
+                    row.get("wins", 0),
+                    row.get("losses", 0),
+                    row.get("pushes", 0),
+                    row.get("brier", ""),
+                )
+            )
+        lines.append("")
+
+    if winner:
+        lines.append("## Winner")
+        lines.append("")
+        lines.append(f"- strategy_id: `{winner.get('strategy_id', '')}`")
+        lines.append(f"- roi: `{winner.get('roi', '')}`")
+        lines.append(f"- rows_graded: `{winner.get('rows_graded', 0)}`")
+        lines.append("")
+
+    return "\n".join(lines)
+
+
+def _cmd_strategy_backtest_summarize(args: argparse.Namespace) -> int:
+    from prop_ev.backtest_summary import load_backtest_csv, pick_winner, summarize_backtest_rows
+
+    store = SnapshotStore(os.environ.get("PROP_EV_DATA_DIR", "data/odds_api"))
+    snapshot_id = args.snapshot_id or _latest_snapshot_id(store)
+    snapshot_dir = store.snapshot_dir(snapshot_id)
+    reports_dir = snapshot_dir / "reports"
+
+    bin_size = float(getattr(args, "bin_size", 0.05))
+    min_graded = int(getattr(args, "min_graded", 0))
+
+    paths: list[tuple[str, Path]] = []
+    explicit_results = getattr(args, "results", None)
+    if isinstance(explicit_results, list) and explicit_results:
+        for raw in explicit_results:
+            path = Path(str(raw))
+            rows = load_backtest_csv(path)
+            strategy = ""
+            for row in rows:
+                candidate = str(row.get("strategy_id", "")).strip()
+                if candidate:
+                    strategy = normalize_strategy_id(candidate)
+                    break
+            if not strategy:
+                strategy = normalize_strategy_id(path.stem.replace(".", "_"))
+            paths.append((strategy, path))
+    else:
+        strategy_ids = _parse_strategy_ids(getattr(args, "strategies", ""))
+        if not strategy_ids:
+            raise CLIError("backtest-summarize requires --strategies or --results")
+        for strategy_id in strategy_ids:
+            path = reports_dir / f"backtest-results-template.{strategy_id}.csv"
+            if strategy_id == "v0" and not path.exists():
+                path = reports_dir / "backtest-results-template.csv"
+            paths.append((strategy_id, path))
+
+    summaries: list[dict[str, Any]] = []
+    computed = []
+    for strategy_id, path in paths:
+        if not path.exists():
+            raise CLIError(f"missing backtest CSV: {path}")
+        rows = load_backtest_csv(path)
+        summary = summarize_backtest_rows(rows, strategy_id=strategy_id, bin_size=bin_size)
+        computed.append(summary)
+        summaries.append(summary.to_dict())
+
+    winner = pick_winner(computed, min_graded=min_graded)
+    report = {
+        "generated_at_utc": _iso(_utc_now()),
+        "summary": {
+            "snapshot_id": snapshot_id,
+            "strategy_count": len(summaries),
+            "min_graded": min_graded,
+            "bin_size": bin_size,
+        },
+        "strategies": sorted(summaries, key=lambda row: row.get("strategy_id", "")),
+        "winner": winner.to_dict() if winner is not None else {},
+    }
+
+    reports_dir.mkdir(parents=True, exist_ok=True)
+    json_path = reports_dir / "backtest-summary.json"
+    md_path = reports_dir / "backtest-summary.md"
+    json_path.write_text(json.dumps(report, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+    md_path.write_text(_render_backtest_summary_markdown(report), encoding="utf-8")
+
+    print(f"snapshot_id={snapshot_id}")
+    print(f"summary_json={json_path}")
+    print(f"summary_md={md_path}")
+    if winner is not None:
+        print(
+            f"winner_strategy_id={winner.strategy_id} roi={winner.roi} graded={winner.rows_graded}"
+        )
     return 0
 
 
@@ -1401,7 +1809,15 @@ def _cmd_strategy_backtest_prep(args: argparse.Namespace) -> int:
     store = SnapshotStore(os.environ.get("PROP_EV_DATA_DIR", "data/odds_api"))
     snapshot_id = args.snapshot_id or _latest_snapshot_id(store)
     snapshot_dir = store.snapshot_dir(snapshot_id)
-    report_path = snapshot_dir / "reports" / "strategy-report.json"
+    reports_dir = snapshot_dir / "reports"
+    requested = str(getattr(args, "strategy", "") or "").strip()
+    write_canonical = True
+    strategy_id: str | None = None
+    report_path = reports_dir / "strategy-report.json"
+    if requested:
+        strategy_id = normalize_strategy_id(requested)
+        report_path = reports_dir / f"strategy-report.{strategy_id}.json"
+        write_canonical = False
     if not report_path.exists():
         raise CLIError(f"missing strategy report: {report_path}")
     report = json.loads(report_path.read_text(encoding="utf-8"))
@@ -1413,6 +1829,8 @@ def _cmd_strategy_backtest_prep(args: argparse.Namespace) -> int:
         report=report,
         selection=args.selection,
         top_n=max(0, int(args.top_n)),
+        strategy_id=strategy_id,
+        write_canonical=write_canonical,
     )
     print(f"snapshot_id={snapshot_id}")
     print(f"selection_mode={result['selection_mode']} top_n={result['top_n']}")
@@ -1664,16 +2082,19 @@ def _run_snapshot_bundle_for_playbook(args: argparse.Namespace, snapshot_id: str
 def _run_strategy_for_playbook(
     *,
     snapshot_id: str,
+    strategy_id: str,
     top_n: int,
     min_ev: float,
     allow_tier_b: bool,
     offline: bool,
     block_paid: bool,
     refresh_context: bool,
-    allow_secondary_injuries: bool,
+    allow_secondary_injuries: bool = False,
+    write_canonical: bool = True,
 ) -> int:
     strategy_args = argparse.Namespace(
         snapshot_id=snapshot_id,
+        strategy=strategy_id,
         top_n=top_n,
         min_ev=min_ev,
         allow_tier_b=allow_tier_b,
@@ -1681,6 +2102,7 @@ def _run_strategy_for_playbook(
         block_paid=block_paid,
         refresh_context=refresh_context,
         allow_secondary_injuries=allow_secondary_injuries,
+        write_canonical=write_canonical,
     )
     return _cmd_strategy_run(strategy_args)
 
@@ -1689,6 +2111,10 @@ def _cmd_playbook_run(args: argparse.Namespace) -> int:
     store = SnapshotStore(os.environ.get("PROP_EV_DATA_DIR", "data/odds_api"))
     settings = Settings.from_env()
     month = args.month or current_month_utc()
+    strategy_id = _resolve_strategy_id(
+        str(getattr(args, "strategy", "")),
+        default_id=settings.strategy_default_id,
+    )
     top_n = args.top_n if args.top_n > 0 else settings.playbook_top_n
     per_game_top_n = (
         args.per_game_top_n if args.per_game_top_n > 0 else settings.playbook_per_game_top_n
@@ -1842,6 +2268,7 @@ def _cmd_playbook_run(args: argparse.Namespace) -> int:
         print(f"note=refresh_context_ignored_in_offline_mode snapshot_id={snapshot_id}")
     strategy_code = _run_strategy_for_playbook(
         snapshot_id=snapshot_id,
+        strategy_id=strategy_id,
         top_n=args.strategy_top_n,
         min_ev=args.min_ev,
         allow_tier_b=args.allow_tier_b,
@@ -1849,6 +2276,7 @@ def _cmd_playbook_run(args: argparse.Namespace) -> int:
         block_paid=bool(getattr(args, "block_paid", False)),
         refresh_context=refresh_context,
         allow_secondary_injuries=allow_secondary_injuries,
+        write_canonical=True,
     )
     if strategy_code != 0:
         return strategy_code
@@ -1873,6 +2301,7 @@ def _cmd_playbook_run(args: argparse.Namespace) -> int:
             end_budget["odds"].get("cap_reached", False),
         )
     )
+    print(f"strategy_id={strategy_id}")
     preflight_gates = (
         preflight_context.get("health_gates", [])
         if isinstance(preflight_context.get("health_gates"), list)
@@ -1898,6 +2327,10 @@ def _cmd_playbook_render(args: argparse.Namespace) -> int:
     store = SnapshotStore(os.environ.get("PROP_EV_DATA_DIR", "data/odds_api"))
     settings = Settings.from_env()
     month = args.month or current_month_utc()
+    strategy_id = _resolve_strategy_id(
+        str(getattr(args, "strategy", "")),
+        default_id=settings.strategy_default_id,
+    )
     top_n = args.top_n if args.top_n > 0 else settings.playbook_top_n
     per_game_top_n = (
         args.per_game_top_n if args.per_game_top_n > 0 else settings.playbook_per_game_top_n
@@ -1907,9 +2340,22 @@ def _cmd_playbook_render(args: argparse.Namespace) -> int:
     if bool(args.refresh_context) and bool(args.offline):
         print(f"note=refresh_context_ignored_in_offline_mode snapshot_id={snapshot_id}")
     strategy_json = store.snapshot_dir(snapshot_id) / "reports" / "strategy-report.json"
-    if not strategy_json.exists():
+    strategy_needs_refresh = not strategy_json.exists()
+    if not strategy_needs_refresh:
+        try:
+            existing = json.loads(strategy_json.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            strategy_needs_refresh = True
+        else:
+            existing_id = ""
+            if isinstance(existing, dict):
+                existing_id = str(existing.get("strategy_id", "")).strip()
+            existing_id = normalize_strategy_id(existing_id) if existing_id else "v0"
+            strategy_needs_refresh = existing_id != strategy_id
+    if strategy_needs_refresh:
         code = _run_strategy_for_playbook(
             snapshot_id=snapshot_id,
+            strategy_id=strategy_id,
             top_n=args.strategy_top_n,
             min_ev=args.min_ev,
             allow_tier_b=args.allow_tier_b,
@@ -1919,6 +2365,7 @@ def _cmd_playbook_render(args: argparse.Namespace) -> int:
             allow_secondary_injuries=_allow_secondary_injuries_override(
                 cli_flag=bool(getattr(args, "allow_secondary_injuries", False))
             ),
+            write_canonical=True,
         )
         if code != 0:
             return code
@@ -1934,6 +2381,7 @@ def _cmd_playbook_render(args: argparse.Namespace) -> int:
         month=month,
     )
     print(f"snapshot_id={snapshot_id}")
+    print(f"strategy_id={strategy_id}")
     print(f"strategy_brief_md={brief['report_markdown']}")
     print(f"strategy_brief_tex={brief['report_tex']}")
     print(f"strategy_brief_pdf={brief['report_pdf']}")
@@ -1954,6 +2402,10 @@ def _cmd_playbook_discover_execute(args: argparse.Namespace) -> int:
     store = SnapshotStore(os.environ.get("PROP_EV_DATA_DIR", "data/odds_api"))
     settings = Settings.from_env()
     month = args.month or current_month_utc()
+    strategy_id = _resolve_strategy_id(
+        str(getattr(args, "strategy", "")),
+        default_id=settings.strategy_default_id,
+    )
     base_snapshot = args.base_snapshot_id or make_snapshot_id()
     discovery_snapshot_id = f"{base_snapshot}-discover"
     execution_snapshot_id = f"{base_snapshot}-execute"
@@ -2040,6 +2492,7 @@ def _cmd_playbook_discover_execute(args: argparse.Namespace) -> int:
     if (
         _run_strategy_for_playbook(
             snapshot_id=discovery_snapshot_id,
+            strategy_id=strategy_id,
             top_n=args.strategy_top_n,
             min_ev=args.min_ev,
             allow_tier_b=args.allow_tier_b,
@@ -2049,6 +2502,7 @@ def _cmd_playbook_discover_execute(args: argparse.Namespace) -> int:
             allow_secondary_injuries=_allow_secondary_injuries_override(
                 cli_flag=bool(getattr(args, "allow_secondary_injuries", False))
             ),
+            write_canonical=True,
         )
         != 0
     ):
@@ -2061,6 +2515,7 @@ def _cmd_playbook_discover_execute(args: argparse.Namespace) -> int:
     if (
         _run_strategy_for_playbook(
             snapshot_id=execution_snapshot_id,
+            strategy_id=strategy_id,
             top_n=args.strategy_top_n,
             min_ev=args.min_ev,
             allow_tier_b=args.allow_tier_b,
@@ -2070,6 +2525,7 @@ def _cmd_playbook_discover_execute(args: argparse.Namespace) -> int:
             allow_secondary_injuries=_allow_secondary_injuries_override(
                 cli_flag=bool(getattr(args, "allow_secondary_injuries", False))
             ),
+            write_canonical=True,
         )
         != 0
     ):
@@ -2111,6 +2567,7 @@ def _cmd_playbook_discover_execute(args: argparse.Namespace) -> int:
     summary = compare_report.get("summary", {})
     print(f"discovery_snapshot_id={discovery_snapshot_id}")
     print(f"execution_snapshot_id={execution_snapshot_id}")
+    print(f"strategy_id={strategy_id}")
     print(
         "actionable_rows={} matched_rows={} discovery_eligible_rows={}".format(
             summary.get("actionable_rows", 0),
@@ -2202,9 +2659,13 @@ def _build_parser() -> argparse.ArgumentParser:
     strategy = subparsers.add_parser("strategy", help="Run offline strategy reports")
     strategy_subparsers = strategy.add_subparsers(dest="strategy_command")
 
+    strategy_ls = strategy_subparsers.add_parser("ls", help="List available strategy plugins")
+    strategy_ls.set_defaults(func=_cmd_strategy_ls)
+
     strategy_run = strategy_subparsers.add_parser("run", help="Generate strategy report")
     strategy_run.set_defaults(func=_cmd_strategy_run)
     strategy_run.add_argument("--snapshot-id", default="")
+    strategy_run.add_argument("--strategy", default="v0")
     strategy_run.add_argument("--top-n", type=int, default=25)
     strategy_run.add_argument("--min-ev", type=float, default=0.01)
     strategy_run.add_argument("--allow-tier-b", action="store_true")
@@ -2243,11 +2704,25 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Emit compact text output",
     )
 
+    strategy_compare = strategy_subparsers.add_parser(
+        "compare", help="Run multiple strategies for the same snapshot"
+    )
+    strategy_compare.set_defaults(func=_cmd_strategy_compare)
+    strategy_compare.add_argument("--snapshot-id", default="")
+    strategy_compare.add_argument("--strategies", required=True)
+    strategy_compare.add_argument("--top-n", type=int, default=25)
+    strategy_compare.add_argument("--min-ev", type=float, default=0.01)
+    strategy_compare.add_argument("--allow-tier-b", action="store_true")
+    strategy_compare.add_argument("--offline", action="store_true")
+    strategy_compare.add_argument("--block-paid", action="store_true")
+    strategy_compare.add_argument("--refresh-context", action="store_true")
+
     strategy_backtest_prep = strategy_subparsers.add_parser(
         "backtest-prep", help="Write backtest seed/readiness artifacts for a snapshot"
     )
     strategy_backtest_prep.set_defaults(func=_cmd_strategy_backtest_prep)
     strategy_backtest_prep.add_argument("--snapshot-id", default="")
+    strategy_backtest_prep.add_argument("--strategy", default="")
     strategy_backtest_prep.add_argument(
         "--selection", choices=sorted(ROW_SELECTIONS), default="eligible"
     )
@@ -2279,6 +2754,15 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_false",
         help="Emit compact text output",
     )
+    strategy_backtest_summarize = strategy_subparsers.add_parser(
+        "backtest-summarize", help="Summarize graded backtest CSVs for one snapshot"
+    )
+    strategy_backtest_summarize.set_defaults(func=_cmd_strategy_backtest_summarize)
+    strategy_backtest_summarize.add_argument("--snapshot-id", default="")
+    strategy_backtest_summarize.add_argument("--strategies", default="")
+    strategy_backtest_summarize.add_argument("--results", action="append", default=[])
+    strategy_backtest_summarize.add_argument("--min-graded", type=int, default=200)
+    strategy_backtest_summarize.add_argument("--bin-size", type=float, default=0.05)
 
     playbook = subparsers.add_parser("playbook", help="Run playbook briefs")
     playbook_subparsers = playbook.add_subparsers(dest="playbook_command")
@@ -2314,6 +2798,7 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Allow run when official injuries are unavailable and secondary source is healthy.",
     )
     playbook_run.add_argument("--refresh-llm", action="store_true")
+    playbook_run.add_argument("--strategy", default="")
     playbook_run.add_argument("--top-n", type=int, default=0)
     playbook_run.add_argument("--per-game-top-n", type=int, default=0)
     playbook_run.add_argument("--strategy-top-n", type=int, default=25)
@@ -2335,6 +2820,7 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Allow run when official injuries are unavailable and secondary source is healthy.",
     )
     playbook_render.add_argument("--refresh-llm", action="store_true")
+    playbook_render.add_argument("--strategy", default="")
     playbook_render.add_argument("--top-n", type=int, default=0)
     playbook_render.add_argument("--per-game-top-n", type=int, default=0)
     playbook_render.add_argument("--strategy-top-n", type=int, default=25)
@@ -2389,6 +2875,7 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Allow run when official injuries are unavailable and secondary source is healthy.",
     )
     playbook_discover_execute.add_argument("--refresh-llm", action="store_true")
+    playbook_discover_execute.add_argument("--strategy", default="")
     playbook_discover_execute.add_argument("--top-n", type=int, default=25)
     playbook_discover_execute.add_argument("--per-game-top-n", type=int, default=5)
     playbook_discover_execute.add_argument("--strategy-top-n", type=int, default=50)

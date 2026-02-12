@@ -53,15 +53,16 @@ def _safe_int(value: Any) -> int | None:
 
 
 def _ticket_key(snapshot_id: str, row: dict[str, Any]) -> str:
+    # Keep this identity stable across strategy variants so we can compare
+    # the same underlying prop even when selected book/price changes.
+    del snapshot_id  # retained in signature for backwards compatibility
     payload = {
-        "snapshot_id": snapshot_id,
-        "event_id": str(row.get("event_id", "")),
-        "player": str(row.get("player", "")),
-        "market": str(row.get("market", "")),
+        "version": 2,
+        "event_id": str(row.get("event_id", "")).strip(),
+        "player": str(row.get("player", "")).strip().lower(),
+        "market": str(row.get("market", "")).strip().lower(),
         "point": _safe_float(row.get("point")),
-        "side": str(row.get("recommended_side", "")),
-        "book": str(row.get("selected_book", "")),
-        "price": _safe_int(row.get("selected_price")),
+        "side": str(row.get("recommended_side", "")).strip().lower(),
     }
     serialized = json.dumps(payload, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(serialized.encode("utf-8")).hexdigest()[:16]
@@ -112,6 +113,7 @@ def build_backtest_seed_rows(
     *, report: dict[str, Any], selection: str, top_n: int
 ) -> list[dict[str, Any]]:
     snapshot_id = str(report.get("snapshot_id", ""))
+    strategy_id = str(report.get("strategy_id", ""))
     generated_at_utc = str(report.get("generated_at_utc", ""))
     modeled_date_et = str(report.get("modeled_date_et", ""))
     strategy_mode = str(report.get("strategy_mode", ""))
@@ -126,6 +128,7 @@ def build_backtest_seed_rows(
             {
                 "ticket_key": ticket_key,
                 "snapshot_id": snapshot_id,
+                "strategy_id": strategy_id,
                 "snapshot_generated_at_utc": generated_at_utc,
                 "modeled_date_et": modeled_date_et,
                 "strategy_mode": strategy_mode,
@@ -189,6 +192,7 @@ def _write_template_csv(path: Path, rows: list[dict[str, Any]]) -> None:
     columns = [
         "ticket_key",
         "snapshot_id",
+        "strategy_id",
         "event_id",
         "game",
         "tip_et",
@@ -258,6 +262,7 @@ def build_backtest_readiness(
     seed_rows: list[dict[str, Any]],
     selection: str,
     top_n: int,
+    strategy_report_path: Path | None = None,
 ) -> dict[str, Any]:
     health = (
         report.get("health_report", {}) if isinstance(report.get("health_report"), dict) else {}
@@ -272,7 +277,7 @@ def build_backtest_readiness(
 
     event_props_path = derived_dir / "event_props.jsonl"
     featured_path = derived_dir / "featured_odds.jsonl"
-    strategy_path = reports_dir / "strategy-report.json"
+    strategy_path = strategy_report_path or (reports_dir / "strategy-report.json")
     injuries_path = context_dir / "injuries.json"
     roster_path = context_dir / "roster.json"
     official_pdf_dir = context_dir / "official_injury_pdf"
@@ -291,6 +296,7 @@ def build_backtest_readiness(
 
     return {
         "snapshot_id": str(report.get("snapshot_id", "")),
+        "strategy_id": str(report.get("strategy_id", "")),
         "generated_at_utc": _now_utc(),
         "modeled_date_et": str(report.get("modeled_date_et", "")),
         "strategy_mode": str(report.get("strategy_mode", "")),
@@ -334,30 +340,78 @@ def write_backtest_artifacts(
     report: dict[str, Any],
     selection: str = "eligible",
     top_n: int = 0,
+    strategy_id: str | None = None,
+    write_canonical: bool = True,
 ) -> dict[str, Any]:
+    from prop_ev.strategies.base import normalize_strategy_id
+
     reports_dir = snapshot_dir / "reports"
     reports_dir.mkdir(parents=True, exist_ok=True)
     seed_rows = build_backtest_seed_rows(report=report, selection=selection, top_n=top_n)
 
-    seed_jsonl_path = reports_dir / "backtest-seed.jsonl"
-    template_csv_path = reports_dir / "backtest-results-template.csv"
-    readiness_json_path = reports_dir / "backtest-readiness.json"
+    canonical_seed_jsonl = reports_dir / "backtest-seed.jsonl"
+    canonical_template_csv = reports_dir / "backtest-results-template.csv"
+    canonical_readiness_json = reports_dir / "backtest-readiness.json"
 
-    _write_jsonl(seed_jsonl_path, seed_rows)
-    _write_template_csv(template_csv_path, seed_rows)
+    normalized = ""
+    if strategy_id:
+        normalized = normalize_strategy_id(strategy_id)
+    elif str(report.get("strategy_id", "")).strip():
+        normalized = normalize_strategy_id(str(report.get("strategy_id", "")).strip())
+
+    def _suffix(path: Path) -> Path:
+        return path.with_name(f"{path.stem}.{normalized}{path.suffix}")
+
+    primary_seed = canonical_seed_jsonl
+    primary_template = canonical_template_csv
+    primary_readiness = canonical_readiness_json
+    primary_strategy_report = reports_dir / "strategy-report.json"
+    if not write_canonical:
+        if not normalized:
+            raise ValueError("strategy_id is required when write_canonical=false")
+        primary_seed = _suffix(canonical_seed_jsonl)
+        primary_template = _suffix(canonical_template_csv)
+        primary_readiness = _suffix(canonical_readiness_json)
+        primary_strategy_report = _suffix(primary_strategy_report)
+
+    def _write(
+        seed_path: Path, template_path: Path, readiness_path: Path, strategy_path: Path
+    ) -> None:
+        _write_jsonl(seed_path, seed_rows)
+        _write_template_csv(template_path, seed_rows)
+        readiness = build_backtest_readiness(
+            snapshot_dir=snapshot_dir,
+            report=report,
+            seed_rows=seed_rows,
+            selection=selection,
+            top_n=top_n,
+            strategy_report_path=strategy_path,
+        )
+        _write_json(readiness_path, readiness)
+
+    _write(primary_seed, primary_template, primary_readiness, primary_strategy_report)
+    if write_canonical and normalized:
+        suffixed_strategy_report = _suffix(reports_dir / "strategy-report.json")
+        _write(
+            _suffix(canonical_seed_jsonl),
+            _suffix(canonical_template_csv),
+            _suffix(canonical_readiness_json),
+            suffixed_strategy_report,
+        )
+
     readiness = build_backtest_readiness(
         snapshot_dir=snapshot_dir,
         report=report,
         seed_rows=seed_rows,
         selection=selection,
         top_n=top_n,
+        strategy_report_path=primary_strategy_report,
     )
-    _write_json(readiness_json_path, readiness)
 
     return {
-        "seed_jsonl": str(seed_jsonl_path),
-        "results_template_csv": str(template_csv_path),
-        "readiness_json": str(readiness_json_path),
+        "seed_jsonl": str(primary_seed),
+        "results_template_csv": str(primary_template),
+        "readiness_json": str(primary_readiness),
         "selection_mode": selection,
         "top_n": top_n,
         "seed_rows": len(seed_rows),
