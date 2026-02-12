@@ -83,7 +83,7 @@ def _sample_report() -> dict:
                 "p_over_model": 0.57,
                 "p_over_fair": 0.52,
                 "hold": 0.02,
-                "injury_status": "probable",
+                "injury_status": "available",
                 "roster_status": "active",
                 "reason": "",
             },

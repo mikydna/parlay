@@ -55,6 +55,61 @@ def test_strategy_run_from_snapshot(local_data_dir: Path) -> None:
     store = SnapshotStore(local_data_dir)
     snapshot_id = "2026-02-11T10-10-00Z"
     snapshot_dir = store.ensure_snapshot(snapshot_id)
+    context_dir = snapshot_dir / "context"
+    context_dir.mkdir(parents=True, exist_ok=True)
+    (context_dir / "injuries.json").write_text(
+        json.dumps(
+            {
+                "fetched_at_utc": "2026-02-11T10:10:00Z",
+                "official": {
+                    "source": "official_nba",
+                    "url": "https://official.nba.com/nba-injury-report-2025-26-season/",
+                    "status": "ok",
+                    "count": 1,
+                    "fetched_at_utc": "2026-02-11T10:10:00Z",
+                    "pdf_links": ["https://example.com/injury.pdf"],
+                    "pdf_download_status": "ok",
+                    "selected_pdf_url": "https://example.com/injury.pdf",
+                    "parse_status": "ok",
+                    "parse_coverage": 1.0,
+                    "rows_count": 1,
+                    "rows": [
+                        {
+                            "player": "Player A",
+                            "player_norm": "playera",
+                            "team": "Boston Celtics",
+                            "team_norm": "boston celtics",
+                            "status": "available",
+                            "note": "",
+                            "source": "official_nba_pdf",
+                        }
+                    ],
+                },
+                "secondary": {"status": "ok", "rows": [], "count": 0},
+            },
+            sort_keys=True,
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (context_dir / "roster.json").write_text(
+        json.dumps(
+            {
+                "source": "nba_live_scoreboard",
+                "url": "https://cdn.nba.com/static/json/liveData/scoreboard/todaysScoreboard_00.json",
+                "status": "ok",
+                "fetched_at_utc": "2026-02-11T10:10:00Z",
+                "count_teams": 0,
+                "missing_roster_teams": [],
+                "teams": {},
+            },
+            sort_keys=True,
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
     store.write_jsonl(
         snapshot_dir / "derived" / "event_props.jsonl",
         [

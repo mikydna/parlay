@@ -435,7 +435,7 @@ class LLMClient:
         if _supports_temperature(model):
             request_payload["temperature"] = temperature
         if isinstance(request_options, dict):
-            for key in ["tools", "tool_choice", "include", "reasoning"]:
+            for key in ["tools", "tool_choice", "include", "reasoning", "text"]:
                 if key in request_options:
                     request_payload[key] = request_options[key]
         raw = self.post_fn(

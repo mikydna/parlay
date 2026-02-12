@@ -246,16 +246,88 @@ def _best_side(rows: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def _injury_source_rows(source: Any, *, default_source: str) -> list[dict[str, Any]]:
+    if not isinstance(source, dict):
+        return []
+    rows = source.get("rows", [])
+    if not isinstance(rows, list):
+        return []
+    cleaned: list[dict[str, Any]] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        player = str(row.get("player", "")).strip()
+        player_norm = str(row.get("player_norm", "")).strip() or normalize_person_name(player)
+        if not player_norm:
+            continue
+        team_norm = canonical_team_name(str(row.get("team_norm", row.get("team", ""))))
+        item = dict(row)
+        item["player"] = player
+        item["player_norm"] = player_norm
+        item["team_norm"] = team_norm
+        item["source"] = str(row.get("source", default_source))
+        cleaned.append(item)
+    return cleaned
+
+
+def _merged_injury_rows(injuries: dict[str, Any] | None) -> list[dict[str, Any]]:
+    if not isinstance(injuries, dict):
+        return []
+    official_rows = _injury_source_rows(
+        injuries.get("official"),
+        default_source="official_nba_pdf",
+    )
+    secondary_rows = _injury_source_rows(
+        injuries.get("secondary"),
+        default_source="secondary_injuries",
+    )
+    merged: dict[str, dict[str, Any]] = {}
+    for row in secondary_rows:
+        merged[str(row.get("player_norm", ""))] = row
+    for row in official_rows:
+        key = str(row.get("player_norm", ""))
+        previous = merged.get(key)
+        if previous is not None:
+            item = dict(previous)
+            item.update(row)
+            # Keep structured team identity from secondary when available.
+            # Official rows drive status and note fields.
+            item["team"] = str(previous.get("team", row.get("team", "")))
+            item["team_norm"] = canonical_team_name(
+                str(previous.get("team_norm", previous.get("team", "")))
+            )
+            merged[key] = item
+        else:
+            merged[key] = row
+    return list(merged.values())
+
+
+def _official_rows_count(official: dict[str, Any] | None) -> int:
+    if not isinstance(official, dict):
+        return 0
+    rows = official.get("rows", [])
+    rows_count = len(rows) if isinstance(rows, list) else 0
+    raw_count = official.get("rows_count", rows_count)
+    if isinstance(raw_count, bool):
+        return rows_count
+    if isinstance(raw_count, (int, float)):
+        return max(0, int(raw_count))
+    if isinstance(raw_count, str):
+        try:
+            return max(0, int(raw_count.strip()))
+        except ValueError:
+            return rows_count
+    return rows_count
+
+
 def _injury_index(injuries: dict[str, Any] | None) -> dict[str, dict[str, str]]:
     index: dict[str, dict[str, str]] = {}
-    if not isinstance(injuries, dict):
-        return index
-    secondary = injuries.get("secondary", {})
-    rows = secondary.get("rows", []) if isinstance(secondary, dict) else []
-    if not isinstance(rows, list):
+    rows = _merged_injury_rows(injuries)
+    if not rows:
         return index
     severity = {
         "unknown": 0,
+        "available": 1,
         "day_to_day": 1,
         "probable": 2,
         "questionable": 3,
@@ -276,7 +348,7 @@ def _injury_index(injuries: dict[str, Any] | None) -> dict[str, dict[str, str]]:
         candidate = {
             "status": status,
             "date_update": date_update,
-            "source": "basketball_reference",
+            "source": str(row.get("source", "")),
             "note": str(row.get("note", "")),
             "team_norm": team_norm,
             "team": str(row.get("team", "")),
@@ -294,15 +366,7 @@ def _injury_index(injuries: dict[str, Any] | None) -> dict[str, dict[str, str]]:
 
 def _injuries_by_team(injuries: dict[str, Any] | None) -> dict[str, list[dict[str, Any]]]:
     grouped: dict[str, list[dict[str, Any]]] = {}
-    if not isinstance(injuries, dict):
-        return grouped
-    secondary = injuries.get("secondary", {})
-    rows = secondary.get("rows", []) if isinstance(secondary, dict) else []
-    if not isinstance(rows, list):
-        return grouped
-    for row in rows:
-        if not isinstance(row, dict):
-            continue
+    for row in _merged_injury_rows(injuries):
         team_norm = canonical_team_name(str(row.get("team_norm", row.get("team", ""))))
         if not team_norm:
             continue
@@ -790,6 +854,16 @@ def _roster_resolution_detail(status: str) -> str:
     return "ok"
 
 
+def _pre_bet_readiness(*, injury_status: str, roster_status: str) -> tuple[bool, str]:
+    clean_injury = injury_status in {"available", "available_unlisted"}
+    clean_roster = roster_status in {"active", "rostered"}
+    if clean_injury and clean_roster:
+        return True, "ok"
+    if not clean_injury:
+        return False, f"injury_status={injury_status}"
+    return False, f"roster_status={roster_status}"
+
+
 def _market_label(market: str) -> str:
     return MARKET_LABELS.get(market, market.replace("_", " ").upper())
 
@@ -916,39 +990,40 @@ def _availability_notes(
 ) -> dict[str, Any]:
     official = injuries.get("official", {}) if isinstance(injuries, dict) else {}
     secondary = injuries.get("secondary", {}) if isinstance(injuries, dict) else {}
+    merged_rows = _merged_injury_rows(injuries)
+
     key_rows: list[dict[str, str]] = []
-    if isinstance(secondary, dict):
-        rows = secondary.get("rows", [])
-        if isinstance(rows, list):
-            scored: list[tuple[int, str, dict[str, str]]] = []
-            severity = {
-                "out_for_season": 5,
-                "out": 4,
-                "doubtful": 3,
-                "questionable": 2,
-                "day_to_day": 1,
-                "probable": 0,
-                "unknown": 0,
+    if merged_rows:
+        scored: list[tuple[int, str, dict[str, str]]] = []
+        severity = {
+            "out_for_season": 5,
+            "out": 4,
+            "doubtful": 3,
+            "questionable": 2,
+            "day_to_day": 1,
+            "probable": 0,
+            "available": 0,
+            "unknown": 0,
+        }
+        for row in merged_rows:
+            if not isinstance(row, dict):
+                continue
+            team_norm = canonical_team_name(str(row.get("team_norm", row.get("team", ""))))
+            if teams_in_scope and team_norm and team_norm not in teams_in_scope:
+                continue
+            status = str(row.get("status", "unknown"))
+            if status not in {"out_for_season", "out", "doubtful", "questionable"}:
+                continue
+            entry = {
+                "player": str(row.get("player", "")),
+                "team": str(row.get("team", "")),
+                "status": status,
+                "note": str(row.get("note", "")),
+                "date_update": str(row.get("date_update", "")),
             }
-            for row in rows:
-                if not isinstance(row, dict):
-                    continue
-                team_norm = canonical_team_name(str(row.get("team_norm", row.get("team", ""))))
-                if teams_in_scope and team_norm and team_norm not in teams_in_scope:
-                    continue
-                status = str(row.get("status", "unknown"))
-                if status not in {"out_for_season", "out", "doubtful", "questionable"}:
-                    continue
-                entry = {
-                    "player": str(row.get("player", "")),
-                    "team": str(row.get("team", "")),
-                    "status": status,
-                    "note": str(row.get("note", "")),
-                    "date_update": str(row.get("date_update", "")),
-                }
-                scored.append((severity.get(status, 0), entry["date_update"], entry))
-            scored.sort(key=lambda item: (-item[0], item[1], item[2]["player"]))
-            key_rows = [item[2] for item in scored[:20]]
+            scored.append((severity.get(status, 0), entry["date_update"], entry))
+        scored.sort(key=lambda item: (-item[0], item[1], item[2]["player"]))
+        key_rows = [item[2] for item in scored[:20]]
 
     return {
         "official": {
@@ -960,12 +1035,24 @@ def _availability_notes(
             if isinstance(official, dict)
             else "",
             "count": int(official.get("count", 0)) if isinstance(official, dict) else 0,
+            "rows_count": _official_rows_count(official if isinstance(official, dict) else None),
+            "parse_status": (
+                str(official.get("parse_status", "")) if isinstance(official, dict) else ""
+            ),
+            "parse_coverage": (
+                (_safe_float(official.get("parse_coverage")) or 0.0)
+                if isinstance(official, dict)
+                else 0.0
+            ),
             "pdf_links": official.get("pdf_links", []) if isinstance(official, dict) else [],
             "pdf_download_status": (
                 str(official.get("pdf_download_status", "")) if isinstance(official, dict) else ""
             ),
             "pdf_cached_path": (
                 str(official.get("pdf_cached_path", "")) if isinstance(official, dict) else ""
+            ),
+            "selected_pdf_url": (
+                str(official.get("selected_pdf_url", "")) if isinstance(official, dict) else ""
             ),
         },
         "secondary": {
@@ -1185,6 +1272,29 @@ def build_strategy_report(
 
     injuries_by_player = _injury_index(injuries)
     injuries_by_team = _injuries_by_team(injuries)
+    official = injuries.get("official", {}) if isinstance(injuries, dict) else {}
+    secondary = injuries.get("secondary", {}) if isinstance(injuries, dict) else {}
+    official_rows_count = _official_rows_count(official if isinstance(official, dict) else None)
+    official_parse_status = (
+        str(official.get("parse_status", "")) if isinstance(official, dict) else ""
+    )
+    official_ready = (
+        isinstance(official, dict)
+        and official.get("status") == "ok"
+        and official_rows_count > 0
+        and official_parse_status in {"", "ok"}
+    )
+    official_player_norms: set[str] = set()
+    if isinstance(official, dict):
+        official_rows = official.get("rows", [])
+        if isinstance(official_rows, list):
+            for row in official_rows:
+                if not isinstance(row, dict):
+                    continue
+                player = str(row.get("player", ""))
+                player_norm = str(row.get("player_norm", "")) or normalize_person_name(player)
+                if player_norm:
+                    official_player_norms.add(player_norm)
 
     candidates: list[dict[str, Any]] = []
     tier_a_count = 0
@@ -1226,7 +1336,8 @@ def build_strategy_report(
             p_over_fair, p_under_fair = _normalize_prob_pair(over_prob_imp, under_prob_imp)
             hold = (over_prob_imp + under_prob_imp) - 1.0
 
-        injury_row = injuries_by_player.get(normalize_person_name(player), {})
+        player_norm = normalize_person_name(player)
+        injury_row = injuries_by_player.get(player_norm, {})
         injury_status = str(injury_row.get("status", "unknown"))
         injury_note = str(injury_row.get("note", ""))
         roster_status = _roster_status(
@@ -1236,6 +1347,14 @@ def build_strategy_report(
             roster=roster,
             player_identity_map=player_identity_map,
         )
+        if (
+            official_ready
+            and player_norm not in official_player_norms
+            and roster_status in {"active", "rostered"}
+        ):
+            injury_status = "available_unlisted"
+            if not injury_note:
+                injury_note = "Not listed on official NBA injury report."
         player_team = _resolve_player_team(
             player_name=player,
             event_id=event_id,
@@ -1277,6 +1396,10 @@ def build_strategy_report(
         if injury_status in {"out", "out_for_season"}:
             eligible = False
             reason = "injury_gate"
+        pre_bet_ready, pre_bet_reason = _pre_bet_readiness(
+            injury_status=injury_status,
+            roster_status=roster_status,
+        )
 
         adjustment = _probability_adjustment(
             injury_status=injury_status,
@@ -1437,6 +1560,8 @@ def build_strategy_report(
                 "injury_status": injury_status,
                 "injury_note": injury_note,
                 "roster_status": roster_status,
+                "pre_bet_ready": pre_bet_ready,
+                "pre_bet_reason": pre_bet_reason,
                 "roster_resolution_detail": _roster_resolution_detail(roster_status),
                 "baseline_minutes": minutes_projection.get("baseline_minutes"),
                 "projected_minutes": minutes_projection.get("projected_minutes"),
@@ -1478,8 +1603,6 @@ def build_strategy_report(
     availability = _availability_notes(
         injuries=injuries, roster=roster, teams_in_scope=teams_in_scope
     )
-    official = injuries.get("official", {}) if isinstance(injuries, dict) else {}
-    secondary = injuries.get("secondary", {}) if isinstance(injuries, dict) else {}
     roster_ok = isinstance(roster, dict) and roster.get("status") == "ok"
     roster_count = int(roster.get("count_teams", 0)) if isinstance(roster, dict) else 0
 
@@ -1501,9 +1624,7 @@ def build_strategy_report(
 
     odds_health = _odds_health(candidates, stale_quote_minutes)
     health_gates: list[str] = []
-    if require_official_injuries and not (
-        isinstance(official, dict) and official.get("status") == "ok"
-    ):
+    if require_official_injuries and not official_ready:
         health_gates.append("official_injury_missing")
     if bool(odds_health.get("odds_stale", False)):
         health_gates.append("odds_snapshot_stale")
@@ -1632,8 +1753,11 @@ def build_strategy_report(
     roster_warnings = sorted(set(warnings))[:30]
 
     gaps: list[str] = []
-    if not isinstance(official, dict) or official.get("status") != "ok":
-        gaps.append("Official NBA injury report links were not reachable in this environment.")
+    if not official_ready:
+        gaps.append(
+            "Official NBA injury report data was not cleanly parsed "
+            "(missing links, download failure, or empty parse rows)."
+        )
     if not isinstance(secondary, dict) or secondary.get("status") != "ok":
         gaps.append("Secondary injury feed unavailable (optional fallback).")
     if not roster_ok:
@@ -1699,6 +1823,10 @@ def build_strategy_report(
             "official_injuries": str(official.get("status", "missing"))
             if isinstance(official, dict)
             else "missing",
+            "official_injuries_parse": str(official.get("parse_status", "missing"))
+            if isinstance(official, dict)
+            else "missing",
+            "official_injuries_rows": official_rows_count,
             "secondary_injuries": str(secondary.get("status", "missing"))
             if isinstance(secondary, dict)
             else "missing",
@@ -1748,12 +1876,13 @@ def build_strategy_report(
             "health_gate_count": len(health_gates),
             "eligible_tier_a": len([item for item in eligible_rows if item.get("tier") == "A"]),
             "eligible_tier_b": len([item for item in eligible_rows if item.get("tier") == "B"]),
+            "eligible_pre_bet_ready": len(
+                [item for item in eligible_rows if bool(item.get("pre_bet_ready"))]
+            ),
             "qualified_unders": len(qualified_unders),
             "request_counts": request_counts,
             "quota": manifest.get("quota", {}),
-            "injury_source_official": _bool(
-                isinstance(official, dict) and official.get("status") == "ok"
-            ),
+            "injury_source_official": _bool(official_ready),
             "injury_source_secondary": _bool(
                 isinstance(secondary, dict) and secondary.get("status") == "ok"
             ),
@@ -1921,16 +2050,18 @@ def render_strategy_markdown(report: dict[str, Any], top_n: int) -> str:
     )
     roster = availability.get("roster", {}) if isinstance(availability.get("roster"), dict) else {}
     lines.append(
-        "- Official injury source: status=`{}` fetched=`{}` links=`{}`".format(
+        "- Official injury source: status=`{}` fetched=`{}` links=`{}` parsed_rows=`{}`".format(
             official.get("status", ""),
             official.get("fetched_at_utc", ""),
             official.get("count", 0),
+            official.get("rows_count", 0),
         )
     )
     lines.append(
-        "- Official injury PDF cache: status=`{}` path=`{}`".format(
+        "- Official injury PDF cache: status=`{}` path=`{}` parse_status=`{}`".format(
             official.get("pdf_download_status", ""),
             official.get("pdf_cached_path", ""),
+            official.get("parse_status", ""),
         )
     )
     lines.append(

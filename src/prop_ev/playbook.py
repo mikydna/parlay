@@ -78,6 +78,97 @@ def _load_json(path: Path) -> dict[str, Any]:
     return payload
 
 
+def _pass1_structured_output_options() -> dict[str, Any]:
+    """Request strict pass1 JSON shape from the Responses API."""
+    return {
+        "text": {
+            "format": {
+                "type": "json_schema",
+                "name": "playbook_pass1",
+                "strict": True,
+                "schema": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "required": [
+                        "slate_summary",
+                        "top_plays_explained",
+                        "watchouts",
+                        "data_quality_flags",
+                        "confidence_notes",
+                    ],
+                    "properties": {
+                        "slate_summary": {"type": "string"},
+                        "top_plays_explained": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "additionalProperties": False,
+                                "required": [
+                                    "game",
+                                    "player",
+                                    "market",
+                                    "point",
+                                    "side",
+                                    "best_price",
+                                    "best_book",
+                                    "ev",
+                                    "kelly",
+                                    "ticket",
+                                    "action",
+                                    "edge_note",
+                                    "why",
+                                ],
+                                "properties": {
+                                    "game": {"type": "string"},
+                                    "player": {"type": "string"},
+                                    "market": {"type": "string"},
+                                    "point": {
+                                        "anyOf": [
+                                            {"type": "number"},
+                                            {"type": "string"},
+                                            {"type": "null"},
+                                        ]
+                                    },
+                                    "side": {"type": "string"},
+                                    "best_price": {
+                                        "anyOf": [
+                                            {"type": "number"},
+                                            {"type": "string"},
+                                            {"type": "null"},
+                                        ]
+                                    },
+                                    "best_book": {"type": "string"},
+                                    "ev": {
+                                        "anyOf": [
+                                            {"type": "number"},
+                                            {"type": "string"},
+                                            {"type": "null"},
+                                        ]
+                                    },
+                                    "kelly": {
+                                        "anyOf": [
+                                            {"type": "number"},
+                                            {"type": "string"},
+                                            {"type": "null"},
+                                        ]
+                                    },
+                                    "ticket": {"type": "string"},
+                                    "action": {"type": "string", "enum": ["GO", "LEAN", "NO-GO"]},
+                                    "edge_note": {"type": "string"},
+                                    "why": {"type": "string"},
+                                },
+                            },
+                        },
+                        "watchouts": {"type": "array", "items": {"type": "string"}},
+                        "data_quality_flags": {"type": "array", "items": {"type": "string"}},
+                        "confidence_notes": {"type": "array", "items": {"type": "string"}},
+                    },
+                },
+            }
+        }
+    }
+
+
 def compute_live_window(
     events: list[dict[str, Any]],
     *,
@@ -211,7 +302,8 @@ def generate_brief_for_snapshot(
         {
             "prompt_version": "v2",
             "prompt": pass1_prompt,
-            "max_output_tokens": 700,
+            "max_output_tokens": 1400,
+            "request_options": _pass1_structured_output_options(),
         },
         {
             "prompt_version": "v2_retry1",
@@ -219,7 +311,8 @@ def generate_brief_for_snapshot(
                 pass1_prompt + "\n\nIMPORTANT: Return a single top-level JSON object only. "
                 "No prose, no markdown fences."
             ),
-            "max_output_tokens": 520,
+            "max_output_tokens": 1200,
+            "request_options": _pass1_structured_output_options(),
         },
         {
             "prompt_version": "v2_retry2",
@@ -228,7 +321,8 @@ def generate_brief_for_snapshot(
                 + "\n\nCRITICAL OUTPUT CONTRACT: output valid minified JSON object only, "
                 "with required keys."
             ),
-            "max_output_tokens": 420,
+            "max_output_tokens": 1000,
+            "request_options": _pass1_structured_output_options(),
         },
     ]
     for idx, attempt in enumerate(pass1_attempts):
@@ -245,6 +339,7 @@ def generate_brief_for_snapshot(
                 temperature=0.1,
                 refresh=llm_refresh if idx == 0 else True,
                 offline=llm_offline,
+                request_options=attempt["request_options"],
             )
             parsed = extract_json_object(str(result.get("text", "")))
             sanitized = sanitize_pass1(parsed, brief_input)
@@ -373,7 +468,7 @@ def generate_brief_for_snapshot(
                 "reasoning": {"effort": "low"},
                 "include": ["web_search_call.action.sources"],
             },
-            "max_output_tokens": 1200,
+            "max_output_tokens": 2400,
         },
         {
             "prompt_version": "v1_retry1",
@@ -382,7 +477,7 @@ def generate_brief_for_snapshot(
                 "tool_choice": "auto",
                 "reasoning": {"effort": "low"},
             },
-            "max_output_tokens": 900,
+            "max_output_tokens": 1800,
         },
     ]
     for idx, attempt in enumerate(analyst_attempts):

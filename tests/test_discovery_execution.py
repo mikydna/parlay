@@ -17,6 +17,7 @@ def test_build_discovery_execution_report_filters_actionable() -> None:
                 "play_to_american": 105,
                 "model_p_hit": 0.55,
                 "best_ev": 0.1,
+                "pre_bet_ready": True,
             }
         ]
     }

@@ -90,6 +90,12 @@ def _to_str(value: Any) -> str:
     return str(value)
 
 
+def _to_optional_bool(value: Any) -> bool | None:
+    if isinstance(value, bool):
+        return value
+    return None
+
+
 def _pick_side_fields(item: dict[str, Any]) -> dict[str, Any]:
     side = _to_str(item.get("recommended_side", "")).lower()
     if side == "under":
@@ -180,9 +186,9 @@ def _action_decision(
         return "NO-GO"
     if reason in {"injury_gate", "roster_gate"}:
         return "NO-GO"
-    if injury_status in {"out", "out_for_season", "doubtful"}:
+    if injury_status not in {"available", "available_unlisted"}:
         return "NO-GO"
-    if roster_status in {"inactive", "not_on_roster"}:
+    if roster_status not in {"active", "rostered"}:
         return "NO-GO"
 
     ev = _to_float(best_ev)
@@ -202,6 +208,18 @@ def _action_decision(
     if ev >= 0.02:
         return "LEAN"
     return "NO-GO"
+
+
+def _is_pre_bet_ready(row: dict[str, Any]) -> bool:
+    raw = row.get("pre_bet_ready")
+    if isinstance(raw, bool):
+        return raw
+    injury_status = _to_str(row.get("injury_status", ""))
+    roster_status = _to_str(row.get("roster_status", ""))
+    return injury_status in {"available", "available_unlisted"} and roster_status in {
+        "active",
+        "rostered",
+    }
 
 
 def _action_rank(action: str) -> int:
@@ -380,6 +398,8 @@ def build_brief_input(
                 "hold": _to_float(item.get("hold")),
                 "injury_status": injury_status,
                 "roster_status": roster_status,
+                "pre_bet_ready": _to_optional_bool(item.get("pre_bet_ready")),
+                "pre_bet_reason": _to_str(item.get("pre_bet_reason", "")),
                 "reason": reason,
                 "bet_type": "player_prop",
                 "ticket": ticket,
@@ -466,6 +486,8 @@ def build_brief_input(
                 "best_ev": _to_float(item.get("best_ev")),
                 "injury_status": injury_status,
                 "roster_status": roster_status,
+                "pre_bet_ready": _to_optional_bool(item.get("pre_bet_ready")),
+                "pre_bet_reason": _to_str(item.get("pre_bet_reason", "")),
                 "bet_type": "player_prop",
                 "ticket": ticket,
                 "action_default": action_default,
@@ -967,6 +989,8 @@ def _best_available_row(brief_input: dict[str, Any]) -> dict[str, Any] | None:
         action = _to_str(row.get("action_default", "")).upper()
         if action not in {"GO", "LEAN"}:
             continue
+        if not _is_pre_bet_ready(row):
+            continue
         actionable.append(row)
     if not actionable:
         return None
@@ -981,7 +1005,7 @@ def render_best_available_section(brief_input: dict[str, Any]) -> str:
     lines.append("## Best Available Bet Right Now")
     lines.append("")
     if best is None:
-        lines.append("- status: no actionable GO/LEAN play passed current gates.")
+        lines.append("- status: no actionable GO/LEAN play passed pre-bet availability checks.")
         lines.append("- action: wait for injury/roster updates, then rerun.")
         return "\n".join(lines).strip()
 
@@ -1114,9 +1138,7 @@ def strip_empty_go_placeholder_rows(markdown: str) -> str:
 
 def build_analyst_web_prompt(brief_input: dict[str, Any], pass1: dict[str, Any]) -> str:
     """Prompt for external evidence synthesis with web search enabled."""
-    summary = (
-        brief_input.get("summary", {}) if isinstance(brief_input.get("summary"), dict) else {}
-    )
+    summary = brief_input.get("summary", {}) if isinstance(brief_input.get("summary"), dict) else {}
     top_rows = (
         brief_input.get("top_plays", []) if isinstance(brief_input.get("top_plays"), list) else []
     )
@@ -1350,6 +1372,7 @@ def render_analyst_take_section(
     analyst_take: dict[str, Any], *, mode: str, brief_input: dict[str, Any] | None = None
 ) -> str:
     """Render Analyst Take section as markdown."""
+
     def _trim_sentences(text: str, *, max_sentences: int, max_chars: int) -> str:
         raw = text.strip()
         if not raw:
@@ -1383,11 +1406,7 @@ def render_analyst_take_section(
         url = row.get("source_url", "").strip()
         if not domain and url.startswith("http"):
             domain = (
-                url.replace("https://", "")
-                .replace("http://", "")
-                .split("/", 1)[0]
-                .strip()
-                .lower()
+                url.replace("https://", "").replace("http://", "").split("/", 1)[0].strip().lower()
             )
         if title and domain:
             if domain in title.lower():
@@ -1406,16 +1425,12 @@ def render_analyst_take_section(
         lowered = url.strip().lower()
         return lowered.startswith("https://") or lowered.startswith("http://")
 
-    external_supporting = [
-        row for row in supporting if _is_external_url(row.get("source_url", ""))
-    ]
+    external_supporting = [row for row in supporting if _is_external_url(row.get("source_url", ""))]
     external_refuting = [row for row in refuting if _is_external_url(row.get("source_url", ""))]
     internal_supporting = [
         row for row in supporting if not _is_external_url(row.get("source_url", ""))
     ]
-    internal_refuting = [
-        row for row in refuting if not _is_external_url(row.get("source_url", ""))
-    ]
+    internal_refuting = [row for row in refuting if not _is_external_url(row.get("source_url", ""))]
 
     source_ids: dict[tuple[str, str], int] = {}
     source_rows: list[dict[str, str]] = []
@@ -1510,9 +1525,7 @@ def render_analyst_take_section(
             lines.append(f"- [S{idx}] {label}")
     if internal_supporting or internal_refuting:
         lines.append("- Deterministic model details are summarized in Snapshot/Action Plan.")
-    lines.append(
-        "- Full source URLs are stored in `brief-analyst.json` for audit/debug use."
-    )
+    lines.append("- Full source URLs are stored in `brief-analyst.json` for audit/debug use.")
     return "\n".join(lines).strip()
 
 

@@ -156,9 +156,7 @@ def test_incomplete_response_raises_clear_error(
         )
 
 
-def test_web_sources_extracted_and_cached(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_web_sources_extracted_and_cached(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("ODDS_API_KEY", "odds-test")
     monkeypatch.setenv("OPENAI_API_KEY", "openai-test")
     settings = Settings(_env_file=None)
@@ -168,8 +166,7 @@ def test_web_sources_extracted_and_cached(
         assert payload.get("tools") == [{"type": "web_search"}]
         assert "reasoning" not in payload
         output_text = (
-            '{"analysis_summary":"ok","supporting_facts":[],'
-            '"refuting_facts":[],"bottom_line":"ok"}'
+            '{"analysis_summary":"ok","supporting_facts":[],"refuting_facts":[],"bottom_line":"ok"}'
         )
         return {
             "output_text": output_text,
@@ -222,3 +219,79 @@ def test_web_sources_extracted_and_cached(
     assert first["web_sources"][0]["url"] == "https://example.com/a"
     assert second["cached"] is True
     assert second["web_sources"][0]["title"] == "Source A"
+
+
+def test_request_options_text_schema_forwarded(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("ODDS_API_KEY", "odds-test")
+    monkeypatch.setenv("OPENAI_API_KEY", "openai-test")
+    settings = Settings(_env_file=None)
+
+    captured: dict[str, dict] = {}
+
+    def fake_post(url: str, headers: dict[str, str], payload: dict, timeout: float) -> dict:
+        del url, headers, timeout
+        captured["payload"] = payload
+        output_text = (
+            '{"slate_summary":"ok","top_plays_explained":[],"watchouts":[],'
+            '"data_quality_flags":[],"confidence_notes":[]}'
+        )
+        return {"output_text": output_text, "usage": {"input_tokens": 2, "output_tokens": 3}}
+
+    client = LLMClient(settings=settings, data_root=tmp_path / "data", post_fn=fake_post)
+    request_options = {
+        "text": {
+            "format": {
+                "type": "json_schema",
+                "name": "playbook_pass1",
+                "strict": True,
+                "schema": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "required": [
+                        "slate_summary",
+                        "top_plays_explained",
+                        "watchouts",
+                        "data_quality_flags",
+                        "confidence_notes",
+                    ],
+                    "properties": {
+                        "slate_summary": {"type": "string"},
+                        "top_plays_explained": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "additionalProperties": False,
+                                "required": ["game", "action", "why"],
+                                "properties": {
+                                    "game": {"type": "string"},
+                                    "action": {"type": "string"},
+                                    "why": {"type": "string"},
+                                },
+                            },
+                        },
+                        "watchouts": {"type": "array", "items": {"type": "string"}},
+                        "data_quality_flags": {"type": "array", "items": {"type": "string"}},
+                        "confidence_notes": {"type": "array", "items": {"type": "string"}},
+                    },
+                },
+            }
+        }
+    }
+    client.cached_completion(
+        task="playbook_pass1",
+        prompt_version="v2",
+        prompt="hello",
+        payload={"x": 1},
+        snapshot_id="snap-1",
+        model="gpt-5-mini",
+        max_output_tokens=200,
+        temperature=0.1,
+        refresh=True,
+        offline=False,
+        request_options=request_options,
+    )
+
+    payload = captured["payload"]
+    assert payload.get("text", {}) == request_options["text"]
