@@ -1,0 +1,33 @@
+{
+  "analysis_summary": "The provided deterministic model identifies five Tier A \"GO\" player-prop plays across three NBA games, led by Day'Ron Sharpe (IND @ BKN) and Nolan Traore (IND @ BKN). The model uses market-implied probabilities with manual adjustments for injuries/rosters/opponents and applies deterministic (v0) rules for minutes/usage projections and correlation haircuts. External news sources offer mixed supporting context for recent player performances and injury status but do not fully validate the model's probabilistic edges.",
+  "bottom_line": "The model surfaces several plausible Tier A player-prop candidates and incorporates roster/injury adjustments; independent news sources provide some supporting performance and injury context (e.g., Sharpe, Okongwu, Oubre). However, the model relies on deterministic v0 rules for minutes/usage and correlation haircuts rather than learned distributions, and external sources do not corroborate the specific EV values. Evidence quality is mixed\u2014use the listed plays as informed signals, not definitive guarantees of profit.",
+  "refuting_facts": [
+    {
+      "fact": "The deterministic model notes it uses fixed v0 rules for minutes/usage and correlation haircuts rather than learned distributions, which may overstate confidence in the listed edges.",
+      "source_title": "Deterministic model snapshot (methodology notes)",
+      "source_url": "daily-20260211T230026Z"
+    },
+    {
+      "fact": "Public game previews and reporting do not provide independent market EV calculations; available news sources do not confirm the model's stated edge magnitudes for the listed top_plays.",
+      "source_title": "Knicks at 76ers game preview (news coverage lacks market EV details)",
+      "source_url": "https://www.postingandtoasting.com/knicks-game-previews/79139/game-preview-knicks-at-76ers-february-11-2026"
+    }
+  ],
+  "supporting_facts": [
+    {
+      "fact": "Day'Ron Sharpe has been highlighted by game coverage and box-score reporting as an active contributor in Nets games, consistent with a model selecting him as a top prop play.",
+      "source_title": "Nets vs Wizards 127-113 (game coverage mentioning Day'Ron Sharpe)",
+      "source_url": "https://www.netsdaily.com/nets-scores-results/105830/nets-vs-wizards-127-113-danny-wolf-dayron-sharpe"
+    },
+    {
+      "fact": "Kelly Oubre Jr. has a recent official injury designation from the NBA (knee) that could affect his availability and thus the model's adjustments for player usage and prop evaluations.",
+      "source_title": "76ers: Kelly Oubre Jr. out with knee injury; will be reevaluated in two weeks",
+      "source_url": "https://www.nba.com/news/76ers-kelly-oubre-jr-out-with-knee-injury-will-be-reevaluated-in-two-weeks"
+    },
+    {
+      "fact": "Onyeka Okongwu has recorded a recent double-double (15 points, 10 rebounds) in game action, supporting model selection of him as a Tier A prop candidate for points+rebounds+assists markets.",
+      "source_title": "Onyeka Okongwu posts double-double with 15 points and 10 rebounds as Hawks defeat Hornets",
+      "source_url": "https://www.fanduel.com/research/nba/player-news/game-updates/onyeka-okongwu-posts-double-double-with-15-points-and-10-rebounds-as-hawks-defeat-hornets-on-march-18-2025"
+    }
+  ]
+}
