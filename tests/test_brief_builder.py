@@ -5,6 +5,7 @@ from prop_ev.brief_builder import (
     default_pass1,
     enforce_p_hit_notes,
     enforce_readability_labels,
+    enforce_snapshot_dates_et,
     enforce_snapshot_mode_labels,
     ensure_pagebreak_before_action_plan,
     merge_analyst_take_sources,
@@ -26,6 +27,7 @@ def _sample_report() -> dict:
     return {
         "snapshot_id": "snap-1",
         "generated_at_utc": "2026-02-11T17:00:00Z",
+        "modeled_date_et": "2026-02-11",
         "strategy_status": "modeled_with_gates",
         "summary": {
             "events": 2,
@@ -377,3 +379,21 @@ def test_enforce_snapshot_mode_labels() -> None:
     assert "- narrative: `deterministic_fallback`" in labeled
     assert "- llm_pass1_status: `fallback`" in labeled
     assert "- llm_pass2_status: `fallback`" in labeled
+
+
+def test_enforce_snapshot_dates_et_inserts_fields_and_removes_llm_date_line() -> None:
+    brief = build_brief_input(_sample_report(), top_n=5)
+    markdown = (
+        "## Snapshot\n"
+        "- source_data: `snapshot_inputs`\n"
+        "- scoring: `deterministic`\n"
+        "- narrative: `llm`\n"
+        "Date: 2026-02-11 (generated 17:00:00Z).\n"
+        "Scope: example\n\n"
+        "## What The Bet Is\n"
+    )
+    patched = enforce_snapshot_dates_et(markdown, brief_input=brief)
+    assert "- snapshot_id: `snap-1`" in patched
+    assert "- modeled_date_et: `2026-02-11`" in patched
+    assert "- generated_at_et: `2026-02-11 12:00:00 PM EST`" in patched
+    assert "Date: 2026-02-11" not in patched

@@ -19,6 +19,7 @@ from prop_ev.brief_builder import (
     default_pass1,
     enforce_p_hit_notes,
     enforce_readability_labels,
+    enforce_snapshot_dates_et,
     enforce_snapshot_mode_labels,
     ensure_pagebreak_before_action_plan,
     extract_json_object,
@@ -605,6 +606,7 @@ def generate_brief_for_snapshot(
         llm_pass1_status=str(pass1_meta.get("status", "")),
         llm_pass2_status=str(pass2_meta.get("status", "")),
     )
+    markdown = enforce_snapshot_dates_et(markdown, brief_input=brief_input)
     markdown_path = reports_dir / "strategy-brief.md"
     markdown_path.write_text(markdown, encoding="utf-8")
 

@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import json
 import re
+from datetime import UTC, datetime
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from prop_ev.context_sources import canonical_team_name
 
@@ -27,6 +29,8 @@ REQUIRED_PASS2_HEADINGS = [
 ]
 
 P_HIT_NOTES_HEADING = "### Interpreting p(hit)"
+
+ET_ZONE = ZoneInfo("America/New_York")
 
 MARKET_LABELS = {
     "player_points": "points",
@@ -84,6 +88,30 @@ def _to_float(value: Any) -> float | None:
         except ValueError:
             return None
     return None
+
+
+def _parse_iso_datetime(value: str) -> datetime | None:
+    raw = value.strip()
+    if not raw:
+        return None
+    if raw.endswith("Z"):
+        raw = raw[:-1] + "+00:00"
+    try:
+        parsed = datetime.fromisoformat(raw)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=UTC)
+    return parsed
+
+
+def _format_timestamp_et(value: Any) -> str:
+    raw = _to_str(value)
+    parsed = _parse_iso_datetime(raw)
+    if parsed is None:
+        return ""
+    local = parsed.astimezone(ET_ZONE)
+    return local.strftime("%Y-%m-%d %I:%M:%S %p %Z")
 
 
 def _to_str(value: Any) -> str:
@@ -635,10 +663,14 @@ def build_brief_input(
         )
     )
 
+    generated_at_utc = _to_str(report.get("generated_at_utc", ""))
+
     return {
         "snapshot_id": _to_str(report.get("snapshot_id", "")),
         "strategy_status": _to_str(report.get("strategy_status", "")),
-        "generated_at_utc": _to_str(report.get("generated_at_utc", "")),
+        "generated_at_utc": generated_at_utc,
+        "generated_at_et": _format_timestamp_et(generated_at_utc),
+        "modeled_date_et": _to_str(report.get("modeled_date_et", "")),
         "summary": {
             "events": summary.get("events", 0),
             "candidate_lines": summary.get("candidate_lines", 0),
@@ -763,6 +795,7 @@ def build_pass2_prompt(brief_input: dict[str, Any], pass1: dict[str, Any]) -> st
         "## Action Plan (GO / LEAN / NO-GO)\n"
         "## Data Quality\n"
         "## Confidence\n\n"
+        "Within Snapshot, show dates/times in ET (America/New_York); do not use UTC/Z.\n"
         "Within Action Plan, use a markdown table with columns: Action, Game, Tier, Ticket, "
         "p(hit), Edge Note, Why.\n"
         "p(hit) must come from the provided model_prob for that ticket.\n"
@@ -839,7 +872,14 @@ def render_fallback_markdown(
     lines.append("## Snapshot")
     lines.append("")
     lines.append(f"- snapshot_id: `{brief_input.get('snapshot_id', '')}`")
-    lines.append(f"- generated_at_utc: `{brief_input.get('generated_at_utc', '')}`")
+    modeled_date_et = _to_str(brief_input.get("modeled_date_et", "")).strip()
+    if modeled_date_et:
+        lines.append(f"- modeled_date_et: `{modeled_date_et}`")
+    generated_at_et = _to_str(brief_input.get("generated_at_et", "")).strip()
+    if generated_at_et:
+        lines.append(f"- generated_at_et: `{generated_at_et}`")
+    else:
+        lines.append(f"- generated_at_utc: `{brief_input.get('generated_at_utc', '')}`")
     lines.append(f"- source: `{source_label}`")
     lines.append("")
     lines.append("## What The Bet Is")
@@ -1865,6 +1905,66 @@ def enforce_snapshot_mode_labels(
     while len(new_section) >= 2 and not new_section[-1].strip() and not new_section[-2].strip():
         new_section.pop()
 
+    merged = lines[: snapshot_idx + 1] + new_section + lines[section_end:]
+    return "\n".join(merged).rstrip() + "\n"
+
+
+def enforce_snapshot_dates_et(markdown: str, *, brief_input: dict[str, Any]) -> str:
+    """Ensure Snapshot uses ET date/time labels and removes UTC/Z narrative lines."""
+    lines = markdown.splitlines()
+    snapshot_idx: int | None = None
+    for idx, line in enumerate(lines):
+        if line.strip() == "## Snapshot":
+            snapshot_idx = idx
+            break
+    if snapshot_idx is None:
+        return markdown.rstrip() + "\n"
+
+    section_end = len(lines)
+    for idx in range(snapshot_idx + 1, len(lines)):
+        if lines[idx].strip().startswith("## "):
+            section_end = idx
+            break
+
+    section = lines[snapshot_idx + 1 : section_end]
+    filtered: list[str] = []
+    for row in section:
+        stripped = row.strip()
+        if stripped.startswith(("- snapshot_id:", "- modeled_date_et:", "- generated_at_et:")):
+            continue
+        if stripped.startswith("- generated_at_utc:"):
+            continue
+        if not stripped.startswith("-"):
+            lower = stripped.lower()
+            if lower.startswith("date:"):
+                continue
+            if "generated" in lower and ("utc" in lower or "z" in stripped):
+                continue
+        filtered.append(row)
+
+    snapshot_id = _to_str(brief_input.get("snapshot_id", "")).strip()
+    modeled_date_et = _to_str(brief_input.get("modeled_date_et", "")).strip()
+    generated_at_et = _to_str(brief_input.get("generated_at_et", "")).strip()
+    generated_at_utc = _to_str(brief_input.get("generated_at_utc", "")).strip()
+
+    meta: list[str] = []
+    if snapshot_id:
+        meta.append(f"- snapshot_id: `{snapshot_id}`")
+    if modeled_date_et:
+        meta.append(f"- modeled_date_et: `{modeled_date_et}`")
+    if generated_at_et:
+        meta.append(f"- generated_at_et: `{generated_at_et}`")
+    elif generated_at_utc:
+        meta.append(f"- generated_at_utc: `{generated_at_utc}`")
+
+    if not meta:
+        return markdown.rstrip() + "\n"
+
+    while filtered and not filtered[0].strip():
+        filtered.pop(0)
+
+    new_section = meta[:]
+    new_section.extend(filtered)
     merged = lines[: snapshot_idx + 1] + new_section + lines[section_end:]
     return "\n".join(merged).rstrip() + "\n"
 
