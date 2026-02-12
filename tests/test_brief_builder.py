@@ -16,6 +16,7 @@ from prop_ev.brief_builder import (
     strip_empty_go_placeholder_rows,
     strip_risks_and_watchouts_section,
     strip_tier_b_view_section,
+    upsert_action_plan_table,
     upsert_analyst_take_section,
     upsert_best_available_section,
 )
@@ -164,6 +165,24 @@ def test_enforce_p_hit_notes_inserts_block_and_is_idempotent() -> None:
     patched = enforce_p_hit_notes(markdown)
     assert "### Interpreting p(hit)" in patched
     assert enforce_p_hit_notes(patched).count("### Interpreting p(hit)") == 1
+
+
+def test_upsert_action_plan_table_replaces_and_sorts() -> None:
+    brief = build_brief_input(_sample_report(), top_n=5)
+    markdown = (
+        "## Snapshot\n\n"
+        "## Action Plan (GO / LEAN / NO-GO)\n\n"
+        "### Top 2 Across All Games\n\n"
+        "| Action | Game | Tier | Ticket | p(hit) | Edge Note | Why |\n"
+        "| --- | --- | --- | --- | --- | --- | --- |\n"
+        "| NO-GO | A @ B | A | Old ticket 1 | 1% | n/a | bad |\n"
+        "| GO | C @ D | A | Old ticket 2 | 99% | n/a | good |\n\n"
+        "## Data Quality\n"
+    )
+    patched = upsert_action_plan_table(markdown, brief_input=brief, top_n=2)
+    assert "| Action | Game | Tier | Ticket | p(hit) | Edge Note | Why |" in patched
+    # GO entry from deterministic brief should appear before NO-GO even if original was reversed.
+    assert patched.index("Player C OVER 12.5 points") < patched.index("Player A UNDER 20.5 points")
 
 
 def test_strip_empty_go_placeholder_rows() -> None:

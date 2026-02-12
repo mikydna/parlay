@@ -256,6 +256,38 @@ def _play_rank_key(row: dict[str, Any]) -> tuple[Any, ...]:
     )
 
 
+def _render_action_plan_table_rows(top_plays: list[dict[str, Any]]) -> list[str]:
+    if not top_plays:
+        return ["- none"]
+
+    sorted_rows = sorted(
+        [row for row in top_plays if isinstance(row, dict)],
+        key=_play_rank_key,
+    )
+    lines = [
+        "| Action | Game | Tier | Ticket | p(hit) | Edge Note | Why |",
+        "| --- | --- | --- | --- | --- | --- | --- |",
+    ]
+    for row in sorted_rows:
+        action = _md_cell(row.get("action_default", "NO-GO"))
+        game = _md_cell(row.get("game", ""))
+        ticket = _md_cell(row.get("ticket", ""))
+        p_hit = _md_cell(_format_prob(row.get("model_prob")) or "n/a")
+        edge_note = _md_cell(row.get("edge_note", "n/a"))
+        why = _md_cell(row.get("plain_reason", ""))
+        context = (
+            f"{why} "
+            f"(tier={_to_str(row.get('tier', ''))}; "
+            f"injury={_to_str(row.get('injury_status', ''))}; "
+            f"roster={_to_str(row.get('roster_status', ''))})"
+        )
+        lines.append(
+            f"| {action} | {game} | {_md_cell(row.get('tier', ''))} | {ticket} | {p_hit} | "
+            f"{edge_note} | {_md_cell(context)} |"
+        )
+    return lines
+
+
 def _is_game_card_candidate(row: dict[str, Any], *, min_ev: float) -> bool:
     action = _to_str(row.get("action_default", "NO-GO"))
     if action not in {"GO", "LEAN"}:
@@ -841,30 +873,7 @@ def render_fallback_markdown(
     lines.append("")
     lines.append(f"### Top {len(top_plays)} Across All Games")
     lines.append("")
-    if not top_plays:
-        lines.append("- none")
-    else:
-        lines.append("| Action | Game | Tier | Ticket | p(hit) | Edge Note | Why |")
-        lines.append("| --- | --- | --- | --- | --- | --- | --- |")
-        for row in top_plays:
-            if not isinstance(row, dict):
-                continue
-            action = _md_cell(row.get("action_default", "NO-GO"))
-            game = _md_cell(row.get("game", ""))
-            ticket = _md_cell(row.get("ticket", ""))
-            p_hit = _md_cell(_format_prob(row.get("model_prob")) or "n/a")
-            edge_note = _md_cell(row.get("edge_note", "n/a"))
-            why = _md_cell(row.get("plain_reason", ""))
-            context = (
-                f"{why} "
-                f"(tier={_to_str(row.get('tier', ''))}; "
-                f"injury={_to_str(row.get('injury_status', ''))}; "
-                f"roster={_to_str(row.get('roster_status', ''))})"
-            )
-            lines.append(
-                f"| {action} | {game} | {_md_cell(row.get('tier', ''))} | {ticket} | {p_hit} | "
-                f"{edge_note} | {_md_cell(context)} |"
-            )
+    lines.extend(_render_action_plan_table_rows(top_plays))
     lines.append("")
     lines.append("## Data Quality")
     lines.append("")
@@ -1694,6 +1703,81 @@ def move_disclosures_to_end(markdown: str) -> str:
         out.extend(confidence)
 
     return "\n".join(out).rstrip() + "\n"
+
+
+def upsert_action_plan_table(markdown: str, *, brief_input: dict[str, Any], top_n: int) -> str:
+    """Replace the Action Plan table with a deterministic, sorted table."""
+    lines = markdown.splitlines()
+    action_heading = "## Action Plan (GO / LEAN / NO-GO)"
+
+    action_idx: int | None = None
+    for idx, line in enumerate(lines):
+        if line.strip() == action_heading:
+            action_idx = idx
+            break
+    if action_idx is None:
+        return markdown.rstrip() + "\n"
+
+    section_end = len(lines)
+    for idx in range(action_idx + 1, len(lines)):
+        if lines[idx].strip().startswith("## "):
+            section_end = idx
+            break
+
+    # Find the Top-N label if present; otherwise insert immediately after the Action Plan heading.
+    top_label = f"### Top {max(0, top_n)} Across All Games"
+    top_idx: int | None = None
+    for idx in range(action_idx + 1, section_end):
+        if lines[idx].strip() == top_label:
+            top_idx = idx
+            break
+    if top_idx is None:
+        for idx in range(action_idx + 1, section_end):
+            if lines[idx].strip().startswith("### Top ") and " Across All Games" in lines[idx]:
+                top_idx = idx
+                break
+    if top_idx is None:
+        top_idx = action_idx
+
+    search_start = top_idx + 1
+    search_end = section_end
+    for idx in range(search_start, section_end):
+        stripped = lines[idx].strip()
+        if stripped.startswith("## ") or stripped.startswith("### "):
+            search_end = idx
+            break
+
+    table_start: int | None = None
+    for idx in range(search_start, search_end):
+        if _split_markdown_row(lines[idx]) is not None:
+            table_start = idx
+            break
+
+    if table_start is None:
+        replace_start = search_end
+        replace_end = search_end
+    else:
+        replace_start = table_start
+        table_end = table_start
+        while table_end < search_end and _split_markdown_row(lines[table_end]) is not None:
+            table_end += 1
+        replace_end = table_end
+
+    top_plays = (
+        brief_input.get("top_plays", []) if isinstance(brief_input.get("top_plays"), list) else []
+    )
+    clipped = top_plays[: max(0, int(top_n))]
+    table_lines = _render_action_plan_table_rows([row for row in clipped if isinstance(row, dict)])
+
+    block: list[str] = []
+    if replace_start <= len(lines) and (replace_start == 0 or lines[replace_start - 1].strip()):
+        block.append("")
+    block.extend(table_lines)
+    if replace_end >= len(lines) or lines[replace_end].strip():
+        block.append("")
+
+    merged = lines[:replace_start] + block + lines[replace_end:]
+    return "\n".join(merged).rstrip() + "\n"
 
 
 def enforce_p_hit_notes(markdown: str) -> str:

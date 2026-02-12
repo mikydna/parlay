@@ -32,6 +32,7 @@ from prop_ev.brief_builder import (
     strip_empty_go_placeholder_rows,
     strip_risks_and_watchouts_section,
     strip_tier_b_view_section,
+    upsert_action_plan_table,
     upsert_analyst_take_section,
     upsert_best_available_section,
 )
@@ -587,6 +588,7 @@ def generate_brief_for_snapshot(
     markdown = strip_tier_b_view_section(markdown)
     markdown = strip_empty_go_placeholder_rows(markdown)
     markdown = enforce_readability_labels(markdown, top_n=top_n)
+    markdown = upsert_action_plan_table(markdown, brief_input=brief_input, top_n=top_n)
     analyst_section = render_analyst_take_section(
         analyst_take,
         mode=analyst_mode,
