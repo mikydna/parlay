@@ -19,6 +19,7 @@ def _seed_snapshot(
     with_event_context: bool,
     injuries_fetched_at: str,
     roster_fetched_at: str,
+    injuries_payload_override: dict[str, object] | None = None,
     missing_roster_teams: list[str] | None = None,
     roster_fallback: dict[str, object] | None = None,
 ) -> Path:
@@ -83,7 +84,7 @@ def _seed_snapshot(
     context_dir = snapshot_dir / "context"
     context_dir.mkdir(parents=True, exist_ok=True)
 
-    injuries_payload = {
+    injuries_payload = injuries_payload_override or {
         "fetched_at_utc": injuries_fetched_at,
         "official": {
             "source": "official_nba",
@@ -245,3 +246,66 @@ def test_strategy_health_degraded_when_roster_fallback_covers_scope(
     assert payload["checks"]["roster"]["fallback_covers_missing"] is True
     assert "roster_source_failed" not in payload["gates"]
     assert "roster_fallback_used" in payload["gates"]
+
+
+def test_strategy_health_allows_secondary_with_explicit_flag(
+    local_data_dir: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    store = SnapshotStore(local_data_dir)
+    snapshot_id = "2026-02-11T11-00-00Z"
+    now_utc = _iso(datetime.now(UTC))
+    _seed_snapshot(
+        store=store,
+        snapshot_id=snapshot_id,
+        with_event_context=True,
+        injuries_fetched_at=now_utc,
+        roster_fetched_at=now_utc,
+        injuries_payload_override={
+            "fetched_at_utc": now_utc,
+            "official": {
+                "source": "official_nba",
+                "url": "https://official.nba.com/nba-injury-report-2025-26-season/",
+                "status": "error",
+                "count": 0,
+                "fetched_at_utc": now_utc,
+                "pdf_links": ["https://example.com/injury.pdf"],
+                "pdf_download_status": "error",
+                "parse_status": "error",
+                "parse_coverage": 0.0,
+                "rows_count": 0,
+                "rows": [],
+            },
+            "secondary": {
+                "status": "ok",
+                "rows": [
+                    {
+                        "player": "Player A",
+                        "player_norm": "playera",
+                        "team": "Boston Celtics",
+                        "team_norm": "boston celtics",
+                        "status": "questionable",
+                        "note": "Test note",
+                    }
+                ],
+                "count": 1,
+            },
+        },
+    )
+
+    code = main(
+        [
+            "strategy",
+            "health",
+            "--snapshot-id",
+            snapshot_id,
+            "--offline",
+            "--allow-secondary-injuries",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+
+    assert code == 1
+    assert payload["status"] == "degraded"
+    assert payload["checks"]["injuries"]["pass"] is True
+    assert payload["checks"]["injuries"]["secondary_override"] is True
+    assert "official_injury_secondary_override" in payload["gates"]

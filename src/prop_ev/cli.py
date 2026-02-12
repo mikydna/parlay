@@ -718,6 +718,38 @@ def _official_source_ready(official: dict[str, Any]) -> bool:
     return parse_status in {"", "ok"}
 
 
+def _secondary_source_ready(secondary: dict[str, Any]) -> bool:
+    if str(secondary.get("status", "")) != "ok":
+        return False
+    rows = secondary.get("rows", [])
+    row_count = len(rows) if isinstance(rows, list) else 0
+    raw_count = secondary.get("count", row_count)
+    if isinstance(raw_count, bool):
+        count = row_count
+    elif isinstance(raw_count, (int, float)):
+        count = int(raw_count)
+    elif isinstance(raw_count, str):
+        try:
+            count = int(raw_count.strip())
+        except ValueError:
+            count = row_count
+    else:
+        count = row_count
+    return count > 0
+
+
+def _allow_secondary_injuries_override(*, cli_flag: bool) -> bool:
+    return cli_flag or _env_bool("PROP_EV_STRATEGY_ALLOW_SECONDARY_INJURIES", False)
+
+
+def _official_injury_hard_fail_message() -> str:
+    return (
+        "official injury report unavailable; refusing to continue without override. "
+        "Use --allow-secondary-injuries or set "
+        "PROP_EV_STRATEGY_ALLOW_SECONDARY_INJURIES=true to allow secondary fallback."
+    )
+
+
 def _preflight_context_for_snapshot(
     *,
     store: SnapshotStore,
@@ -725,6 +757,7 @@ def _preflight_context_for_snapshot(
     teams_in_scope: set[str],
     refresh_context: bool,
     require_official_injuries: bool,
+    allow_secondary_injuries: bool,
     require_fresh_context: bool,
     injuries_stale_hours: float,
     roster_stale_hours: float,
@@ -764,9 +797,15 @@ def _preflight_context_for_snapshot(
     )
 
     official = injuries.get("official", {}) if isinstance(injuries, dict) else {}
+    secondary = injuries.get("secondary", {}) if isinstance(injuries, dict) else {}
     health_gates: list[str] = []
     official_ready = _official_source_ready(official) if isinstance(official, dict) else False
-    if require_official_injuries and not official_ready:
+    secondary_ready = _secondary_source_ready(secondary) if isinstance(secondary, dict) else False
+    if (
+        require_official_injuries
+        and not official_ready
+        and not (allow_secondary_injuries and secondary_ready)
+    ):
         health_gates.append("official_injury_missing")
     injuries_stale = bool(injuries.get("stale", False)) if isinstance(injuries, dict) else True
     roster_stale = bool(roster.get("stale", False)) if isinstance(roster, dict) else True
@@ -791,6 +830,10 @@ def _preflight_context_for_snapshot(
 def _strategy_policy_from_env() -> dict[str, Any]:
     return {
         "require_official_injuries": _env_bool("PROP_EV_STRATEGY_REQUIRE_OFFICIAL_INJURIES", True),
+        "allow_secondary_injuries": _env_bool(
+            "PROP_EV_STRATEGY_ALLOW_SECONDARY_INJURIES",
+            False,
+        ),
         "stale_quote_minutes": _env_int("PROP_EV_STRATEGY_STALE_QUOTE_MINUTES", 20),
         "injuries_stale_hours": _env_float("PROP_EV_CONTEXT_INJURIES_STALE_HOURS", 6.0),
         "roster_stale_hours": _env_float("PROP_EV_CONTEXT_ROSTER_STALE_HOURS", 24.0),
@@ -881,6 +924,10 @@ def _health_recommendations(
         recommendations.append(
             "Monitor roster fallback usage; primary roster feed did not fully cover scope."
         )
+    if "official_injury_secondary_override" in gates:
+        recommendations.append(
+            "Official injury source override is active; monitor for official report recovery."
+        )
     if missing_injury > 0:
         recommendations.append(
             "Missing injury rows are informational in this mode; "
@@ -902,6 +949,9 @@ def _cmd_strategy_health(args: argparse.Namespace) -> int:
     event_context = _load_event_context(store, snapshot_id, manifest)
     slate_rows = _load_slate_rows(store, snapshot_id)
     policy = _strategy_policy_from_env()
+    allow_secondary_injuries = _allow_secondary_injuries_override(
+        cli_flag=bool(getattr(args, "allow_secondary_injuries", False))
+    )
     teams_in_scope = sorted(_teams_in_scope(event_context))
     injuries, roster, injuries_path, roster_path = _load_strategy_context(
         store=store,
@@ -911,6 +961,20 @@ def _cmd_strategy_health(args: argparse.Namespace) -> int:
         refresh_context=bool(args.refresh_context),
         injuries_stale_hours=float(policy["injuries_stale_hours"]),
         roster_stale_hours=float(policy["roster_stale_hours"]),
+    )
+    official_for_policy = (
+        _coerce_dict(injuries.get("official")) if isinstance(injuries, dict) else {}
+    )
+    secondary_for_policy = (
+        _coerce_dict(injuries.get("secondary")) if isinstance(injuries, dict) else {}
+    )
+    official_ready_for_policy = _official_source_ready(official_for_policy)
+    secondary_ready_for_policy = _secondary_source_ready(secondary_for_policy)
+    injury_override_active = (
+        allow_secondary_injuries and secondary_ready_for_policy and not official_ready_for_policy
+    )
+    effective_require_official = bool(policy["require_official_injuries"]) and not (
+        injury_override_active
     )
 
     report = build_strategy_report(
@@ -925,13 +989,14 @@ def _cmd_strategy_health(args: argparse.Namespace) -> int:
         player_identity_map=None,
         min_ev=0.01,
         allow_tier_b=False,
-        require_official_injuries=bool(policy["require_official_injuries"]),
+        require_official_injuries=effective_require_official,
         stale_quote_minutes=int(policy["stale_quote_minutes"]),
         require_fresh_context=bool(policy["require_fresh_context"]),
     )
 
     health_report = _coerce_dict(report.get("health_report"))
-    official = _coerce_dict(injuries.get("official")) if isinstance(injuries, dict) else {}
+    official = official_for_policy
+    secondary = secondary_for_policy
     roster_details = _coerce_dict(roster) if isinstance(roster, dict) else {}
     candidates = [row for row in _coerce_list(report.get("candidates")) if isinstance(row, dict)]
     contracts = _coerce_dict(health_report.get("contracts"))
@@ -977,9 +1042,9 @@ def _cmd_strategy_health(args: argparse.Namespace) -> int:
     else:
         official_parse_coverage = 0.0
 
-    injury_check_pass = (
-        _official_source_ready(official) and len(_coerce_list(official.get("pdf_links"))) > 0
-    )
+    injury_check_pass = (official_ready_for_policy or injury_override_active) and len(
+        _coerce_list(official.get("pdf_links"))
+    ) > 0
     roster_check_pass = (
         str(roster_details.get("status", "")) == "ok"
         and int(roster_details.get("count_teams", 0)) > 0
@@ -1005,6 +1070,8 @@ def _cmd_strategy_health(args: argparse.Namespace) -> int:
         degraded_gates.append("unknown_roster_detected")
     if roster_fallback_used:
         degraded_gates.append("roster_fallback_used")
+    if injury_override_active:
+        degraded_gates.append("official_injury_secondary_override")
     for gate in _coerce_list(health_report.get("health_gates")):
         if (
             isinstance(gate, str)
@@ -1034,6 +1101,7 @@ def _cmd_strategy_health(args: argparse.Namespace) -> int:
             "rows_count": official_rows_count,
             "parse_status": official_parse_status,
             "parse_coverage": official_parse_coverage,
+            "secondary_override": injury_override_active,
         },
         "roster": {
             "pass": roster_check_pass,
@@ -1081,6 +1149,9 @@ def _cmd_strategy_health(args: argparse.Namespace) -> int:
             "parse_status": official_parse_status,
             "parse_coverage": official_parse_coverage,
             "report_generated_at_utc": str(official.get("report_generated_at_utc", "")),
+            "secondary_override": injury_override_active,
+            "secondary_status": str(secondary.get("status", "missing")),
+            "secondary_count": int(secondary.get("count", 0) or 0),
         },
         "roster": {
             "source": str(roster_details.get("source", "")),
@@ -1453,6 +1524,9 @@ def _cmd_strategy_run(args: argparse.Namespace) -> int:
         slate_rows = _load_slate_rows(store, snapshot_id)
 
     require_official_injuries = _env_bool("PROP_EV_STRATEGY_REQUIRE_OFFICIAL_INJURIES", True)
+    allow_secondary_injuries = _allow_secondary_injuries_override(
+        cli_flag=bool(getattr(args, "allow_secondary_injuries", False))
+    )
     stale_quote_minutes = _env_int("PROP_EV_STRATEGY_STALE_QUOTE_MINUTES", 20)
     injuries_stale_hours = _env_float("PROP_EV_CONTEXT_INJURIES_STALE_HOURS", 6.0)
     roster_stale_hours = _env_float("PROP_EV_CONTEXT_ROSTER_STALE_HOURS", 24.0)
@@ -1491,6 +1565,17 @@ def _cmd_strategy_run(args: argparse.Namespace) -> int:
         write_through_paths=[reference_roster_daily, reference_roster_latest],
         stale_after_hours=roster_stale_hours,
     )
+    official = _coerce_dict(injuries.get("official")) if isinstance(injuries, dict) else {}
+    secondary = _coerce_dict(injuries.get("secondary")) if isinstance(injuries, dict) else {}
+    official_ready = _official_source_ready(official)
+    secondary_ready = _secondary_source_ready(secondary)
+    secondary_override_active = allow_secondary_injuries and secondary_ready and not official_ready
+    if require_official_injuries and not official_ready and not secondary_override_active:
+        raise CLIError(_official_injury_hard_fail_message())
+    effective_require_official = require_official_injuries and not secondary_override_active
+    if secondary_override_active:
+        print("note=official_injury_missing_using_secondary_override")
+
     identity_summary = update_identity_map(
         path=identity_map_path,
         rows=rows,
@@ -1510,7 +1595,7 @@ def _cmd_strategy_run(args: argparse.Namespace) -> int:
         player_identity_map=player_identity_map,
         min_ev=args.min_ev,
         allow_tier_b=args.allow_tier_b,
-        require_official_injuries=require_official_injuries,
+        require_official_injuries=effective_require_official,
         stale_quote_minutes=stale_quote_minutes,
         require_fresh_context=require_fresh_context,
     )
@@ -1780,6 +1865,7 @@ def _run_strategy_for_playbook(
     offline: bool,
     block_paid: bool,
     refresh_context: bool,
+    allow_secondary_injuries: bool,
 ) -> int:
     strategy_args = argparse.Namespace(
         snapshot_id=snapshot_id,
@@ -1789,6 +1875,7 @@ def _run_strategy_for_playbook(
         offline=offline,
         block_paid=block_paid,
         refresh_context=refresh_context,
+        allow_secondary_injuries=allow_secondary_injuries,
     )
     return _cmd_strategy_run(strategy_args)
 
@@ -1803,6 +1890,9 @@ def _cmd_playbook_run(args: argparse.Namespace) -> int:
     )
     start_budget = budget_snapshot(store=store, settings=settings, month=month)
     require_official_injuries = _env_bool("PROP_EV_STRATEGY_REQUIRE_OFFICIAL_INJURIES", True)
+    allow_secondary_injuries = _allow_secondary_injuries_override(
+        cli_flag=bool(getattr(args, "allow_secondary_injuries", False))
+    )
     require_fresh_context = _env_bool("PROP_EV_STRATEGY_REQUIRE_FRESH_CONTEXT", True)
     injuries_stale_hours = _env_float("PROP_EV_CONTEXT_INJURIES_STALE_HOURS", 6.0)
     roster_stale_hours = _env_float("PROP_EV_CONTEXT_ROSTER_STALE_HOURS", 24.0)
@@ -1863,11 +1953,18 @@ def _cmd_playbook_run(args: argparse.Namespace) -> int:
                     teams_in_scope=_teams_in_scope_from_events(events),
                     refresh_context=args.refresh_context,
                     require_official_injuries=require_official_injuries,
+                    allow_secondary_injuries=allow_secondary_injuries,
                     require_fresh_context=require_fresh_context,
                     injuries_stale_hours=injuries_stale_hours,
                     roster_stale_hours=roster_stale_hours,
                 )
                 preflight_gates = preflight_context.get("health_gates", [])
+                if (
+                    isinstance(preflight_gates, list)
+                    and "official_injury_missing" in preflight_gates
+                    and not allow_secondary_injuries
+                ):
+                    raise CLIError(_official_injury_hard_fail_message()) from None
                 if isinstance(preflight_gates, list) and preflight_gates:
                     try:
                         snapshot_id = _latest_snapshot_id(store)
@@ -1907,11 +2004,18 @@ def _cmd_playbook_run(args: argparse.Namespace) -> int:
                         teams_in_scope=_teams_in_scope_from_events(events),
                         refresh_context=args.refresh_context,
                         require_official_injuries=require_official_injuries,
+                        allow_secondary_injuries=allow_secondary_injuries,
                         require_fresh_context=require_fresh_context,
                         injuries_stale_hours=injuries_stale_hours,
                         roster_stale_hours=roster_stale_hours,
                     )
                     preflight_gates = preflight_context.get("health_gates", [])
+                    if (
+                        isinstance(preflight_gates, list)
+                        and "official_injury_missing" in preflight_gates
+                        and not allow_secondary_injuries
+                    ):
+                        raise CLIError(_official_injury_hard_fail_message()) from None
                     if isinstance(preflight_gates, list) and preflight_gates:
                         raise CLIError(
                             "context preflight failed; refusing paid odds fetch in bootstrap mode; "
@@ -1939,6 +2043,7 @@ def _cmd_playbook_run(args: argparse.Namespace) -> int:
         offline=strategy_offline,
         block_paid=bool(getattr(args, "block_paid", False)),
         refresh_context=refresh_context,
+        allow_secondary_injuries=allow_secondary_injuries,
     )
     if strategy_code != 0:
         return strategy_code
@@ -2006,6 +2111,9 @@ def _cmd_playbook_render(args: argparse.Namespace) -> int:
             offline=args.offline,
             block_paid=bool(getattr(args, "block_paid", False)),
             refresh_context=refresh_context,
+            allow_secondary_injuries=_allow_secondary_injuries_override(
+                cli_flag=bool(getattr(args, "allow_secondary_injuries", False))
+            ),
         )
         if code != 0:
             return code
@@ -2133,6 +2241,9 @@ def _cmd_playbook_discover_execute(args: argparse.Namespace) -> int:
             offline=False,
             block_paid=False,
             refresh_context=args.refresh_context,
+            allow_secondary_injuries=_allow_secondary_injuries_override(
+                cli_flag=bool(getattr(args, "allow_secondary_injuries", False))
+            ),
         )
         != 0
     ):
@@ -2151,6 +2262,9 @@ def _cmd_playbook_discover_execute(args: argparse.Namespace) -> int:
             offline=False,
             block_paid=False,
             refresh_context=args.refresh_context,
+            allow_secondary_injuries=_allow_secondary_injuries_override(
+                cli_flag=bool(getattr(args, "allow_secondary_injuries", False))
+            ),
         )
         != 0
     ):
@@ -2292,6 +2406,11 @@ def _build_parser() -> argparse.ArgumentParser:
     strategy_run.add_argument("--offline", action="store_true")
     strategy_run.add_argument("--block-paid", action="store_true")
     strategy_run.add_argument("--refresh-context", action="store_true")
+    strategy_run.add_argument(
+        "--allow-secondary-injuries",
+        action="store_true",
+        help="Allow secondary injury source when official report is unavailable.",
+    )
 
     strategy_health = strategy_subparsers.add_parser(
         "health", help="Report injury/roster/mapping health for a snapshot"
@@ -2300,6 +2419,11 @@ def _build_parser() -> argparse.ArgumentParser:
     strategy_health.add_argument("--snapshot-id", default="")
     strategy_health.add_argument("--offline", action="store_true")
     strategy_health.add_argument("--refresh-context", action="store_true")
+    strategy_health.add_argument(
+        "--allow-secondary-injuries",
+        action="store_true",
+        help="Treat secondary injuries as explicit override when official report is unavailable.",
+    )
     strategy_health.add_argument(
         "--json",
         dest="json_output",
@@ -2352,6 +2476,11 @@ def _build_parser() -> argparse.ArgumentParser:
     playbook_run.add_argument("--offline", action="store_true")
     playbook_run.add_argument("--block-paid", action="store_true")
     playbook_run.add_argument("--refresh-context", action="store_true")
+    playbook_run.add_argument(
+        "--allow-secondary-injuries",
+        action="store_true",
+        help="Allow run when official injuries are unavailable and secondary source is healthy.",
+    )
     playbook_run.add_argument("--refresh-llm", action="store_true")
     playbook_run.add_argument("--top-n", type=int, default=0)
     playbook_run.add_argument("--per-game-top-n", type=int, default=0)

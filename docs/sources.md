@@ -14,6 +14,10 @@
   - injury-report PDF link extraction is non-empty,
   - latest official PDF download succeeds,
   - structured injury parse is non-empty (`rows_count > 0`, `parse_status = ok`).
+- If official injuries are unavailable, default behavior is hard-fail.
+- Secondary injury continuation is allowed only with explicit override:
+  - CLI flag: `--allow-secondary-injuries`
+  - Env var: `PROP_EV_STRATEGY_ALLOW_SECONDARY_INJURIES=true`
 - Secondary injury feeds are fallbacks only and must be labeled as fallback provenance.
 - LLM/web search output is never an authoritative injury status source.
 
@@ -34,6 +38,7 @@
 ## Fallback Triggers and Escalation
 
 - Injury fallback trigger: official source unavailable or invalid.
+- Injury fallback continuation requires explicit override flag/env.
 - Roster fallback trigger: teams missing from primary roster coverage.
 - Degraded mode:
   - stale inputs,
@@ -61,6 +66,7 @@ Optional flags:
 ```bash
 uv run prop-ev strategy health --snapshot-id <SNAPSHOT_ID> --refresh-context
 uv run prop-ev strategy health --snapshot-id <SNAPSHOT_ID> --json
+uv run prop-ev strategy health --snapshot-id <SNAPSHOT_ID> --allow-secondary-injuries
 ```
 
 Output contract (JSON):
