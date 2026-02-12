@@ -77,6 +77,37 @@ Consensus baseline (exclude DK by default to avoid circularity):
 - `dispersion = IQR(p_over_novig across discovery books)`
 - `n_pairs = count(discovery books with O/U pair)`
 
+## Alt-Line Support (Most SOTA / Most Leverage)
+
+Problem:
+- Books often disagree on the exact line point (and they move quickly), so "same point across 3 books"
+  can throw away a lot of usable signal and reduce the chance we can find 5 good DK bets.
+
+Upgrade:
+- Build a "market-implied distribution" per `(event_id, player, market)` using many alternate lines
+  across discovery books, then evaluate the fair probability at the DraftKings point.
+
+Concrete approach:
+1. Collect paired quotes across discovery books:
+   - each datapoint is `(point, p_over_novig, hold_book, last_update, book)`
+2. Fit a monotone curve of fair probability vs line:
+   - fit `p_over_fair(point)` as a monotone-decreasing function of `point`
+   - practical first version: weighted isotonic regression on `(point -> p_over_novig)`
+   - optional: add smoothing so the curve is not step-like (keep monotonicity)
+3. Evaluate at DK line:
+   - `p_market_novig = p_over_fair(point_DK)`
+4. Derive uncertainty bands:
+   - bootstrap across books/quotes to produce `p_low/p_high`
+   - bet gate uses conservative EV: `EV(p_low, DK_price) > 0`
+
+Eligibility gates for this mode (recommended):
+- minimum paired quote count across discovery books (example: >= 6 total pairs)
+- minimum unique discovery books contributing pairs (example: >= 3)
+- require at least 2 distinct points reasonably near DK's point (to avoid fragile extrapolation)
+
+Net effect:
+- materially improves coverage and ranking quality without needing a "from scratch" player model.
+
 ## Execution Scoring (DraftKings Only)
 
 For each candidate ticket, compute EV using the **DraftKings** price at the decision snapshot:

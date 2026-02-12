@@ -38,9 +38,14 @@ We separate:
 
 **Minimum viable**: DraftKings + 3 discovery books (works, but will be noisier and require stricter gates).
 
-**Per-prop eligibility requirement (recommended):**
+**Per-prop eligibility requirement (v1 recommended):**
 - At decision time, a prop must have **at least 3 discovery books** showing **both Over and Under** for the **same line** (same points).
 - If fewer, it's WATCHLIST only (or requires a much higher edge).
+
+**Upgrade (most leverage): alt-line support**
+- Many books will not match DraftKings on the exact line point. A "market-implied distribution" upgrade
+  uses multiple alternate lines across books to estimate the fair probability for the DraftKings line,
+  instead of throwing those props away.
 
 ## Which Books (Target Set)
 
@@ -76,6 +81,9 @@ If Pinnacle/Circa props are available in your feed, they're valuable for discove
    - Require positive EV under a conservative probability (`p_low`).
 4. **Stage 4: Add ML only as a correction**
    - A small "market + features" model (never "from scratch").
+5. **Stage 5: Market-implied distribution (most SOTA)**
+   - Use many alternate lines across books to fit a stable fair probability curve per player prop, then
+     bet DraftKings only when the conservative edge is still positive.
 
 ## Where This Fits In The Repo
 
