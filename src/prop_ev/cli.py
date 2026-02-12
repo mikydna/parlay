@@ -2497,6 +2497,11 @@ def _build_parser() -> argparse.ArgumentParser:
     playbook_render.add_argument("--offline", action="store_true")
     playbook_render.add_argument("--block-paid", action="store_true")
     playbook_render.add_argument("--refresh-context", action="store_true")
+    playbook_render.add_argument(
+        "--allow-secondary-injuries",
+        action="store_true",
+        help="Allow run when official injuries are unavailable and secondary source is healthy.",
+    )
     playbook_render.add_argument("--refresh-llm", action="store_true")
     playbook_render.add_argument("--top-n", type=int, default=0)
     playbook_render.add_argument("--per-game-top-n", type=int, default=0)
@@ -2546,6 +2551,11 @@ def _build_parser() -> argparse.ArgumentParser:
     playbook_discover_execute.add_argument("--resume", action="store_true")
     playbook_discover_execute.add_argument("--offline", action="store_true")
     playbook_discover_execute.add_argument("--refresh-context", action="store_true")
+    playbook_discover_execute.add_argument(
+        "--allow-secondary-injuries",
+        action="store_true",
+        help="Allow run when official injuries are unavailable and secondary source is healthy.",
+    )
     playbook_discover_execute.add_argument("--refresh-llm", action="store_true")
     playbook_discover_execute.add_argument("--top-n", type=int, default=25)
     playbook_discover_execute.add_argument("--per-game-top-n", type=int, default=5)
