@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from prop_ev.cli import main
+from prop_ev.cli import _run_strategy_for_playbook, main
 from prop_ev.storage import SnapshotStore
 
 
@@ -162,8 +162,13 @@ def test_strategy_run_from_snapshot(local_data_dir: Path) -> None:
     )
     assert (snapshot_dir / "reports" / "strategy-report.json").exists()
     assert (snapshot_dir / "reports" / "strategy-report.md").exists()
+    assert (snapshot_dir / "reports" / "strategy-report.v0.json").exists()
+    assert (snapshot_dir / "reports" / "strategy-report.v0.md").exists()
     assert (snapshot_dir / "reports" / "backtest-seed.jsonl").exists()
     assert (snapshot_dir / "reports" / "backtest-readiness.json").exists()
+    assert (snapshot_dir / "reports" / "backtest-seed.v0.jsonl").exists()
+    assert (snapshot_dir / "reports" / "backtest-results-template.v0.csv").exists()
+    assert (snapshot_dir / "reports" / "backtest-readiness.v0.json").exists()
 
     assert (
         main(
@@ -180,3 +185,87 @@ def test_strategy_run_from_snapshot(local_data_dir: Path) -> None:
         )
         == 0
     )
+
+
+def test_strategy_compare_writes_suffixed_outputs(
+    local_data_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("PROP_EV_STRATEGY_REQUIRE_OFFICIAL_INJURIES", "false")
+    monkeypatch.setenv("PROP_EV_STRATEGY_REQUIRE_FRESH_CONTEXT", "false")
+    store = SnapshotStore(local_data_dir)
+    snapshot_id = "2026-02-11T10-11-00Z"
+    snapshot_dir = store.ensure_snapshot(snapshot_id)
+    store.write_jsonl(
+        snapshot_dir / "derived" / "event_props.jsonl",
+        [
+            {
+                "event_id": "event-1",
+                "market": "player_points",
+                "player": "Player A",
+                "point": 22.5,
+                "side": "Over",
+                "price": -105,
+                "book": "book_a",
+                "link": "",
+            },
+            {
+                "event_id": "event-1",
+                "market": "player_points",
+                "player": "Player A",
+                "point": 22.5,
+                "side": "Under",
+                "price": -115,
+                "book": "book_a",
+                "link": "",
+            },
+        ],
+    )
+
+    assert (
+        main(
+            [
+                "strategy",
+                "compare",
+                "--snapshot-id",
+                snapshot_id,
+                "--strategies",
+                "v0,v0_tier_b",
+                "--top-n",
+                "5",
+                "--offline",
+            ]
+        )
+        == 0
+    )
+    assert (snapshot_dir / "reports" / "strategy-compare.json").exists()
+    assert (snapshot_dir / "reports" / "strategy-compare.md").exists()
+    assert (snapshot_dir / "reports" / "strategy-report.v0.json").exists()
+    assert (snapshot_dir / "reports" / "strategy-report.v0_tier_b.json").exists()
+
+
+def test_run_strategy_for_playbook_passes_strategy_id(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    def _fake_cmd(args) -> int:
+        captured["strategy"] = getattr(args, "strategy", "")
+        captured["write_canonical"] = getattr(args, "write_canonical", None)
+        return 0
+
+    monkeypatch.setattr("prop_ev.cli._cmd_strategy_run", _fake_cmd)
+    code = _run_strategy_for_playbook(
+        snapshot_id="snap-1",
+        strategy_id="v0_tier_b",
+        top_n=25,
+        min_ev=0.01,
+        allow_tier_b=False,
+        offline=True,
+        block_paid=True,
+        refresh_context=False,
+        write_canonical=True,
+    )
+
+    assert code == 0
+    assert captured["strategy"] == "v0_tier_b"
+    assert captured["write_canonical"] is True

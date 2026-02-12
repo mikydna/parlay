@@ -32,6 +32,7 @@ uv run prop-ev --help
 uv run prop-ev snapshot slate --dry-run
 uv run prop-ev snapshot props --dry-run --max-events 10
 uv run prop-ev strategy health --offline
+uv run prop-ev strategy ls
 uv run prop-ev playbook budget
 make ci
 ```
@@ -63,6 +64,7 @@ uv run prop-ev snapshot ls
 uv run prop-ev snapshot show --snapshot-id <SNAPSHOT_ID>
 uv run prop-ev snapshot props --snapshot-id <SNAPSHOT_ID> --offline
 uv run prop-ev strategy run --snapshot-id <SNAPSHOT_ID> --offline
+uv run prop-ev strategy compare --snapshot-id <SNAPSHOT_ID> --strategies v0,baseline_median_novig --offline
 ```
 
 Dev mode with free calls allowed but paid odds endpoints blocked:
@@ -80,10 +82,16 @@ Strategy reports are written to:
 - `data/odds_api/snapshots/<SNAPSHOT_ID>/reports/backtest-results-template.csv`
 - `data/odds_api/snapshots/<SNAPSHOT_ID>/reports/backtest-readiness.json`
 
+Per-strategy runs also write suffixed artifacts:
+- `data/odds_api/snapshots/<SNAPSHOT_ID>/reports/strategy-report.<STRATEGY_ID>.json`
+- `data/odds_api/snapshots/<SNAPSHOT_ID>/reports/strategy-report.<STRATEGY_ID>.md`
+- `data/odds_api/snapshots/<SNAPSHOT_ID>/reports/backtest-results-template.<STRATEGY_ID>.csv`
+
 Rebuild backtest artifacts for any snapshot:
 
 ```bash
 uv run prop-ev strategy backtest-prep --snapshot-id <SNAPSHOT_ID> --selection eligible
+uv run prop-ev strategy backtest-summarize --snapshot-id <SNAPSHOT_ID> --strategies v0,baseline_median_novig
 ```
 
 Strategy context caches are written to:
@@ -102,6 +110,7 @@ Run end-to-end with live-window gating and budget controls:
 
 ```bash
 uv run prop-ev playbook run --month 2026-02
+uv run prop-ev playbook run --strategy baseline_median_novig --month 2026-02
 ```
 
 Preflight behavior:
@@ -198,6 +207,7 @@ uv run prop-ev credits report --month 2026-02
   - `PROP_EV_STRATEGY_ALLOW_SECONDARY_INJURIES=true|false`
   - `PROP_EV_STRATEGY_REQUIRE_FRESH_CONTEXT=true|false`
   - `PROP_EV_STRATEGY_STALE_QUOTE_MINUTES=20`
+  - `PROP_EV_STRATEGY_DEFAULT_ID=v0`
   - `PROP_EV_CONTEXT_INJURIES_STALE_HOURS=6`
   - `PROP_EV_CONTEXT_ROSTER_STALE_HOURS=24`
 

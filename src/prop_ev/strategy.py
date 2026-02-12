@@ -198,6 +198,90 @@ def _normalize_prob_pair(over_prob: float, under_prob: float) -> tuple[float, fl
     return over_prob / total, under_prob / total
 
 
+def _median(values: list[float]) -> float | None:
+    if not values:
+        return None
+    ordered = sorted(values)
+    mid = len(ordered) // 2
+    if len(ordered) % 2:
+        return ordered[mid]
+    return (ordered[mid - 1] + ordered[mid]) / 2.0
+
+
+def _quantile(sorted_values: list[float], q: float) -> float | None:
+    if not sorted_values:
+        return None
+    if q <= 0:
+        return sorted_values[0]
+    if q >= 1:
+        return sorted_values[-1]
+    pos = q * (len(sorted_values) - 1)
+    lower = int(pos)
+    upper = min(len(sorted_values) - 1, lower + 1)
+    if lower == upper:
+        return sorted_values[lower]
+    frac = pos - lower
+    return (sorted_values[lower] * (1.0 - frac)) + (sorted_values[upper] * frac)
+
+
+def _iqr(values: list[float]) -> float | None:
+    if not values:
+        return None
+    ordered = sorted(values)
+    q1 = _quantile(ordered, 0.25)
+    q3 = _quantile(ordered, 0.75)
+    if q1 is None or q3 is None:
+        return None
+    return q3 - q1
+
+
+def _per_book_prob_pairs(group_rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Return per-book no-vig probability pairs for a single (event, player, market, point) line."""
+    book_sides: dict[str, dict[str, list[int]]] = {}
+    for row in group_rows:
+        if not isinstance(row, dict):
+            continue
+        book = str(row.get("book", "")).strip()
+        if not book:
+            continue
+        side_raw = str(row.get("side", "")).strip().lower()
+        if side_raw in {"over", "o"}:
+            side = "over"
+        elif side_raw in {"under", "u"}:
+            side = "under"
+        else:
+            continue
+        price = _to_price(row.get("price"))
+        if price is None:
+            continue
+        entry = book_sides.setdefault(book, {"over": [], "under": []})
+        entry[side].append(price)
+
+    pairs: list[dict[str, Any]] = []
+    for book, sides in book_sides.items():
+        if not sides["over"] or not sides["under"]:
+            continue
+        over_price = max(sides["over"])
+        under_price = max(sides["under"])
+        over_prob_imp = _implied_prob_from_american(over_price)
+        under_prob_imp = _implied_prob_from_american(under_price)
+        if over_prob_imp is None or under_prob_imp is None:
+            continue
+        p_over_fair, p_under_fair = _normalize_prob_pair(over_prob_imp, under_prob_imp)
+        pairs.append(
+            {
+                "book": book,
+                "over_price": over_price,
+                "under_price": under_price,
+                "p_over_fair": p_over_fair,
+                "p_under_fair": p_under_fair,
+                "hold": (over_prob_imp + under_prob_imp) - 1.0,
+            }
+        )
+    pairs.sort(key=lambda row: str(row.get("book", "")))
+    return pairs
+
+
 def _line_key(row: dict[str, Any]) -> tuple[str, str, str, float]:
     event_id = str(row.get("event_id", ""))
     market = str(row.get("market", ""))
@@ -1251,8 +1335,25 @@ def build_strategy_report(
     require_official_injuries: bool = True,
     stale_quote_minutes: int = 20,
     require_fresh_context: bool = True,
+    market_baseline_method: str = "best_sides",
+    market_baseline_fallback: str = "best_sides",
+    min_book_pairs: int = 0,
+    hold_cap: float | None = None,
+    p_over_iqr_cap: float | None = None,
 ) -> dict[str, Any]:
     """Create an audit-ready, deterministic NBA prop strategy report."""
+    baseline_method = market_baseline_method.strip().lower()
+    if baseline_method not in {"best_sides", "median_book"}:
+        raise ValueError(f"invalid market_baseline_method: {market_baseline_method}")
+    baseline_fallback = market_baseline_fallback.strip().lower()
+    if baseline_fallback not in {"best_sides", "none"}:
+        raise ValueError(f"invalid market_baseline_fallback: {market_baseline_fallback}")
+    min_book_pairs = max(0, int(min_book_pairs))
+    if hold_cap is not None and hold_cap < 0:
+        raise ValueError("hold_cap must be >= 0")
+    if p_over_iqr_cap is not None and p_over_iqr_cap < 0:
+        raise ValueError("p_over_iqr_cap must be >= 0")
+
     grouped: dict[tuple[str, str, str, float], list[dict[str, Any]]] = {}
     for row in rows:
         key = _line_key(row)
@@ -1327,14 +1428,45 @@ def build_strategy_report(
         over = _best_side(over_rows)
         under = _best_side(under_rows)
 
-        over_prob_imp = _implied_prob_from_american(_to_price(over["price"]))
-        under_prob_imp = _implied_prob_from_american(_to_price(under["price"]))
+        over_prob_imp_best = _implied_prob_from_american(_to_price(over["price"]))
+        under_prob_imp_best = _implied_prob_from_american(_to_price(under["price"]))
+        p_over_fair_best: float | None = None
+        p_under_fair_best: float | None = None
+        hold_best: float | None = None
+        if over_prob_imp_best is not None and under_prob_imp_best is not None:
+            p_over_fair_best, p_under_fair_best = _normalize_prob_pair(
+                over_prob_imp_best, under_prob_imp_best
+            )
+            hold_best = (over_prob_imp_best + under_prob_imp_best) - 1.0
+
+        book_pairs = _per_book_prob_pairs(group_rows)
+        book_pair_count = len(book_pairs)
+        p_over_book = [
+            pair["p_over_fair"] for pair in book_pairs if isinstance(pair.get("p_over_fair"), float)
+        ]
+        hold_book = [pair["hold"] for pair in book_pairs if isinstance(pair.get("hold"), float)]
+        p_over_book_median = _median(p_over_book)
+        hold_book_median = _median(hold_book)
+        p_over_book_iqr = _iqr(p_over_book)
+        p_over_book_range: float | None = None
+        if p_over_book:
+            p_over_book_range = max(p_over_book) - min(p_over_book)
         p_over_fair: float | None = None
         p_under_fair: float | None = None
         hold: float | None = None
-        if over_prob_imp is not None and under_prob_imp is not None:
-            p_over_fair, p_under_fair = _normalize_prob_pair(over_prob_imp, under_prob_imp)
-            hold = (over_prob_imp + under_prob_imp) - 1.0
+        baseline_used = "best_sides"
+        p_over_fair, p_under_fair, hold = p_over_fair_best, p_under_fair_best, hold_best
+        if baseline_method == "median_book":
+            if p_over_book_median is not None and hold_book_median is not None:
+                p_over_fair = p_over_book_median
+                p_under_fair = 1.0 - p_over_fair
+                hold = hold_book_median
+                baseline_used = "median_book"
+            elif baseline_fallback == "best_sides":
+                baseline_used = "best_sides_fallback"
+            else:
+                p_over_fair, p_under_fair, hold = None, None, None
+                baseline_used = "missing"
 
         player_norm = normalize_person_name(player)
         injury_row = injuries_by_player.get(player_norm, {})
@@ -1400,6 +1532,27 @@ def build_strategy_report(
             injury_status=injury_status,
             roster_status=roster_status,
         )
+
+        if eligible and baseline_used == "missing":
+            eligible = False
+            reason = "baseline_missing"
+        if eligible and min_book_pairs > 0 and book_pair_count < min_book_pairs:
+            eligible = False
+            reason = "book_pairs_gate"
+        if eligible and hold_cap is not None:
+            if hold_book_median is None:
+                eligible = False
+                reason = "hold_missing"
+            elif hold_book_median > hold_cap:
+                eligible = False
+                reason = "hold_cap"
+        if eligible and p_over_iqr_cap is not None:
+            if p_over_book_iqr is None:
+                eligible = False
+                reason = "dispersion_missing"
+            elif p_over_book_iqr > p_over_iqr_cap:
+                eligible = False
+                reason = "dispersion_iqr"
 
         adjustment = _probability_adjustment(
             injury_status=injury_status,
@@ -1530,6 +1683,12 @@ def build_strategy_report(
                 "under_shop_delta": under["shop_delta"],
                 "p_over_fair": p_over_fair,
                 "p_under_fair": p_under_fair,
+                "baseline_used": baseline_used,
+                "book_pair_count": book_pair_count,
+                "p_over_book_median": p_over_book_median,
+                "hold_book_median": hold_book_median,
+                "p_over_book_iqr": p_over_book_iqr,
+                "p_over_book_range": p_over_book_range,
                 "p_over_model": p_over_model,
                 "p_under_model": p_under_model,
                 "ev_over": ev_over,
@@ -1557,6 +1716,7 @@ def build_strategy_report(
                 "full_kelly": best_kelly,
                 "quarter_kelly": round((best_kelly / 4.0), 6) if best_kelly is not None else None,
                 "hold": hold,
+                "hold_best_sides": hold_best,
                 "injury_status": injury_status,
                 "injury_note": injury_note,
                 "roster_status": roster_status,
@@ -1902,6 +2062,11 @@ def build_strategy_report(
             "tier_a_min_ev": tier_a_min_ev,
             "tier_b_min_ev": tier_b_min_ev,
             "allow_tier_b": allow_tier_b,
+            "market_baseline_method": baseline_method,
+            "market_baseline_fallback": baseline_fallback,
+            "min_book_pairs": min_book_pairs,
+            "hold_cap": hold_cap,
+            "p_over_iqr_cap": p_over_iqr_cap,
             "timezone": "ET",
             "audit_trail": audit_trail,
         },
@@ -2401,15 +2566,41 @@ def write_strategy_reports(
     snapshot_dir: Path,
     report: dict[str, Any],
     top_n: int,
+    strategy_id: str | None = None,
+    write_canonical: bool = True,
 ) -> tuple[Path, Path]:
     """Write json and markdown strategy reports."""
+    from prop_ev.strategies.base import normalize_strategy_id
+
     reports_dir = snapshot_dir / "reports"
     reports_dir.mkdir(parents=True, exist_ok=True)
-    json_path = reports_dir / "strategy-report.json"
-    md_path = reports_dir / "strategy-report.md"
-    card_path = reports_dir / "strategy-card.md"
     markdown = render_strategy_markdown(report, top_n=top_n)
-    json_path.write_text(json.dumps(report, sort_keys=True, indent=2) + "\n", encoding="utf-8")
-    md_path.write_text(markdown, encoding="utf-8")
-    card_path.write_text(markdown, encoding="utf-8")
-    return json_path, md_path
+
+    canonical_json = reports_dir / "strategy-report.json"
+    canonical_md = reports_dir / "strategy-report.md"
+    canonical_card = reports_dir / "strategy-card.md"
+
+    normalized = normalize_strategy_id(strategy_id) if strategy_id else ""
+
+    def _suffix(path: Path) -> Path:
+        return path.with_name(f"{path.stem}.{normalized}{path.suffix}")
+
+    primary_json = canonical_json
+    primary_md = canonical_md
+    if not write_canonical:
+        if not normalized:
+            raise ValueError("strategy_id is required when write_canonical=false")
+        primary_json = _suffix(canonical_json)
+        primary_md = _suffix(canonical_md)
+
+    def _write(json_path: Path, md_path: Path, card_path: Path) -> None:
+        json_path.write_text(json.dumps(report, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+        md_path.write_text(markdown, encoding="utf-8")
+        card_path.write_text(markdown, encoding="utf-8")
+
+    if write_canonical:
+        _write(canonical_json, canonical_md, canonical_card)
+    if normalized:
+        _write(_suffix(canonical_json), _suffix(canonical_md), _suffix(canonical_card))
+
+    return primary_json, primary_md
