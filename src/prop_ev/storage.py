@@ -53,7 +53,7 @@ def _atomic_write_text(path: Path, content: str) -> None:
     try:
         tmp_path.write_text(content, encoding="utf-8")
         os.replace(tmp_path, path)
-    except Exception:
+    except OSError:
         with suppress(FileNotFoundError):
             tmp_path.unlink()
         raise
