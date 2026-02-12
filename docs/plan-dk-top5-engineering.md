@@ -190,3 +190,29 @@ Rules:
 - Walk-forward training/validation by date (no leakage).
 - Calibrate (isotonic/logistic) if needed.
 - Keep a "no-ML baseline" strategy active as a control.
+
+## LLM Add-Ons (Optional, Non-Deterministic)
+
+Principle:
+- LLMs should not be the probability engine. They should add *decision hygiene* and *execution quality*
+  around the deterministic EV stack.
+
+High-leverage uses:
+- **Strict structured outputs**: require JSON schemas for any non-deterministic step (no missing keys,
+  no invented columns, no free-form drift). Use this for: risk tags, portfolio picks (max 5),
+  and "why" text that references existing fields.
+- **Risk tagging (qualitative)**: label rows with hard-to-model uncertainty (minutes volatility,
+  role ambiguity, blowout risk, trade/debut risk, stale info). Convert tags into deterministic gates
+  or EV penalties.
+- **Portfolio selection under constraints**: choose exactly up to 5 bets from a candidate set while
+  enforcing diversification (avoid correlated exposures) and obeying hard rules (injury gates,
+  min book depth, freshness). The model must select only from provided candidates (no new bets).
+- **Vision fallback for UI-only data**: if DK lines must be verified from screenshots, use a vision-capable
+  model to extract (player, market, point, side, price) and compare to snapshot rows.
+- **Audio/briefing outputs (optional)**: generate a short morning/60-min-pre-tip briefing based on the
+  deterministic shortlist (no web, no new facts).
+
+Guardrails and logging:
+- LLM outputs may never override numeric inputs (`p_*`, odds, EV). Deterministic values win.
+- Store raw prompts/outputs + model IDs + prompt hashes + usage in snapshot artifacts for auditability.
+- Add an explicit LLM budget cap and caching (re-run should be stable where possible).

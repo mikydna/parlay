@@ -79,9 +79,14 @@ If Pinnacle/Circa props are available in your feed, they're valuable for discove
    - Brier + calibration buckets to detect fake edges.
 3. **Stage 3: Add uncertainty bands**
    - Require positive EV under a conservative probability (`p_low`).
-4. **Stage 4: Add ML only as a correction**
+4. **Stage 4: Add an AI assistant layer (optional)**
+   - Uses strict structured outputs (JSON schemas) for: risk/uncertainty tags (minutes volatility, role
+     ambiguity, stale info), top-5 selection while avoiding correlated bets, and clearer "why"
+     explanations based only on known inputs.
+   - It does **not** invent odds or probabilities and does **not** replace the market baseline.
+5. **Stage 5: Add ML only as a correction**
    - A small "market + features" model (never "from scratch").
-5. **Stage 5: Market-implied distribution (most SOTA)**
+6. **Stage 6: Market-implied distribution (most SOTA)**
    - Use many alternate lines across books to fit a stable fair probability curve per player prop, then
      bet DraftKings only when the conservative edge is still positive.
 
