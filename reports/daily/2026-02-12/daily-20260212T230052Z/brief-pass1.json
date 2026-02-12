@@ -1,0 +1,94 @@
+{
+  "confidence_notes": [
+    "Recommendations reflect the model probabilities and EVs supplied in the payload; do not assume any data beyond this JSON.",
+    "NO-GO items were marked in the payload primarily due to low EV and questionable injury status; consult live injury/in-play feeds before any action."
+  ],
+  "data_quality_flags": [
+    "All outputs strictly based on provided payload; no external price or injury updates applied.",
+    "Injury statuses present in payload: some entries show 'questionable' which impacts pre_bet_ready=false for those tickets.",
+    "Model notes indicate deterministic approximations for minutes/usage and SGP correlation (v0) which limit probabilistic fidelity."
+  ],
+  "slate_summary": "Top-tier player prop opportunities across DAL@LAL and MIL@OKC; multiple GO plays with positive EVs and verified availability. Watch for listed model/data gaps and several NO-GO items tied to questionable injury status.",
+  "top_plays_explained": [
+    {
+      "action": "GO",
+      "best_book": "fanduel",
+      "best_price": -106,
+      "edge_note": "Strong edge (+33.0% est.), Higher stake",
+      "ev": 0.329989,
+      "game": "DAL @ LAL",
+      "kelly": 0.349788,
+      "market": "player_points_rebounds_assists",
+      "player": "LeBron James",
+      "point": 40.5,
+      "side": "over",
+      "ticket": "LeBron James OVER 40.5 points+rebounds+assists @ -106 (fanduel)",
+      "why": "Model shows a large positive edge with verified availability and deep market liquidity, so the expected value is favorable."
+    },
+    {
+      "action": "GO",
+      "best_book": "fanduel",
+      "best_price": -106,
+      "edge_note": "Strong edge (+32.4% est.), Higher stake",
+      "ev": 0.323545,
+      "game": "DAL @ LAL",
+      "kelly": 0.342958,
+      "market": "player_points_rebounds_assists",
+      "player": "Austin Reaves",
+      "point": 36.5,
+      "side": "over",
+      "ticket": "Austin Reaves OVER 36.5 points+rebounds+assists @ -106 (fanduel)",
+      "why": "The model indicates a sizable positive edge and availability at a Tier A market, supporting the over."
+    },
+    {
+      "action": "GO",
+      "best_book": "fanduel",
+      "best_price": -102,
+      "edge_note": "Strong edge (+30.7% est.), Higher stake",
+      "ev": 0.30684,
+      "game": "DAL @ LAL",
+      "kelly": 0.312977,
+      "market": "player_points_rebounds_assists",
+      "player": "Marcus Smart",
+      "point": 18.5,
+      "side": "over",
+      "ticket": "Marcus Smart OVER 18.5 points+rebounds+assists @ -102 (fanduel)",
+      "why": "Verified liquidity and a positive modeled edge make the over a recommended play."
+    },
+    {
+      "action": "GO",
+      "best_book": "draftkings",
+      "best_price": -102,
+      "edge_note": "Strong edge (+30.3% est.), Higher stake",
+      "ev": 0.303456,
+      "game": "DAL @ LAL",
+      "kelly": 0.309525,
+      "market": "player_points_rebounds_assists",
+      "player": "Jake LaRavia",
+      "point": 16.5,
+      "side": "over",
+      "ticket": "Jake LaRavia OVER 16.5 points+rebounds+assists @ -102 (draftkings)",
+      "why": "Tier B depth but a strong positive edge and model probability support taking the over at the listed price."
+    },
+    {
+      "action": "GO",
+      "best_book": "fanduel",
+      "best_price": -108,
+      "edge_note": "Strong edge (+29.2% est.), Higher stake",
+      "ev": 0.292094,
+      "game": "MIL @ OKC",
+      "kelly": 0.315461,
+      "market": "player_points_rebounds_assists",
+      "player": "Cason Wallace",
+      "point": 20.5,
+      "side": "over",
+      "ticket": "Cason Wallace OVER 20.5 points+rebounds+assists @ -108 (fanduel)",
+      "why": "Model shows a clear positive edge with Tier A market depth and verified availability, favoring the over."
+    }
+  ],
+  "watchouts": [
+    "Several NO-GO plays are flagged due to injury_status=questionable \u2014 verify official injury reports before considering exposure.",
+    "Model uses deterministic minutes/usage and SGP correlation rules (v0); these simplifications may understate variance for correlated lines.",
+    "Tier B selections have shallower market depth; execution risk (price movement/limits) is higher for those tickets."
+  ]
+}

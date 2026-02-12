@@ -1,0 +1,87 @@
+{
+  "brief_analyst_path": "data/odds_api/snapshots/daily-20260212T230052Z/reports/brief-analyst.json",
+  "brief_input_path": "data/odds_api/snapshots/daily-20260212T230052Z/reports/brief-input.json",
+  "brief_markdown_path": "data/odds_api/snapshots/daily-20260212T230052Z/reports/strategy-brief.md",
+  "brief_pass1_path": "data/odds_api/snapshots/daily-20260212T230052Z/reports/brief-pass1.json",
+  "brief_pdf_path": "data/odds_api/snapshots/daily-20260212T230052Z/reports/strategy-brief.pdf",
+  "brief_tex_path": "data/odds_api/snapshots/daily-20260212T230052Z/reports/strategy-brief.tex",
+  "generated_at_utc": "2026-02-12T23:01:58Z",
+  "latest": {
+    "latest.json": "data/odds_api/reports/latest/latest.json",
+    "strategy-brief.md": "data/odds_api/reports/latest/strategy-brief.md",
+    "strategy-brief.pdf": "data/odds_api/reports/latest/strategy-brief.pdf",
+    "strategy-brief.tex": "data/odds_api/reports/latest/strategy-brief.tex"
+  },
+  "llm": {
+    "analyst": {
+      "attempts": 1,
+      "cache_key": "682c2aebb6eca2167b0fcef00dac6f2655e7a22cc96e88137fbafb611c0afd2b",
+      "cached": false,
+      "errors": [],
+      "mode": "llm_web",
+      "status": "ok",
+      "usage": {
+        "cost_usd": 0.001049,
+        "input_tokens": 952,
+        "output_tokens": 811,
+        "total_tokens": 1763
+      },
+      "web_source_count": 28
+    },
+    "budget": {
+      "cap_reached": false,
+      "cap_usd": 5.0,
+      "month": "2026-02",
+      "remaining_usd": 4.752637,
+      "request_count": 85,
+      "total_input_tokens": 799026,
+      "total_output_tokens": 47616,
+      "usage_path": "data/odds_api/llm_usage/usage-2026-02.jsonl",
+      "used_usd": 0.247363
+    },
+    "pass1": {
+      "attempts": 1,
+      "cache_key": "ea4566115ef36ca6ca4ed352dc0f989b122d7e64563e28c46aaf8cafb5e59bf4",
+      "cached": false,
+      "errors": [],
+      "status": "ok",
+      "usage": {
+        "cost_usd": 0.004973,
+        "input_tokens": 16217,
+        "output_tokens": 919,
+        "total_tokens": 17136
+      }
+    },
+    "pass2": {
+      "attempts": 1,
+      "cache_key": "e24ecdf5a5327da7656b012a34cef1cbd3ec9bd818869cea61bcb55415ade227",
+      "cached": false,
+      "errors": [],
+      "status": "ok",
+      "usage": {
+        "cost_usd": 0.005459,
+        "input_tokens": 17035,
+        "output_tokens": 1200,
+        "total_tokens": 18235
+      }
+    }
+  },
+  "model": "gpt-5-mini",
+  "odds_budget": {
+    "cap_credits": 450,
+    "cap_reached": false,
+    "month": "2026-02",
+    "provider_remaining": "150",
+    "remaining_credits": 101,
+    "usage_path": "data/odds_api/usage/usage-2026-02.jsonl",
+    "used_credits": 349
+  },
+  "pdf": {
+    "message": "pdf generated",
+    "pdf_path": "data/odds_api/snapshots/daily-20260212T230052Z/reports/strategy-brief.pdf",
+    "returncode": 0,
+    "status": "ok"
+  },
+  "schema_version": 1,
+  "snapshot_id": "daily-20260212T230052Z"
+}

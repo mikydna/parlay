@@ -1,0 +1,278 @@
+\documentclass[10pt]{article}
+\usepackage[margin=1in,landscape]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage{hyperref}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{ragged2e}
+\newcolumntype{L}[1]{>{\RaggedRight\arraybackslash}p{#1}}
+\newcolumntype{R}[1]{>{\RaggedLeft\arraybackslash}p{#1}}
+\renewcommand{\arraystretch}{1.05}
+\setlength{\parskip}{4pt}
+\setlength{\parindent}{0pt}
+\sloppy
+\begin{document}
+\begin{center}\LARGE\textbf{NBA Strategy Brief}\end{center}
+\vspace{0.5em}
+\section*{Strategy Brief}
+
+\subsection*{Snapshot}
+\begin{itemize}
+\item snapshot\_id: \texttt{daily-20260212T230052Z}
+\item modeled\_date\_et: \texttt{Thursday, Feb 12, 2026 (ET)}
+\item generated\_at\_et: \texttt{2026-02-12 06:00:58 PM EST}
+\item source\_data: \texttt{snapshot\_inputs}
+\item scoring: \texttt{deterministic}
+\item narrative: \texttt{llm}
+\end{itemize}
+
+\subsection*{What The Bet Is}
+
+\begin{itemize}
+\item Bet type: single-player props (over/under stat lines).
+\item Not a game-winner (moneyline) strategy.
+\item Injury and roster checks are used as action gates.
+\item Tier A = 2+ book quotes for a line; Tier B = a single-book quote.
+\end{itemize}
+
+\subsection*{Executive Summary}
+
+\begin{itemize}
+\item Top-tier player prop opportunities across DAL@LAL and MIL@OKC; multiple GO plays with positive EVs and verified availability. Watch for listed model/data gaps and several NO-GO items tied to questionable injury status.
+\item Eligible plays: \texttt{181} out of \texttt{190} candidate lines.
+\item Tier-B mode: \texttt{enabled}. Candidate mix: Tier A \texttt{110}, Tier B \texttt{80}.
+\item Gated-out lines hidden from this brief: \texttt{5}.
+\item First-page table below shows the top \texttt{5} plays across all games.
+\end{itemize}
+
+\newpage
+
+\subsection*{Analyst Take}
+
+\begin{itemize}
+\item mode: \texttt{llm\_web}
+\end{itemize}
+
+\subsubsection*{Read This First}
+
+The model identifies several high-expected-value (EV) player prop 'GO' recommendations concentrated on the DAL@LAL game, notably LeBron James (two props), Austin Reaves, Marcus Smart, and Jake LaRavia. The deterministic model uses market-implied probabilities with manual adjustments for injuries and rostering, but it also lists explicit gaps: minutes/usage projections and correlation treatments follow deterministi...
+
+\subsubsection*{News Signals}
+
+\begin{itemize}
+\item Refutes/Risks:
+\item [S1] Recent reporting indicates Austin Reaves will miss at least a month with a calf injury, which directly challenges the reliability of any GO recommendation depending on his availability.
+\item [S2] Multiple news reports and injury updates show Austin Reaves has been on the Lakers injury report and there is coverage of his return/status, highlighting uncertainty about his game availability.
+\item [S3] News coverage documents Austin Reaves' injury situation and team updates, indicating evolving status that could invalidate model assumptions about his minutes/usage.
+\end{itemize}
+
+\subsubsection*{Bottom Line}
+
+\begin{itemize}
+\item \textbf{Best Bet:} \textbf{LeBron James OVER 40.5 points+rebounds+assists @ -106 (fanduel)}
+\item \textbf{Lookup Line:} \texttt{DAL @ LAL} | \texttt{OVER 40.5 points+rebounds+assists} | \texttt{fanduel -106}
+\end{itemize}
+The model highlights attractive EV plays, mainly in DAL@LAL, but its deterministic handling of minutes/usage and correlation is a stated gap. More importantly, external news shows Austin Reaves has a significant calf injury with uncertain availability; that materially undermines any Reaves prop recommendation and raises caution for model outputs tied to roster/injury assumptions.
+
+\subsubsection*{Source Index}
+
+\begin{itemize}
+\item [S1] Austin Reaves will miss at least a month with calf injury - NBA.com (www.nba.com)
+\item [S2] Lakers' Austin Reaves off injury report for Thursday - CBS Sports (www.cbssports.com)
+\item [S3] Lakers Austin Reaves injury coverage - The Washington Post (www.washingtonpost.com)
+\item Deterministic model details are summarized in Snapshot/Action Plan.
+\item Full source URLs are stored in \texttt{brief-analyst.json} for audit/debug use.
+\end{itemize}
+
+\newpage
+
+\subsection*{Best Available Bet Right Now}
+
+\begin{itemize}
+\item \textbf{Decision:} \textbf{GO} (meets clean GO gates in this snapshot.)
+\item \textbf{Bet:} \textbf{LeBron James OVER 40.5 points+rebounds+assists @ -106 (fanduel)}
+\item \textbf{Lookup Line:} \texttt{DAL @ LAL} | \texttt{OVER 40.5 points+rebounds+assists} | \texttt{fanduel -106}
+\item \textbf{Model Edge:} \texttt{+33.0\% est.}
+\item why: Go: verified availability with tier A market depth and positive edge (EV 0.330).
+\end{itemize}
+
+\newpage
+
+\subsection*{Action Plan (GO / LEAN / NO-GO)}
+
+\subsubsection*{Top 5 Across All Games}
+
+{\small
+\setlength{\tabcolsep}{2pt}
+\setlength{\LTleft}{0pt}
+\setlength{\LTright}{0pt}
+\begin{longtable}{|L{0.089\linewidth}|L{0.164\linewidth}|L{0.089\linewidth}|L{0.150\linewidth}|R{0.068\linewidth}|L{0.150\linewidth}|L{0.150\linewidth}|}
+\hline
+\textbf{Action} & \textbf{Game} & \textbf{Tier} & \textbf{Ticket} & \textbf{p(hit)} & \textbf{Edge Note} & \textbf{Why} \\
+\hline
+\endfirsthead
+\hline
+\textbf{Action} & \textbf{Game} & \textbf{Tier} & \textbf{Ticket} & \textbf{p(hit)} & \textbf{Edge Note} & \textbf{Why} \\
+\hline
+\endhead
+\hline
+\endfoot
+\hline
+\endlastfoot
+GO & DAL @ LAL & A & LeBron James OVER 40.5 points+rebounds+assists @ -106 (fanduel) & 68.4\% & Strong edge (+33.0\% est.), Higher stake & Go: verified availability with tier A market depth and positive edge (EV 0.330). (tier=A; injury=available\_unlisted; roster=active) \\
+\hline
+GO & DAL @ LAL & A & Austin Reaves OVER 36.5 points+rebounds+assists @ -106 (fanduel) & 68.1\% & Strong edge (+32.4\% est.), Higher stake & Go: verified availability with tier A market depth and positive edge (EV 0.324). (tier=A; injury=available\_unlisted; roster=active) \\
+\hline
+GO & DAL @ LAL & A & Marcus Smart OVER 18.5 points+rebounds+assists @ -102 (fanduel) & 66.0\% & Strong edge (+30.7\% est.), Higher stake & Go: verified availability with tier A market depth and positive edge (EV 0.307). (tier=A; injury=available\_unlisted; roster=active) \\
+\hline
+GO & DAL @ LAL & B & Jake LaRavia OVER 16.5 points+rebounds+assists @ -102 (draftkings) & 65.8\% & Strong edge (+30.3\% est.), Higher stake & Go: verified availability with tier B market depth and positive edge (EV 0.303). (tier=B; injury=available\_unlisted; roster=active) \\
+\hline
+GO & DAL @ LAL & A & LeBron James OVER 8.5 assists @ +112 (fanduel) & 61.4\% & Strong edge (+30.1\% est.), Higher stake & Go: verified availability with tier A market depth and positive edge (EV 0.301). (tier=A; injury=available\_unlisted; roster=active) \\
+\hline
+\end{longtable}
+}
+
+
+
+
+\newpage
+
+\subsection*{Game Cards by Matchup}
+
+\subsubsection*{MIL @ OKC}
+\begin{itemize}
+\item Tip (ET): \texttt{07:40 PM ET}
+\item Listed plays: \texttt{5}
+\end{itemize}
+
+{\small
+\setlength{\tabcolsep}{2pt}
+\setlength{\LTleft}{0pt}
+\setlength{\LTright}{0pt}
+\begin{longtable}{|L{0.112\linewidth}|L{0.112\linewidth}|L{0.190\linewidth}|R{0.086\linewidth}|L{0.190\linewidth}|L{0.190\linewidth}|}
+\hline
+\textbf{Action} & \textbf{Tier} & \textbf{Ticket} & \textbf{p(hit)} & \textbf{Edge Note} & \textbf{Why} \\
+\hline
+\endfirsthead
+\hline
+\textbf{Action} & \textbf{Tier} & \textbf{Ticket} & \textbf{p(hit)} & \textbf{Edge Note} & \textbf{Why} \\
+\hline
+\endhead
+\hline
+\endfoot
+\hline
+\endlastfoot
+GO & A & Cason Wallace OVER 20.5 points+rebounds+assists @ -108 (fanduel) & 67.1\% & Strong edge (+29.2\% est.), Higher stake & Go: verified availability with tier A market depth and positive edge (EV 0.292). \\
+\hline
+GO & A & Kevin Porter Jr. OVER 31.5 points+rebounds+assists @ -107 (draftkings) & 66.3\% & Strong edge (+28.4\% est.), Higher stake & Go: verified availability with tier A market depth and positive edge (EV 0.284). \\
+\hline
+GO & A & Chet Holmgren OVER 30.5 points+rebounds+assists @ -108 (fanduel) & 66.2\% & Strong edge (+27.4\% est.), Higher stake & Go: verified availability with tier A market depth and positive edge (EV 0.274). \\
+\hline
+GO & A & Jericho Sims OVER 5.5 points @ +100 (draftkings) & 63.6\% & Strong edge (+27.3\% est.), Higher stake & Go: verified availability with tier A market depth and positive edge (EV 0.273). \\
+\hline
+GO & A & Aaron Wiggins OVER 24.5 points+rebounds+assists @ -111 (fanduel) & 66.9\% & Strong edge (+27.1\% est.), Higher stake & Go: verified availability with tier A market depth and positive edge (EV 0.271). \\
+\hline
+\end{longtable}
+}
+
+
+\newpage
+
+\subsubsection*{POR @ UTA}
+\begin{itemize}
+\item Tip (ET): \texttt{09:10 PM ET}
+\item Listed plays: \texttt{1}
+\end{itemize}
+
+{\small
+\setlength{\tabcolsep}{2pt}
+\setlength{\LTleft}{0pt}
+\setlength{\LTright}{0pt}
+\begin{longtable}{|L{0.112\linewidth}|L{0.112\linewidth}|L{0.190\linewidth}|R{0.086\linewidth}|L{0.190\linewidth}|L{0.190\linewidth}|}
+\hline
+\textbf{Action} & \textbf{Tier} & \textbf{Ticket} & \textbf{p(hit)} & \textbf{Edge Note} & \textbf{Why} \\
+\hline
+\endfirsthead
+\hline
+\textbf{Action} & \textbf{Tier} & \textbf{Ticket} & \textbf{p(hit)} & \textbf{Edge Note} & \textbf{Why} \\
+\hline
+\endhead
+\hline
+\endfoot
+\hline
+\endlastfoot
+GO & A & Jerami Grant OVER 2.5 assists @ +140 (fanduel) & 53.6\% & Strong edge (+28.7\% est.), Higher stake & Go: verified availability with tier A market depth and positive edge (EV 0.287). \\
+\hline
+\end{longtable}
+}
+
+
+\newpage
+
+\subsubsection*{DAL @ LAL}
+\begin{itemize}
+\item Tip (ET): \texttt{10:10 PM ET}
+\item Listed plays: \texttt{5}
+\end{itemize}
+
+{\small
+\setlength{\tabcolsep}{2pt}
+\setlength{\LTleft}{0pt}
+\setlength{\LTright}{0pt}
+\begin{longtable}{|L{0.112\linewidth}|L{0.112\linewidth}|L{0.190\linewidth}|R{0.086\linewidth}|L{0.190\linewidth}|L{0.190\linewidth}|}
+\hline
+\textbf{Action} & \textbf{Tier} & \textbf{Ticket} & \textbf{p(hit)} & \textbf{Edge Note} & \textbf{Why} \\
+\hline
+\endfirsthead
+\hline
+\textbf{Action} & \textbf{Tier} & \textbf{Ticket} & \textbf{p(hit)} & \textbf{Edge Note} & \textbf{Why} \\
+\hline
+\endhead
+\hline
+\endfoot
+\hline
+\endlastfoot
+GO & A & LeBron James OVER 40.5 points+rebounds+assists @ -106 (fanduel) & 68.4\% & Strong edge (+33.0\% est.), Higher stake & Go: verified availability with tier A market depth and positive edge (EV 0.330). \\
+\hline
+GO & A & Austin Reaves OVER 36.5 points+rebounds+assists @ -106 (fanduel) & 68.1\% & Strong edge (+32.4\% est.), Higher stake & Go: verified availability with tier A market depth and positive edge (EV 0.324). \\
+\hline
+GO & A & Marcus Smart OVER 18.5 points+rebounds+assists @ -102 (fanduel) & 66.0\% & Strong edge (+30.7\% est.), Higher stake & Go: verified availability with tier A market depth and positive edge (EV 0.307). \\
+\hline
+GO & B & Jake LaRavia OVER 16.5 points+rebounds+assists @ -102 (draftkings) & 65.8\% & Strong edge (+30.3\% est.), Higher stake & Go: verified availability with tier B market depth and positive edge (EV 0.303). \\
+\hline
+GO & A & LeBron James OVER 8.5 assists @ +112 (fanduel) & 61.4\% & Strong edge (+30.1\% est.), Higher stake & Go: verified availability with tier A market depth and positive edge (EV 0.301). \\
+\hline
+\end{longtable}
+}
+
+
+\newpage
+
+\subsection*{Data Quality}
+
+\begin{itemize}
+\item Model uses market-implied fair probabilities with injury/roster/opponent adjustments.
+\item Minutes/usage projection uses deterministic v0 rules, not learned distributions.
+\item SGP/SGPx correlation uses deterministic haircut rules (v0).
+\item \texttt{unknown\_roster} means the roster feed did not return a trusted active/inactive record for that player in that game snapshot.
+\item \texttt{unknown\_event} means event-to-team mapping was missing, so player-to-game roster checks could not be resolved.
+\end{itemize}
+
+\subsection*{Confidence}
+
+\begin{itemize}
+\item Recommendations reflect the model probabilities and EVs supplied in the payload; do not assume any data beyond this JSON.
+\item NO-GO items were marked in the payload primarily due to low EV and questionable injury status; consult live injury/in-play feeds before any action.
+\end{itemize}
+
+\subsubsection*{Interpreting p(hit)}
+
+\begin{itemize}
+\item \texttt{p(hit)} = estimated chance the recommended side wins at that line.
+\item Built from no-vig odds + small injury/roster/spread adjustments (clamped 1\%-99\%).
+\item Use it to rank EV, not as a guarantee; judge it by calibration over many bets.
+\item Can be wrong when odds are stale, coverage is thin, or minutes/role are uncertain.
+\end{itemize}
+\end{document}
