@@ -854,6 +854,16 @@ def _roster_resolution_detail(status: str) -> str:
     return "ok"
 
 
+def _pre_bet_readiness(*, injury_status: str, roster_status: str) -> tuple[bool, str]:
+    clean_injury = injury_status in {"available", "available_unlisted"}
+    clean_roster = roster_status in {"active", "rostered"}
+    if clean_injury and clean_roster:
+        return True, "ok"
+    if not clean_injury:
+        return False, f"injury_status={injury_status}"
+    return False, f"roster_status={roster_status}"
+
+
 def _market_label(market: str) -> str:
     return MARKET_LABELS.get(market, market.replace("_", " ").upper())
 
@@ -1262,6 +1272,29 @@ def build_strategy_report(
 
     injuries_by_player = _injury_index(injuries)
     injuries_by_team = _injuries_by_team(injuries)
+    official = injuries.get("official", {}) if isinstance(injuries, dict) else {}
+    secondary = injuries.get("secondary", {}) if isinstance(injuries, dict) else {}
+    official_rows_count = _official_rows_count(official if isinstance(official, dict) else None)
+    official_parse_status = (
+        str(official.get("parse_status", "")) if isinstance(official, dict) else ""
+    )
+    official_ready = (
+        isinstance(official, dict)
+        and official.get("status") == "ok"
+        and official_rows_count > 0
+        and official_parse_status in {"", "ok"}
+    )
+    official_player_norms: set[str] = set()
+    if isinstance(official, dict):
+        official_rows = official.get("rows", [])
+        if isinstance(official_rows, list):
+            for row in official_rows:
+                if not isinstance(row, dict):
+                    continue
+                player = str(row.get("player", ""))
+                player_norm = str(row.get("player_norm", "")) or normalize_person_name(player)
+                if player_norm:
+                    official_player_norms.add(player_norm)
 
     candidates: list[dict[str, Any]] = []
     tier_a_count = 0
@@ -1303,7 +1336,8 @@ def build_strategy_report(
             p_over_fair, p_under_fair = _normalize_prob_pair(over_prob_imp, under_prob_imp)
             hold = (over_prob_imp + under_prob_imp) - 1.0
 
-        injury_row = injuries_by_player.get(normalize_person_name(player), {})
+        player_norm = normalize_person_name(player)
+        injury_row = injuries_by_player.get(player_norm, {})
         injury_status = str(injury_row.get("status", "unknown"))
         injury_note = str(injury_row.get("note", ""))
         roster_status = _roster_status(
@@ -1313,6 +1347,14 @@ def build_strategy_report(
             roster=roster,
             player_identity_map=player_identity_map,
         )
+        if (
+            official_ready
+            and player_norm not in official_player_norms
+            and roster_status in {"active", "rostered"}
+        ):
+            injury_status = "available_unlisted"
+            if not injury_note:
+                injury_note = "Not listed on official NBA injury report."
         player_team = _resolve_player_team(
             player_name=player,
             event_id=event_id,
@@ -1354,6 +1396,10 @@ def build_strategy_report(
         if injury_status in {"out", "out_for_season"}:
             eligible = False
             reason = "injury_gate"
+        pre_bet_ready, pre_bet_reason = _pre_bet_readiness(
+            injury_status=injury_status,
+            roster_status=roster_status,
+        )
 
         adjustment = _probability_adjustment(
             injury_status=injury_status,
@@ -1514,6 +1560,8 @@ def build_strategy_report(
                 "injury_status": injury_status,
                 "injury_note": injury_note,
                 "roster_status": roster_status,
+                "pre_bet_ready": pre_bet_ready,
+                "pre_bet_reason": pre_bet_reason,
                 "roster_resolution_detail": _roster_resolution_detail(roster_status),
                 "baseline_minutes": minutes_projection.get("baseline_minutes"),
                 "projected_minutes": minutes_projection.get("projected_minutes"),
@@ -1554,18 +1602,6 @@ def build_strategy_report(
 
     availability = _availability_notes(
         injuries=injuries, roster=roster, teams_in_scope=teams_in_scope
-    )
-    official = injuries.get("official", {}) if isinstance(injuries, dict) else {}
-    secondary = injuries.get("secondary", {}) if isinstance(injuries, dict) else {}
-    official_rows_count = _official_rows_count(official if isinstance(official, dict) else None)
-    official_parse_status = (
-        str(official.get("parse_status", "")) if isinstance(official, dict) else ""
-    )
-    official_ready = (
-        isinstance(official, dict)
-        and official.get("status") == "ok"
-        and official_rows_count > 0
-        and official_parse_status in {"", "ok"}
     )
     roster_ok = isinstance(roster, dict) and roster.get("status") == "ok"
     roster_count = int(roster.get("count_teams", 0)) if isinstance(roster, dict) else 0
@@ -1840,6 +1876,9 @@ def build_strategy_report(
             "health_gate_count": len(health_gates),
             "eligible_tier_a": len([item for item in eligible_rows if item.get("tier") == "A"]),
             "eligible_tier_b": len([item for item in eligible_rows if item.get("tier") == "B"]),
+            "eligible_pre_bet_ready": len(
+                [item for item in eligible_rows if bool(item.get("pre_bet_ready"))]
+            ),
             "qualified_unders": len(qualified_unders),
             "request_counts": request_counts,
             "quota": manifest.get("quota", {}),

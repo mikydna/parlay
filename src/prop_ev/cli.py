@@ -1284,6 +1284,18 @@ def _row_key(row: dict[str, Any]) -> tuple[str, str, str, str]:
     )
 
 
+def _candidate_pre_bet_ready(row: dict[str, Any]) -> bool:
+    raw = row.get("pre_bet_ready")
+    if isinstance(raw, bool):
+        return raw
+    injury_status = str(row.get("injury_status", "")).strip().lower()
+    roster_status = str(row.get("roster_status", "")).strip().lower()
+    return injury_status in {"available", "available_unlisted"} and roster_status in {
+        "active",
+        "rostered",
+    }
+
+
 def _price_for_side(row: dict[str, Any], side: str) -> tuple[int | None, str]:
     normalized = side.lower().strip()
     if normalized == "under":
@@ -1310,7 +1322,9 @@ def _build_discovery_execution_report(
         else []
     )
     discovery_rows = [
-        row for row in discovery_candidates if isinstance(row, dict) and bool(row.get("eligible"))
+        row
+        for row in discovery_candidates
+        if isinstance(row, dict) and bool(row.get("eligible")) and _candidate_pre_bet_ready(row)
     ]
     execution_by_key: dict[tuple[str, str, str, str], dict[str, Any]] = {}
     for row in execution_candidates:

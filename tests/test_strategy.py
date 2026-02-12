@@ -355,3 +355,76 @@ def test_build_strategy_report_official_rows_override_secondary() -> None:
     watchlist = report["watchlist"]
     assert watchlist[0]["injury_status"] == "out"
     assert watchlist[0]["reason"] == "injury_gate"
+
+
+def test_build_strategy_report_marks_unlisted_official_players_as_available() -> None:
+    now_utc = datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    report = build_strategy_report(
+        snapshot_id="snap-5",
+        manifest={"requests": {}},
+        rows=[
+            {
+                "event_id": "event-1",
+                "market": "player_points",
+                "player": "Player A",
+                "point": 20.5,
+                "side": "Over",
+                "price": 110,
+                "book": "book_a",
+                "link": "",
+                "last_update": now_utc,
+            },
+            {
+                "event_id": "event-1",
+                "market": "player_points",
+                "player": "Player A",
+                "point": 20.5,
+                "side": "Under",
+                "price": -120,
+                "book": "book_b",
+                "link": "",
+                "last_update": now_utc,
+            },
+        ],
+        top_n=5,
+        event_context={
+            "event-1": {
+                "home_team": "Boston Celtics",
+                "away_team": "Miami Heat",
+                "commence_time": now_utc,
+            }
+        },
+        roster={
+            "status": "ok",
+            "count_teams": 2,
+            "teams": {
+                "boston celtics": {"active": ["playera"], "inactive": [], "all": ["playera"]},
+                "miami heat": {"active": [], "inactive": [], "all": []},
+            },
+        },
+        injuries={
+            "official": {
+                "status": "ok",
+                "parse_status": "ok",
+                "rows_count": 1,
+                "rows": [
+                    {
+                        "player": "Someone Else",
+                        "player_norm": "someoneelse",
+                        "team": "Miami Heat",
+                        "team_norm": "miami heat",
+                        "status": "out",
+                        "note": "",
+                        "source": "official_nba_pdf",
+                    }
+                ],
+            },
+            "secondary": {"status": "ok", "rows": []},
+        },
+        require_official_injuries=True,
+    )
+
+    candidates = report["candidates"]
+    assert candidates
+    assert candidates[0]["injury_status"] == "available_unlisted"
+    assert candidates[0]["pre_bet_ready"] is True
