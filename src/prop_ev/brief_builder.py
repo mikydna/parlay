@@ -26,6 +26,8 @@ REQUIRED_PASS2_HEADINGS = [
     "## Confidence",
 ]
 
+P_HIT_NOTES_HEADING = "### Interpreting p(hit)"
+
 MARKET_LABELS = {
     "player_points": "points",
     "player_rebounds": "rebounds",
@@ -141,6 +143,17 @@ def _format_prob(value: Any) -> str:
     if prob is None:
         return ""
     return f"{prob * 100.0:.1f}%"
+
+
+def _p_hit_notes_block() -> list[str]:
+    return [
+        P_HIT_NOTES_HEADING,
+        "",
+        "- `p(hit)` = estimated chance the recommended side wins at that line.",
+        "- Built from no-vig odds + small injury/roster/spread adjustments (clamped 1%-99%).",
+        "- Use it to rank EV, not as a guarantee; judge it by calibration over many bets.",
+        "- Can be wrong when odds are stale, coverage is thin, or minutes/role are uncertain.",
+    ]
 
 
 def _market_label(market: str) -> str:
@@ -879,6 +892,8 @@ def render_fallback_markdown(
     else:
         for note in notes:
             lines.append(f"- {note}")
+    lines.append("")
+    lines.extend(_p_hit_notes_block())
     lines.append("")
     base_markdown = "\n".join(lines)
     return append_game_cards_section(base_markdown, brief_input=brief_input)
@@ -1679,6 +1694,40 @@ def move_disclosures_to_end(markdown: str) -> str:
         out.extend(confidence)
 
     return "\n".join(out).rstrip() + "\n"
+
+
+def enforce_p_hit_notes(markdown: str) -> str:
+    """Ensure Confidence includes a short explainer for p(hit)."""
+    lines = markdown.splitlines()
+    confidence_idx: int | None = None
+    for idx, line in enumerate(lines):
+        if line.strip() == "## Confidence":
+            confidence_idx = idx
+            break
+    if confidence_idx is None:
+        return markdown.rstrip() + "\n"
+
+    section_end = len(lines)
+    for idx in range(confidence_idx + 1, len(lines)):
+        if lines[idx].strip().startswith("## "):
+            section_end = idx
+            break
+
+    section = lines[confidence_idx + 1 : section_end]
+    if any(row.strip() == P_HIT_NOTES_HEADING for row in section):
+        return markdown.rstrip() + "\n"
+
+    insert_at = section_end
+    while insert_at > confidence_idx + 1 and not lines[insert_at - 1].strip():
+        insert_at -= 1
+
+    block: list[str] = []
+    if insert_at > confidence_idx + 1 and lines[insert_at - 1].strip():
+        block.append("")
+    block.extend(_p_hit_notes_block())
+    block.append("")
+    merged = lines[:insert_at] + block + lines[insert_at:]
+    return "\n".join(merged).rstrip() + "\n"
 
 
 def enforce_snapshot_mode_labels(

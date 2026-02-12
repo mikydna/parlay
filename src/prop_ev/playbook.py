@@ -17,6 +17,7 @@ from prop_ev.brief_builder import (
     build_pass2_prompt,
     default_analyst_take,
     default_pass1,
+    enforce_p_hit_notes,
     enforce_readability_labels,
     enforce_snapshot_mode_labels,
     ensure_pagebreak_before_action_plan,
@@ -596,6 +597,7 @@ def generate_brief_for_snapshot(
     markdown = ensure_pagebreak_before_action_plan(markdown)
     markdown = append_game_cards_section(markdown, brief_input=brief_input)
     markdown = move_disclosures_to_end(markdown)
+    markdown = enforce_p_hit_notes(markdown)
     markdown = enforce_snapshot_mode_labels(
         markdown,
         llm_pass1_status=str(pass1_meta.get("status", "")),

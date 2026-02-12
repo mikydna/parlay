@@ -3,6 +3,7 @@ from prop_ev.brief_builder import (
     build_brief_input,
     default_analyst_take,
     default_pass1,
+    enforce_p_hit_notes,
     enforce_readability_labels,
     enforce_snapshot_mode_labels,
     ensure_pagebreak_before_action_plan,
@@ -142,6 +143,7 @@ def test_brief_input_and_fallback_markdown() -> None:
     assert "\n<!-- pagebreak -->\n\n## Game Cards by Matchup\n" in markdown
     assert markdown.count("<!-- pagebreak -->") >= len(brief["game_cards"]) + 1
     assert "`unknown_roster` means" in markdown
+    assert "### Interpreting p(hit)" in markdown
     assert "Player A" in markdown
 
 
@@ -155,6 +157,13 @@ def test_enforce_readability_labels_inserts_required_lines() -> None:
     markdown = "## Action Plan (GO / LEAN / NO-GO)\n\n| A | B |\n| --- | --- |\n| 1 | 2 |\n"
     labeled = enforce_readability_labels(markdown, top_n=5)
     assert "### Top 5 Across All Games" in labeled
+
+
+def test_enforce_p_hit_notes_inserts_block_and_is_idempotent() -> None:
+    markdown = "## Snapshot\n\n## Confidence\n\n- note\n"
+    patched = enforce_p_hit_notes(markdown)
+    assert "### Interpreting p(hit)" in patched
+    assert enforce_p_hit_notes(patched).count("### Interpreting p(hit)") == 1
 
 
 def test_strip_empty_go_placeholder_rows() -> None:
