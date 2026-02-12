@@ -1,0 +1,29 @@
+{
+  "constraints": {
+    "requires_meets_play_to": true,
+    "requires_pre_bet_ready": true,
+    "tier_a_min_ev": 0.03,
+    "tier_b_min_ev": 0.05
+  },
+  "execution_bookmakers": [
+    "draftkings"
+  ],
+  "generated_at_utc": "2026-02-12T23:52:00Z",
+  "inputs": {
+    "derived_event_props": "data/odds_api/snapshots/daily-20260212T230052Z/derived/event_props.jsonl",
+    "strategy_report": "data/odds_api/snapshots/daily-20260212T230052Z/reports/strategy-report.json"
+  },
+  "outputs": {
+    "markdown": "reports/daily/2026-02-12/daily-20260212T230052Z/strategy-brief-draftkings.md",
+    "pdf": "reports/daily/2026-02-12/daily-20260212T230052Z/strategy-brief-draftkings.pdf",
+    "tex": "reports/daily/2026-02-12/daily-20260212T230052Z/strategy-brief-draftkings.tex"
+  },
+  "pdf": {
+    "message": "pdf generated",
+    "pdf_path": "reports/daily/2026-02-12/daily-20260212T230052Z/strategy-brief-draftkings.pdf",
+    "returncode": 0,
+    "status": "ok"
+  },
+  "schema_version": 1,
+  "snapshot_id": "daily-20260212T230052Z"
+}
