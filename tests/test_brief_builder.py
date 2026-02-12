@@ -134,7 +134,7 @@ def test_brief_input_and_fallback_markdown() -> None:
     assert "## Executive Summary" in markdown
     assert "## Action Plan (GO / LEAN / NO-GO)" in markdown
     assert "### Top 2 Across All Games" in markdown
-    assert "| Action | Game | Tier | Ticket | Edge Note | Why |" in markdown
+    assert "| Action | Game | Tier | Ticket | p(hit) | Edge Note | Why |" in markdown
     assert "## Risks and Watchouts" not in markdown
     assert "## Tier B View (Single-Book Lines)" not in markdown
     assert "## Game Cards by Matchup" in markdown
@@ -160,24 +160,24 @@ def test_enforce_readability_labels_inserts_required_lines() -> None:
 def test_strip_empty_go_placeholder_rows() -> None:
     markdown = (
         "## Action Plan (GO / LEAN / NO-GO)\n\n"
-        "| Action | Game | Tier | Ticket | Edge Note | Why |\n"
-        "| --- | --- | --- | --- | --- | --- |\n"
-        "| GO | — | — | — | — | No plays cleared as GO. |\n"
-        "| LEAN | WAS @ CLE | A | Example | Strong edge | Lean reason |\n"
+        "| Action | Game | Tier | Ticket | p(hit) | Edge Note | Why |\n"
+        "| --- | --- | --- | --- | --- | --- | --- |\n"
+        "| GO | — | — | — | — | — | No plays cleared as GO. |\n"
+        "| LEAN | WAS @ CLE | A | Example | 55.0% | Strong edge | Lean reason |\n"
         "\n"
         "Note: GO none in this run.\n"
     )
     cleaned = strip_empty_go_placeholder_rows(markdown)
     assert "No plays cleared as GO" not in cleaned
     assert "GO none in this run" not in cleaned
-    assert "| LEAN | WAS @ CLE | A | Example | Strong edge | Lean reason |" in cleaned
+    assert "| LEAN | WAS @ CLE | A | Example | 55.0% | Strong edge | Lean reason |" in cleaned
 
 
 def test_upsert_analyst_take_section() -> None:
     markdown = (
         "## Snapshot\n\n"
         "## Action Plan (GO / LEAN / NO-GO)\n\n"
-        "| Action | Game | Tier | Ticket | Edge Note | Why |\n"
+        "| Action | Game | Tier | Ticket | p(hit) | Edge Note | Why |\n"
     )
     brief = build_brief_input(_sample_report(), top_n=5)
     pass1 = default_pass1(brief)
@@ -242,7 +242,7 @@ def test_upsert_best_available_section() -> None:
         "## Analyst Take\n\n"
         "text\n\n"
         "## Action Plan (GO / LEAN / NO-GO)\n\n"
-        "| Action | Game | Tier | Ticket | Edge Note | Why |\n"
+        "| Action | Game | Tier | Ticket | p(hit) | Edge Note | Why |\n"
     )
     patched = upsert_best_available_section(markdown, brief_input=brief)
     assert "## Best Available Bet Right Now" in patched

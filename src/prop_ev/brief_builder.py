@@ -136,6 +136,13 @@ def _format_price(value: Any) -> str:
     return _to_str(value)
 
 
+def _format_prob(value: Any) -> str:
+    prob = _to_float(value)
+    if prob is None:
+        return ""
+    return f"{prob * 100.0:.1f}%"
+
+
 def _market_label(market: str) -> str:
     return MARKET_LABELS.get(market, market.replace("_", " "))
 
@@ -712,7 +719,8 @@ def build_pass2_prompt(brief_input: dict[str, Any], pass1: dict[str, Any]) -> st
         "## Data Quality\n"
         "## Confidence\n\n"
         "Within Action Plan, use a markdown table with columns: Action, Game, Tier, Ticket, "
-        "Edge Note, Why.\n"
+        "p(hit), Edge Note, Why.\n"
+        "p(hit) must come from the provided model_prob for that ticket.\n"
         "Order Action Plan by decision quality: GO first, then LEAN, then NO-GO.\n"
         "State clearly that this is player-prop over/under betting, not game winner bets.\n"
         "If data is missing or weak, state that plainly.\n\n"
@@ -823,14 +831,15 @@ def render_fallback_markdown(
     if not top_plays:
         lines.append("- none")
     else:
-        lines.append("| Action | Game | Tier | Ticket | Edge Note | Why |")
-        lines.append("| --- | --- | --- | --- | --- | --- |")
+        lines.append("| Action | Game | Tier | Ticket | p(hit) | Edge Note | Why |")
+        lines.append("| --- | --- | --- | --- | --- | --- | --- |")
         for row in top_plays:
             if not isinstance(row, dict):
                 continue
             action = _md_cell(row.get("action_default", "NO-GO"))
             game = _md_cell(row.get("game", ""))
             ticket = _md_cell(row.get("ticket", ""))
+            p_hit = _md_cell(_format_prob(row.get("model_prob")) or "n/a")
             edge_note = _md_cell(row.get("edge_note", "n/a"))
             why = _md_cell(row.get("plain_reason", ""))
             context = (
@@ -840,8 +849,8 @@ def render_fallback_markdown(
                 f"roster={_to_str(row.get('roster_status', ''))})"
             )
             lines.append(
-                f"| {action} | {game} | {_md_cell(row.get('tier', ''))} | {ticket} | {edge_note} | "
-                f"{_md_cell(context)} |"
+                f"| {action} | {game} | {_md_cell(row.get('tier', ''))} | {ticket} | {p_hit} | "
+                f"{edge_note} | {_md_cell(context)} |"
             )
     lines.append("")
     lines.append("## Data Quality")
@@ -906,16 +915,17 @@ def _render_game_cards_section(
             lines.append("- none")
             lines.append("")
             continue
-        lines.append("| Action | Tier | Ticket | Edge Note | Why |")
-        lines.append("| --- | --- | --- | --- | --- |")
+        lines.append("| Action | Tier | Ticket | p(hit) | Edge Note | Why |")
+        lines.append("| --- | --- | --- | --- | --- | --- |")
         for row in rows:
             if not isinstance(row, dict):
                 continue
             lines.append(
-                "| {} | {} | {} | {} | {} |".format(
+                "| {} | {} | {} | {} | {} | {} |".format(
                     _md_cell(row.get("action_default", "NO-GO")),
                     _md_cell(row.get("tier", "")),
                     _md_cell(row.get("ticket", "")),
+                    _md_cell(_format_prob(row.get("model_prob")) or "n/a"),
                     _md_cell(row.get("edge_note", "")),
                     _md_cell(row.get("plain_reason", "")),
                 )
@@ -1091,17 +1101,11 @@ def strip_empty_go_placeholder_rows(markdown: str) -> str:
             action = _to_str(cells[0]).strip().upper()
             joined = " ".join(cells).lower()
             if action == "GO":
-                game = _to_str(cells[1] if len(cells) > 1 else "").strip()
-                tier = _to_str(cells[2] if len(cells) > 2 else "").strip()
-                ticket = _to_str(cells[3] if len(cells) > 3 else "").strip()
-                edge_note = _to_str(cells[4] if len(cells) > 4 else "").strip()
-                why = _to_str(cells[5] if len(cells) > 5 else "").strip().lower()
                 dash_like = {"", "-", "--", "—"}
+                middle = [_to_str(cell).strip() for cell in cells[1:-1]]
+                why = _to_str(cells[-1]).strip().lower() if len(cells) > 1 else ""
                 placeholder = (
-                    game in dash_like
-                    and tier in dash_like
-                    and ticket in dash_like
-                    and edge_note in dash_like
+                    all(cell in dash_like for cell in middle)
                     and ("no plays" in why)
                     and ("go" in why)
                 )
