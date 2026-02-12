@@ -10,14 +10,15 @@ from typing import Any
 from urllib.parse import quote_plus
 from zoneinfo import ZoneInfo
 
+from prop_ev.brief_builder import TEAM_ABBREVIATIONS
 from prop_ev.context_sources import canonical_team_name, normalize_person_name
 from prop_ev.identity_map import name_aliases
 
 ET_ZONE = ZoneInfo("America/New_York")
 MARKET_LABELS = {
-    "player_points": "PTS",
-    "player_rebounds": "REB",
-    "player_assists": "AST",
+    "player_points": "P",
+    "player_rebounds": "R",
+    "player_assists": "A",
     "player_threes": "3PM",
     "player_points_rebounds_assists": "PRA",
     "player_points_rebounds": "P+R",
@@ -952,6 +953,36 @@ def _market_label(market: str) -> str:
     return MARKET_LABELS.get(market, market.replace("_", " ").upper())
 
 
+def _team_abbrev(team_name: str) -> str:
+    raw = team_name.strip()
+    if not raw:
+        return ""
+    canonical = canonical_team_name(raw)
+    if canonical in TEAM_ABBREVIATIONS:
+        return TEAM_ABBREVIATIONS[canonical]
+    token = raw.replace(".", "").strip()
+    if 2 <= len(token) <= 4 and token.isalpha():
+        return token.upper()
+    words = canonical.split()
+    if words:
+        return words[-1][:3].upper()
+    return raw[:3].upper()
+
+
+def _short_game_label(game: str) -> str:
+    raw = game.strip()
+    if not raw:
+        return ""
+    if "@" not in raw:
+        return _team_abbrev(raw) or raw
+    away_raw, home_raw = raw.split("@", 1)
+    away = _team_abbrev(away_raw)
+    home = _team_abbrev(home_raw)
+    if away and home:
+        return f"{away} @ {home}"
+    return raw
+
+
 def _prop_label(player: str, side: str, point: float, market: str) -> str:
     return f"{player} {side.upper()} {point:.1f} {_market_label(market)}"
 
@@ -964,12 +995,13 @@ def _tip_et(value: str) -> str:
 
 
 def _spread_display(home_team: str, home_spread: float | None) -> str:
+    home = _team_abbrev(home_team) or home_team
     if home_spread is None:
         return ""
     if abs(home_spread) < 0.05:
-        return f"{home_team} PK"
+        return f"{home} PK"
     sign = "+" if home_spread > 0 else ""
-    return f"{home_team} {sign}{home_spread:.1f}"
+    return f"{home} {sign}{home_spread:.1f}"
 
 
 def _event_line_index(
@@ -2198,7 +2230,7 @@ def render_strategy_markdown(report: dict[str, Any], top_n: int) -> str:
             lines.append(
                 "| {} | {} | {} | {} |".format(
                     item.get("tip_et", ""),
-                    item.get("away_home", ""),
+                    _short_game_label(str(item.get("away_home", ""))),
                     item.get("spread", ""),
                     item.get("total", ""),
                 )
@@ -2331,7 +2363,7 @@ def render_strategy_markdown(report: dict[str, Any], top_n: int) -> str:
             )
             lines.append(
                 "| {} | {} | {} | {:.1f}% | {} / {} | {:+.2f}% | {:+.2f} | {} | {} |".format(
-                    row.get("game", ""),
+                    _short_game_label(str(row.get("game", ""))),
                     row.get("prop_label", ""),
                     row.get("book_price", ""),
                     (row.get("model_p_hit", 0.0) or 0.0) * 100.0,
@@ -2365,7 +2397,7 @@ def render_strategy_markdown(report: dict[str, Any], top_n: int) -> str:
             )
             lines.append(
                 "| {} | {} | {} | {:.1f}% | {} / {} | {:+.2f}% | {:+.2f} | {} | {} |".format(
-                    row.get("game", ""),
+                    _short_game_label(str(row.get("game", ""))),
                     row.get("prop_label", ""),
                     row.get("book_price", ""),
                     (row.get("model_p_hit", 0.0) or 0.0) * 100.0,
@@ -2410,7 +2442,7 @@ def render_strategy_markdown(report: dict[str, Any], top_n: int) -> str:
                     )
             lines.append(
                 "| {} | {} | {:.2f}% | {:.1f}% | {:.2f}% | {} | {:+.2f} | {:.2f}% |".format(
-                    row.get("game", ""),
+                    _short_game_label(str(row.get("game", ""))),
                     " + ".join(leg_texts),
                     (row.get("independence_joint_p", 0.0) or 0.0) * 100.0,
                     (row.get("haircut", 0.0) or 0.0) * 100.0,
@@ -2436,7 +2468,7 @@ def render_strategy_markdown(report: dict[str, Any], top_n: int) -> str:
                 continue
             lines.append(
                 "  - {} | {} | edge={:+.2f}% | play_to={}".format(
-                    row.get("game", ""),
+                    _short_game_label(str(row.get("game", ""))),
                     row.get("prop_label", ""),
                     row.get("edge_pct", 0.0) or 0.0,
                     _fmt_american(row.get("play_to_american")),
@@ -2454,7 +2486,7 @@ def render_strategy_markdown(report: dict[str, Any], top_n: int) -> str:
                 continue
             lines.append(
                 "  - {} | {} | edge={:+.2f}% | play_to={} | reason={}".format(
-                    row.get("game", ""),
+                    _short_game_label(str(row.get("game", ""))),
                     row.get("prop_label", ""),
                     row.get("edge_pct", 0.0) or 0.0,
                     _fmt_american(row.get("play_to_american")),
@@ -2481,7 +2513,7 @@ def render_strategy_markdown(report: dict[str, Any], top_n: int) -> str:
             )
             lines.append(
                 "| {} | {} | {} | {} | {} |".format(
-                    row.get("game", ""),
+                    _short_game_label(str(row.get("game", ""))),
                     prop,
                     _fmt_american(row.get("current_price")),
                     _fmt_american(row.get("play_to_american")),
@@ -2510,7 +2542,7 @@ def render_strategy_markdown(report: dict[str, Any], top_n: int) -> str:
             quarter = (row.get("quarter_kelly", 0.0) or 0.0) * 100.0
             lines.append(
                 "| {} | {} | {} {} | {:.2f}% | {:.2f}% |".format(
-                    row.get("game", ""),
+                    _short_game_label(str(row.get("game", ""))),
                     prop,
                     row.get("book", ""),
                     _fmt_american(row.get("price")),

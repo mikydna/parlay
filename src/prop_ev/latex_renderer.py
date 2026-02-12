@@ -83,34 +83,116 @@ def _is_table_separator(line: str, column_count: int) -> bool:
 
 
 def _table_colspec(headers: list[str]) -> str:
-    specs: list[str] = []
+    numeric_headers = {
+        "ev",
+        "kelly",
+        "line",
+        "actual",
+        "p(hit)",
+        "fair",
+        "edge%",
+        "ev/$100",
+        "play-to",
+        "current",
+        "full kelly",
+        "1/4 kelly",
+        "1/8 kelly",
+        "wins",
+        "losses",
+        "graded",
+        "hit rate",
+        "roi (units)",
+        "total pnl",
+        "w",
+        "l",
+        "p",
+        "roi",
+        "brier",
+    }
+    wide_headers = {
+        "ticket",
+        "why",
+        "game",
+        "legs",
+        "rationale",
+        "edge note",
+        "player & prop",
+        "prop",
+        "away @ home",
+        "book/price",
+        "reason",
+    }
+
+    header_weights = {
+        "player": 3.0,
+        "game": 2.4,
+        "reason": 2.4,
+        "player & prop": 2.8,
+        "prop": 2.6,
+        "legs": 3.2,
+        "rationale": 3.0,
+        "status": 1.1,
+        "mkt": 1.0,
+        "side": 0.9,
+        "line": 0.8,
+        "actual": 0.8,
+        "result": 1.1,
+    }
+    weights: list[float] = []
     for header in headers:
         label = header.strip().lower()
-        if label in {"ev", "kelly"}:
-            specs.append("r")
-        elif label in {"ticket", "why", "game", "edge note"}:
-            specs.append("Y")
+        if label in header_weights:
+            weights.append(header_weights[label])
+        elif label in wide_headers:
+            weights.append(2.2)
+        elif label in numeric_headers:
+            weights.append(1.0)
         else:
-            specs.append("l")
+            weights.append(1.3)
+
+    total = sum(weights) or 1.0
+    # Leave explicit room for column padding/rules so wide tables do not
+    # overflow the page when many columns are present.
+    target_width = max(0.58, 0.92 - (0.02 * max(0, len(headers) - 4)))
+    specs: list[str] = []
+    for header, weight in zip(headers, weights, strict=True):
+        label = header.strip().lower()
+        width = max(0.05, target_width * (weight / total))
+        coltype = "R" if label in numeric_headers else "L"
+        specs.append(f"{coltype}{{{width:.3f}\\linewidth}}")
     return "|".join(specs)
 
 
 def _render_table_latex(headers: list[str], rows: list[list[str]]) -> list[str]:
     lines: list[str] = []
     colspec = _table_colspec(headers)
-    lines.append(rf"\begin{{tabularx}}{{\textwidth}}{{|{colspec}|}}")
+    lines.append(r"{\small")
+    lines.append(r"\setlength{\tabcolsep}{2pt}")
+    lines.append(r"\setlength{\LTleft}{0pt}")
+    lines.append(r"\setlength{\LTright}{0pt}")
+    lines.append(rf"\begin{{longtable}}{{|{colspec}|}}")
     lines.append(r"\hline")
     header_cells = [rf"\textbf{{{_render_inline_markdown(cell)}}}" for cell in headers]
     header_row = " & ".join(header_cells) + r" \\"
     lines.append(header_row)
     lines.append(r"\hline")
+    lines.append(r"\endfirsthead")
+    lines.append(r"\hline")
+    lines.append(header_row)
+    lines.append(r"\hline")
+    lines.append(r"\endhead")
+    lines.append(r"\hline")
+    lines.append(r"\endfoot")
+    lines.append(r"\hline")
+    lines.append(r"\endlastfoot")
     for row in rows:
         padded = row[: len(headers)] + [""] * max(0, len(headers) - len(row))
         row_cells = [_render_inline_markdown(cell) for cell in padded[: len(headers)]]
         row_line = " & ".join(row_cells) + r" \\"
         lines.append(row_line)
         lines.append(r"\hline")
-    lines.append(r"\end{tabularx}")
+    lines.append(r"\end{longtable}")
+    lines.append(r"}")
     return lines
 
 
@@ -134,10 +216,11 @@ def markdown_to_latex(
         r"\usepackage[utf8]{inputenc}",
         r"\usepackage{lmodern}",
         r"\usepackage{hyperref}",
-        r"\usepackage{tabularx}",
+        r"\usepackage{longtable}",
         r"\usepackage{array}",
         r"\usepackage{ragged2e}",
-        r"\newcolumntype{Y}{>{\RaggedRight\arraybackslash}X}",
+        r"\newcolumntype{L}[1]{>{\RaggedRight\arraybackslash}p{#1}}",
+        r"\newcolumntype{R}[1]{>{\RaggedLeft\arraybackslash}p{#1}}",
         r"\renewcommand{\arraystretch}{1.05}",
         r"\setlength{\parskip}{4pt}",
         r"\setlength{\parindent}{0pt}",

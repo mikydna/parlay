@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from prop_ev.settlement import grade_seed_rows, settle_snapshot
+from prop_ev.settlement import grade_seed_rows, render_settlement_markdown, settle_snapshot
 
 
 def _seed_row(
@@ -132,6 +132,59 @@ def test_grade_seed_rows_final_push_pending() -> None:
     assert by_key["t3"]["result_reason"] == "in_progress_pending"
     assert by_key["t4"]["result"] == "unresolved"
     assert by_key["t4"]["result_reason"] == "unsupported_market"
+
+
+def test_render_settlement_markdown_uses_compact_labels() -> None:
+    report = {
+        "snapshot_id": "snap-1",
+        "generated_at_utc": "2026-02-12T01:00:00Z",
+        "status": "complete",
+        "counts": {
+            "total": 1,
+            "win": 1,
+            "loss": 0,
+            "push": 0,
+            "pending": 0,
+            "unresolved": 0,
+            "final_games": 1,
+            "in_progress_games": 0,
+            "scheduled_games": 0,
+        },
+        "source_details": {"source": "nba_live_scoreboard_boxscore"},
+        "rows": [
+            {
+                "player": "Player One",
+                "strategy_id": "balanced_combo",
+                "away_team": "Indiana Pacers",
+                "home_team": "Brooklyn Nets",
+                "game": "Indiana Pacers @ Brooklyn Nets",
+                "market": "player_points_rebounds_assists",
+                "recommended_side": "over",
+                "selected_book": "draftkings",
+                "selected_price_american": 125,
+                "model_p_hit": 0.618,
+                "edge_pct": 14.42,
+                "ev_per_100": 14.42,
+                "point": 28.5,
+                "actual_stat_value": 31.0,
+                "result": "win",
+                "result_reason": "final_settled",
+                "game_status": "final",
+                "game_status_text": "Final",
+            }
+        ],
+    }
+
+    markdown = render_settlement_markdown(report)
+
+    assert "| Strategy | Tickets | Avg pHit | Avg Edge% | Avg EV/100 |" in markdown
+    assert "| balanced_combo | 1 | 61.8% | +14.42% | 14.42 |" in markdown
+    assert "| Player | Game | Mkt | Side | Line | Book/Price | pHit | Edge% | EV/100 |" in markdown
+    assert (
+        "| Player One | IND @ BKN | PRA | O | 28.50 | draftkings +125 | 61.8% | +14.42% | "
+        "14.42 | 31 | W | settled | Final |"
+    ) in markdown
+    assert "Legend: `Mkt` uses short labels" in markdown
 
 
 def test_settle_snapshot_writes_artifacts(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

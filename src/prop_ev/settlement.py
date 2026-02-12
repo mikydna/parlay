@@ -9,6 +9,7 @@ from typing import Any
 
 import httpx
 
+from prop_ev.brief_builder import TEAM_ABBREVIATIONS
 from prop_ev.context_sources import (
     BOXSCORE_URL_TEMPLATE,
     TODAYS_SCOREBOARD_URL,
@@ -20,6 +21,32 @@ from prop_ev.context_sources import (
 from prop_ev.latex_renderer import render_pdf_from_markdown
 
 RESULTS_SOURCE = "nba_live_scoreboard_boxscore"
+MARKET_SHORT_LABELS = {
+    "player_points": "P",
+    "player_rebounds": "R",
+    "player_assists": "A",
+    "player_threes": "3PM",
+    "player_points_rebounds_assists": "PRA",
+}
+RESULT_SHORT_LABELS = {
+    "win": "W",
+    "loss": "L",
+    "push": "P",
+    "pending": "PD",
+    "unresolved": "U",
+}
+RESULT_REASON_LABELS = {
+    "final_settled": "settled",
+    "in_progress_pending": "in_progress",
+    "scheduled_pending": "scheduled",
+    "game_not_found": "game_missing",
+    "game_status_unknown": "status_unknown",
+    "player_not_found": "player_missing",
+    "line_missing": "line_missing",
+    "stat_unavailable": "stat_missing",
+    "unsupported_market": "market_unsupported",
+    "unsupported_side": "side_unsupported",
+}
 
 
 def _http_get(url: str, *, timeout_s: float = 12.0) -> httpx.Response:
@@ -287,6 +314,7 @@ def _settle_row(
         "ticket_key": ticket_key,
         "snapshot_id": str(row.get("snapshot_id", "")),
         "event_id": str(row.get("event_id", "")),
+        "strategy_id": str(row.get("strategy_id", "")),
         "game": str(row.get("game", "")),
         "home_team": home_team,
         "away_team": away_team,
@@ -294,6 +322,14 @@ def _settle_row(
         "player": str(row.get("player", "")),
         "market": str(row.get("market", "")),
         "recommended_side": str(row.get("recommended_side", "")),
+        "selected_book": str(row.get("selected_book", "")),
+        "selected_price_american": _safe_float(row.get("selected_price_american")),
+        "model_p_hit": _safe_float(row.get("model_p_hit")),
+        "fair_p_hit": _safe_float(row.get("fair_p_hit")),
+        "edge_pct": _safe_float(row.get("edge_pct")),
+        "ev_per_100": _safe_float(row.get("ev_per_100")),
+        "play_to_american": _safe_float(row.get("play_to_american")),
+        "quarter_kelly": _safe_float(row.get("quarter_kelly")),
         "point": point_value,
         "game_status": "unknown",
         "game_status_text": "",
@@ -387,6 +423,138 @@ def _fmt_num(value: Any) -> str:
     return str(value) if value is not None else ""
 
 
+def _fmt_pct(
+    value: Any, *, assume_fraction: bool = False, signed: bool = False, decimals: int = 1
+) -> str:
+    parsed = _safe_float(value)
+    if parsed is None:
+        return ""
+    if assume_fraction:
+        parsed *= 100.0
+    sign = "+" if signed else ""
+    return f"{parsed:{sign}.{decimals}f}%"
+
+
+def _fmt_american(value: Any) -> str:
+    parsed = _safe_float(value)
+    if parsed is None:
+        return ""
+    integer = int(round(parsed))
+    return f"+{integer}" if integer > 0 else str(integer)
+
+
+def _team_abbrev(team_name: str) -> str:
+    raw = team_name.strip()
+    if not raw:
+        return ""
+    canonical = canonical_team_name(raw)
+    if canonical in TEAM_ABBREVIATIONS:
+        return TEAM_ABBREVIATIONS[canonical]
+    token = raw.replace(".", "").strip()
+    if 2 <= len(token) <= 4 and token.isalpha():
+        return token.upper()
+    words = canonical.split()
+    if words:
+        return words[-1][:3].upper()
+    return raw[:3].upper()
+
+
+def _short_game_label(row: dict[str, Any]) -> str:
+    away = _team_abbrev(str(row.get("away_team", "")))
+    home = _team_abbrev(str(row.get("home_team", "")))
+    if not away or not home:
+        game = str(row.get("game", ""))
+        if "@" in game:
+            away_raw, home_raw = game.split("@", 1)
+            away = away or _team_abbrev(away_raw)
+            home = home or _team_abbrev(home_raw)
+    if away and home:
+        return f"{away} @ {home}"
+    return str(row.get("game", "")).strip()
+
+
+def _market_short_label(market: str) -> str:
+    raw = market.strip().lower()
+    return MARKET_SHORT_LABELS.get(raw, raw.replace("player_", "").upper())
+
+
+def _side_short_label(side: str) -> str:
+    raw = side.strip().lower()
+    if raw == "over":
+        return "O"
+    if raw == "under":
+        return "U"
+    return raw.upper()
+
+
+def _result_short_label(result: str) -> str:
+    raw = result.strip().lower()
+    return RESULT_SHORT_LABELS.get(raw, raw.upper())
+
+
+def _reason_short_label(reason: str) -> str:
+    raw = reason.strip().lower()
+    return RESULT_REASON_LABELS.get(raw, raw)
+
+
+def _book_price_label(book: str, price: Any) -> str:
+    price_text = _fmt_american(price)
+    book_text = book.strip().lower()
+    if book_text and price_text:
+        return f"{book_text} {price_text}"
+    return price_text or book_text
+
+
+def _strategy_seed_summary(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    grouped: dict[str, dict[str, float]] = {}
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        strategy = str(row.get("strategy_id", "")).strip() or "unknown"
+        bucket = grouped.setdefault(
+            strategy,
+            {
+                "rows": 0.0,
+                "edge_total": 0.0,
+                "edge_n": 0.0,
+                "ev_total": 0.0,
+                "ev_n": 0.0,
+                "phit_total": 0.0,
+                "phit_n": 0.0,
+            },
+        )
+        bucket["rows"] += 1.0
+        edge = _safe_float(row.get("edge_pct"))
+        if edge is not None:
+            bucket["edge_total"] += edge
+            bucket["edge_n"] += 1.0
+        ev = _safe_float(row.get("ev_per_100"))
+        if ev is not None:
+            bucket["ev_total"] += ev
+            bucket["ev_n"] += 1.0
+        phit = _safe_float(row.get("model_p_hit"))
+        if phit is not None:
+            bucket["phit_total"] += phit
+            bucket["phit_n"] += 1.0
+
+    summary_rows: list[dict[str, Any]] = []
+    for strategy, bucket in sorted(grouped.items(), key=lambda item: item[0]):
+        summary_rows.append(
+            {
+                "strategy_id": strategy,
+                "rows": int(bucket["rows"]),
+                "avg_edge_pct": (
+                    bucket["edge_total"] / bucket["edge_n"] if bucket["edge_n"] else None
+                ),
+                "avg_ev_per_100": bucket["ev_total"] / bucket["ev_n"] if bucket["ev_n"] else None,
+                "avg_model_p_hit": (
+                    bucket["phit_total"] / bucket["phit_n"] if bucket["phit_n"] else None
+                ),
+            }
+        )
+    return summary_rows
+
+
 def render_settlement_markdown(report: dict[str, Any]) -> str:
     """Render deterministic markdown for ticket settlement."""
     summary = report.get("counts", {}) if isinstance(report.get("counts"), dict) else {}
@@ -423,7 +591,26 @@ def render_settlement_markdown(report: dict[str, Any]) -> str:
             summary.get("scheduled_games", 0),
         )
     )
-    lines.append("")
+    strategy_rows = _strategy_seed_summary(rows)
+    if strategy_rows:
+        lines.append("## Strategy Inputs (Seed)")
+        lines.append("")
+        lines.append("| Strategy | Tickets | Avg pHit | Avg Edge% | Avg EV/100 |")
+        lines.append("| --- | --- | --- | --- | --- |")
+        for item in strategy_rows:
+            if not isinstance(item, dict):
+                continue
+            lines.append(
+                "| {} | {} | {} | {} | {} |".format(
+                    item.get("strategy_id", ""),
+                    item.get("rows", 0),
+                    _fmt_pct(item.get("avg_model_p_hit"), assume_fraction=True, decimals=1),
+                    _fmt_pct(item.get("avg_edge_pct"), signed=True, decimals=2),
+                    _fmt_num(item.get("avg_ev_per_100")),
+                )
+            )
+        lines.append("")
+
     lines.append("## Tickets")
     lines.append("")
     if not rows:
@@ -431,25 +618,35 @@ def render_settlement_markdown(report: dict[str, Any]) -> str:
         return "\n".join(lines) + "\n"
 
     lines.append(
-        "| Ticket | Game | Market | Side | Line | Actual | Result | Reason | Game Status |"
+        "| Player | Game | Mkt | Side | Line | Book/Price | pHit | Edge% | EV/100 | "
+        "Actual | Result | Reason | Status |"
     )
-    lines.append("| --- | --- | --- | --- | --- | --- | --- | --- | --- |")
+    lines.append("| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |")
     for row in rows:
         if not isinstance(row, dict):
             continue
         lines.append(
-            "| {} | {} | {} | {} | {} | {} | {} | {} | {} |".format(
-                row.get("ticket", ""),
-                row.get("game", ""),
-                row.get("market", ""),
-                str(row.get("recommended_side", "")).upper(),
+            "| {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} |".format(
+                row.get("player", ""),
+                _short_game_label(row),
+                _market_short_label(str(row.get("market", ""))),
+                _side_short_label(str(row.get("recommended_side", ""))),
                 _fmt_num(row.get("point")),
+                _book_price_label(
+                    str(row.get("selected_book", "")),
+                    row.get("selected_price_american"),
+                ),
+                _fmt_pct(row.get("model_p_hit"), assume_fraction=True, decimals=1),
+                _fmt_pct(row.get("edge_pct"), signed=True, decimals=2),
+                _fmt_num(row.get("ev_per_100")),
                 _fmt_num(row.get("actual_stat_value")),
-                row.get("result", ""),
-                row.get("result_reason", ""),
+                _result_short_label(str(row.get("result", ""))),
+                _reason_short_label(str(row.get("result_reason", ""))),
                 row.get("game_status_text", "") or row.get("game_status", ""),
             )
         )
+    lines.append("")
+    lines.append("Legend: `Mkt` uses short labels (P, R, A, 3PM, PRA). `Side`: O/U.")
     lines.append("")
     lines.append(
         "In-progress and scheduled games remain `pending` until final boxscores are available."
@@ -464,6 +661,7 @@ def _write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
         "ticket_key",
         "snapshot_id",
         "event_id",
+        "strategy_id",
         "game",
         "home_team",
         "away_team",
@@ -471,6 +669,14 @@ def _write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
         "player",
         "market",
         "recommended_side",
+        "selected_book",
+        "selected_price_american",
+        "model_p_hit",
+        "fair_p_hit",
+        "edge_pct",
+        "ev_per_100",
+        "play_to_american",
+        "quarter_kelly",
         "point",
         "game_status",
         "game_status_text",

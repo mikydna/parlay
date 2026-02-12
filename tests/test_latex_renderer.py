@@ -28,7 +28,8 @@ def test_markdown_to_latex_table() -> None:
         "| LEAN | player_prop | A UNDER 10.5 points @ +100 (book) | 0.05 | 0.03 | note |\n"
     )
     tex = markdown_to_latex(markdown, title="NBA Strategy Brief")
-    assert "\\begin{tabularx}{\\textwidth}" in tex
+    assert "\\begin{longtable}" in tex
+    assert "\\endfirsthead" in tex
     assert "\\textbf{Action}" in tex
     assert "A UNDER 10.5 points @ +100 (book)" in tex
 
