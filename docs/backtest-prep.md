@@ -45,3 +45,33 @@ jq . data/odds_api/snapshots/<snapshot_id>/reports/backtest-readiness.json
 ```
 
 `ready_for_backtest_seed=true` means snapshot inputs are complete enough for grading prep.
+
+## 4) Auto settlement (final + in-progress)
+
+Use the settlement command to fetch NBA live boxscores and grade seeded tickets.
+
+```bash
+uv run prop-ev strategy settle --snapshot-id <snapshot_id> --refresh-results
+```
+
+Outputs:
+
+- `data/odds_api/snapshots/<snapshot_id>/reports/backtest-settlement.json`
+- `data/odds_api/snapshots/<snapshot_id>/reports/backtest-settlement.md`
+- `data/odds_api/snapshots/<snapshot_id>/reports/backtest-settlement.tex`
+- `data/odds_api/snapshots/<snapshot_id>/reports/backtest-settlement.pdf`
+- `data/odds_api/snapshots/<snapshot_id>/reports/backtest-settlement.meta.json`
+- optional CSV via `--write-csv`:
+  `data/odds_api/snapshots/<snapshot_id>/reports/backtest-settlement.csv`
+
+Behavior:
+
+- Final games are graded `win|loss|push`.
+- In-progress and scheduled games remain `pending`.
+- Rows that cannot be resolved (missing player/game, unsupported market) are `unresolved`.
+
+Exit codes:
+
+- `0`: all rows fully settled (`win|loss|push`)
+- `1`: partial settlement (`pending` or `unresolved` rows remain)
+- `2`: command failure (missing seed, fetch/cache error, invalid payload)

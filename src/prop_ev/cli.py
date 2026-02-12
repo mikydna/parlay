@@ -37,6 +37,7 @@ from prop_ev.odds_client import (
 )
 from prop_ev.playbook import budget_snapshot, compute_live_window, generate_brief_for_snapshot
 from prop_ev.settings import Settings
+from prop_ev.settlement import settle_snapshot
 from prop_ev.storage import SnapshotStore, make_snapshot_id, request_hash
 from prop_ev.strategy import build_strategy_report, load_jsonl, write_strategy_reports
 
@@ -1427,6 +1428,59 @@ def _cmd_strategy_backtest_prep(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_strategy_settle(args: argparse.Namespace) -> int:
+    store = SnapshotStore(os.environ.get("PROP_EV_DATA_DIR", "data/odds_api"))
+    snapshot_id = args.snapshot_id or _latest_snapshot_id(store)
+    snapshot_dir = store.snapshot_dir(snapshot_id)
+    seed_path = (
+        Path(str(args.seed_path)).expanduser()
+        if str(getattr(args, "seed_path", "")).strip()
+        else snapshot_dir / "reports" / "backtest-seed.jsonl"
+    )
+
+    report = settle_snapshot(
+        snapshot_dir=snapshot_dir,
+        snapshot_id=snapshot_id,
+        seed_path=seed_path,
+        offline=bool(args.offline),
+        refresh_results=bool(args.refresh_results),
+        write_csv=bool(args.write_csv),
+    )
+
+    if bool(getattr(args, "json_output", True)):
+        print(json.dumps(report, sort_keys=True, indent=2))
+    else:
+        counts = report.get("counts", {}) if isinstance(report.get("counts"), dict) else {}
+        artifacts = report.get("artifacts", {}) if isinstance(report.get("artifacts"), dict) else {}
+        print(
+            (
+                "snapshot_id={} status={} exit_code={} total={} win={} loss={} push={} "
+                "pending={} unresolved={} pdf_status={}"
+            ).format(
+                snapshot_id,
+                report.get("status", ""),
+                report.get("exit_code", 1),
+                counts.get("total", 0),
+                counts.get("win", 0),
+                counts.get("loss", 0),
+                counts.get("push", 0),
+                counts.get("pending", 0),
+                counts.get("unresolved", 0),
+                report.get("pdf_status", ""),
+            )
+        )
+        print(f"settlement_json={artifacts.get('json', '')}")
+        print(f"settlement_md={artifacts.get('md', '')}")
+        print(f"settlement_tex={artifacts.get('tex', '')}")
+        print(f"settlement_pdf={artifacts.get('pdf', '')}")
+        print(f"settlement_meta={artifacts.get('meta', '')}")
+        csv_artifact = str(artifacts.get("csv", "")).strip()
+        if csv_artifact:
+            print(f"settlement_csv={csv_artifact}")
+
+    return int(report.get("exit_code", 1))
+
+
 def _load_slate_rows(store: SnapshotStore, snapshot_id: str) -> list[dict[str, Any]]:
     path = store.derived_path(snapshot_id, "featured_odds.jsonl")
     if not path.exists():
@@ -2198,6 +2252,33 @@ def _build_parser() -> argparse.ArgumentParser:
         "--selection", choices=sorted(ROW_SELECTIONS), default="eligible"
     )
     strategy_backtest_prep.add_argument("--top-n", type=int, default=0)
+
+    strategy_settle = strategy_subparsers.add_parser(
+        "settle", help="Grade backtest seed tickets using live NBA boxscore results"
+    )
+    strategy_settle.set_defaults(func=_cmd_strategy_settle)
+    strategy_settle.add_argument("--snapshot-id", default="")
+    strategy_settle.add_argument(
+        "--seed-path",
+        default="",
+        help="Optional override path to backtest seed jsonl",
+    )
+    strategy_settle.add_argument("--offline", action="store_true")
+    strategy_settle.add_argument("--refresh-results", action="store_true")
+    strategy_settle.add_argument("--write-csv", action="store_true")
+    strategy_settle.add_argument(
+        "--json",
+        dest="json_output",
+        action="store_true",
+        default=True,
+        help="Emit JSON output (default)",
+    )
+    strategy_settle.add_argument(
+        "--no-json",
+        dest="json_output",
+        action="store_false",
+        help="Emit compact text output",
+    )
 
     playbook = subparsers.add_parser("playbook", help="Run playbook briefs")
     playbook_subparsers = playbook.add_subparsers(dest="playbook_command")
