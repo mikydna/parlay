@@ -64,6 +64,31 @@ Required keys:
 - `eligible_lines`
 - `generated_at_utc`
 
+## Settlement Contract
+
+Path:
+- `data/odds_api/snapshots/<snapshot_id>/reports/backtest-settlement.json`
+
+Required top-level keys:
+- `snapshot_id`
+- `generated_at_utc`
+- `status`
+- `exit_code`
+- `counts`
+- `source_details`
+- `rows`
+
+`source_details` required keys:
+- `source`
+- `fetched_at_utc`
+- `status`
+- `offline`
+- `refresh_results`
+- `results_cache_path`
+
+`source_details` optional keys:
+- `results_source_mode` (present only when `--results-source` is explicitly set)
+
 ## Health Gate Reason Codes
 
 Primary strategy/playbook health gates:
