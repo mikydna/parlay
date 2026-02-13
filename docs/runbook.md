@@ -10,11 +10,13 @@ OPENAI_API_KEY="$(tr -d '\r\n' < OPENAI_KEY.ignore)" \
 uv run prop-ev playbook run \
   --markets player_points \
   --max-events 10 \
-  --max-credits 20
+  --max-credits 20 \
+  --exit-on-no-games
 ```
 
 Behavior:
 - always checks events first (free endpoint),
+- exits `0` early on no-slate windows when `--exit-on-no-games` is enabled,
 - runs live snapshot only when inside configured window and paid calls are allowed,
 - otherwise falls back to latest cached snapshot,
 - always runs strategy + brief generation after snapshot selection.

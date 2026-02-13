@@ -72,6 +72,7 @@ STRATEGY_DESCRIPTION_KEY = {
 PLAYBOOK_MODE_KEY = {
     "explicit_snapshot": "Used the exact snapshot id passed by the operator.",
     "offline_forced_latest": "Offline mode forced reuse of latest cached snapshot.",
+    "no_games_exit": "No events found; exited early without strategy or brief generation.",
     "live_snapshot": "Inside live window and allowed to fetch paid odds snapshot.",
     "offline_context_gate": "Context preflight failed; reused latest cached snapshot.",
     "offline_paid_block": "Paid odds calls blocked; reused latest cached snapshot.",

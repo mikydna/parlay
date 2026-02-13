@@ -14,8 +14,12 @@ OPENAI_API_KEY="$(tr -d '\r\n' < OPENAI_KEY.ignore)" \
 uv run prop-ev playbook run \
   --markets player_points \
   --max-events 10 \
-  --max-credits 20
+  --max-credits 20 \
+  --exit-on-no-games
 ```
+
+`--exit-on-no-games` returns `0` without running strategy/brief generation when
+events lookup is empty.
 
 If `--bookmakers` is not passed, the command uses `config/bookmakers.json`
 (default: `draftkings,fanduel`).
