@@ -38,6 +38,19 @@ uv run pyright
 uv run pytest -q
 ```
 
+## NBA Data CLI (`nba-data`)
+
+Use `nba-data` for resumable historical NBA data ingestion (separate from `prop-ev`):
+
+```bash
+uv run nba-data discover --seasons 2023-24,2024-25,2025-26 --season-type "Regular Season"
+uv run nba-data ingest --seasons 2023-24,2024-25,2025-26 --season-type "Regular Season"
+uv run nba-data clean --seasons 2023-24,2024-25,2025-26 --season-type "Regular Season"
+uv run nba-data verify --seasons 2023-24,2024-25,2025-26 --season-type "Regular Season"
+```
+
+Artifacts are written under `data/nba_data`. Ingest is resume-safe and skips already valid raw mirrors.
+
 ## Snapshot Workflow
 
 Create a slate snapshot (featured spreads/totals):
