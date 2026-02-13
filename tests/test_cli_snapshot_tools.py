@@ -269,13 +269,13 @@ def test_strategy_run_from_snapshot(local_data_dir: Path) -> None:
     )
     assert (snapshot_dir / "reports" / "strategy-report.json").exists()
     assert (snapshot_dir / "reports" / "strategy-report.md").exists()
-    assert (snapshot_dir / "reports" / "strategy-report.s001.json").exists()
-    assert (snapshot_dir / "reports" / "strategy-report.s001.md").exists()
     assert (snapshot_dir / "reports" / "backtest-seed.jsonl").exists()
     assert (snapshot_dir / "reports" / "backtest-readiness.json").exists()
-    assert (snapshot_dir / "reports" / "backtest-seed.s001.jsonl").exists()
-    assert (snapshot_dir / "reports" / "backtest-results-template.s001.csv").exists()
-    assert (snapshot_dir / "reports" / "backtest-readiness.s001.json").exists()
+    assert not (snapshot_dir / "reports" / "strategy-report.s001.json").exists()
+    assert not (snapshot_dir / "reports" / "strategy-report.s001.md").exists()
+    assert not (snapshot_dir / "reports" / "backtest-seed.s001.jsonl").exists()
+    assert not (snapshot_dir / "reports" / "backtest-results-template.s001.csv").exists()
+    assert not (snapshot_dir / "reports" / "backtest-readiness.s001.json").exists()
 
     assert (
         main(
@@ -669,7 +669,6 @@ def test_playbook_publish_copies_only_compact_outputs(local_data_dir: Path) -> N
     reports_dir = store.ensure_snapshot(snapshot_id) / "reports"
     reports_dir.mkdir(parents=True, exist_ok=True)
     (reports_dir / "strategy-report.json").write_text("{}\n", encoding="utf-8")
-    (reports_dir / "strategy-brief.md").write_text("# Brief\n", encoding="utf-8")
     (reports_dir / "strategy-brief.meta.json").write_text("{}\n", encoding="utf-8")
     (reports_dir / "brief-input.json").write_text("{}\n", encoding="utf-8")
 
@@ -684,14 +683,14 @@ def test_playbook_publish_copies_only_compact_outputs(local_data_dir: Path) -> N
     daily_dir = reports_root / "daily" / "2026-02-11" / f"snapshot={snapshot_id}"
     latest_dir = reports_root / "latest"
     assert (daily_dir / "strategy-report.json").exists()
-    assert (daily_dir / "strategy-brief.md").exists()
     assert (daily_dir / "strategy-brief.meta.json").exists()
     assert (daily_dir / "publish.json").exists()
     assert (latest_dir / "strategy-report.json").exists()
-    assert (latest_dir / "strategy-brief.md").exists()
     assert (latest_dir / "strategy-brief.meta.json").exists()
     assert (latest_dir / "latest.json").exists()
     assert not (daily_dir / "brief-input.json").exists()
+    assert not (daily_dir / "strategy-brief.md").exists()
+    assert not (latest_dir / "strategy-brief.md").exists()
 
 
 def test_playbook_publish_derives_date_for_legacy_daily_snapshot_id(local_data_dir: Path) -> None:
@@ -700,7 +699,6 @@ def test_playbook_publish_derives_date_for_legacy_daily_snapshot_id(local_data_d
     reports_dir = store.ensure_snapshot(snapshot_id) / "reports"
     reports_dir.mkdir(parents=True, exist_ok=True)
     (reports_dir / "strategy-report.json").write_text("{}\n", encoding="utf-8")
-    (reports_dir / "strategy-brief.md").write_text("# Brief\n", encoding="utf-8")
     (reports_dir / "strategy-brief.meta.json").write_text("{}\n", encoding="utf-8")
 
     assert (
@@ -744,4 +742,5 @@ def test_global_reports_dir_override_from_subcommand_position(
     )
     out = capsys.readouterr().out
     assert f"daily_dir={override_root / 'daily' / '2026-02-11' / f'snapshot={snapshot_id}'}" in out
-    assert (override_root / "latest" / "strategy-brief.md").exists()
+    assert (override_root / "latest" / "strategy-report.json").exists()
+    assert (override_root / "latest" / "strategy-brief.meta.json").exists()

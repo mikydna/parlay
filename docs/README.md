@@ -13,6 +13,7 @@ This folder is split into two groups:
 - `nba-data.md` and `nba-data-schemas.md` — NBA lake module + schema docs.
 - `plan.md` — canonical engineering/product roadmap and milestone plan.
 - `strat-odds-api-integration.md` — source-policy rationale and integration context.
+- `issue-P0-lake-boundary-and-report-separation.md` — blocking storage-contract issue for strict lake/report separation.
 
 ## Archived
 

@@ -244,7 +244,6 @@ Strategy report health now includes:
 - automatic mode downgrade to `watchlist_only` when required data is missing/stale.
 
 Latest mirrors:
-- `data/odds_api/reports/latest/strategy-brief.md`
 - `data/odds_api/reports/latest/strategy-brief.meta.json`
 - `data/odds_api/reports/latest/strategy-report.json`
 - `data/odds_api/reports/latest/strategy-brief.pdf` (if generated)
