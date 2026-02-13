@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import pytest
 
-from prop_ev.models.v0_minutes_usage import market_side_adjustment_v0, minutes_usage_v0
+from prop_ev.models.core_minutes_usage import market_side_adjustment_core, minutes_usage_core
 
 
-def test_minutes_usage_v0_standard_case() -> None:
-    projection = minutes_usage_v0(
+def test_minutes_usage_core_standard_case() -> None:
+    projection = minutes_usage_core(
         market="player_points",
         injury_status="questionable",
         roster_status="active",
@@ -22,8 +22,8 @@ def test_minutes_usage_v0_standard_case() -> None:
     }
 
 
-def test_minutes_usage_v0_clamps_usage_and_minutes() -> None:
-    projection = minutes_usage_v0(
+def test_minutes_usage_core_clamps_usage_and_minutes() -> None:
+    projection = minutes_usage_core(
         market="player_points",
         injury_status="doubtful",
         roster_status="unknown_roster",
@@ -39,8 +39,8 @@ def test_minutes_usage_v0_clamps_usage_and_minutes() -> None:
     }
 
 
-def test_market_side_adjustment_v0_standard_case() -> None:
-    delta = market_side_adjustment_v0(
+def test_market_side_adjustment_core_standard_case() -> None:
+    delta = market_side_adjustment_core(
         market="player_points",
         minutes_projection={"minutes_delta": -1.3, "usage_delta": 0.02},
         opponent_counts={"out": 1, "out_for_season": 0},
@@ -49,13 +49,13 @@ def test_market_side_adjustment_v0_standard_case() -> None:
     assert delta == pytest.approx(0.0086, abs=1e-6)
 
 
-def test_market_side_adjustment_v0_caps_bounds() -> None:
-    positive = market_side_adjustment_v0(
+def test_market_side_adjustment_core_caps_bounds() -> None:
+    positive = market_side_adjustment_core(
         market="player_points_rebounds_assists",
         minutes_projection={"minutes_delta": 20.0, "usage_delta": 0.5},
         opponent_counts={"out": 10, "out_for_season": 0},
     )
-    negative = market_side_adjustment_v0(
+    negative = market_side_adjustment_core(
         market="player_turnovers",
         minutes_projection={"minutes_delta": -30.0, "usage_delta": -0.5},
         opponent_counts={"out": 10, "out_for_season": 0},

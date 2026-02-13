@@ -1,9 +1,9 @@
-"""Deterministic v0 minutes/usage projection helpers."""
+"""Deterministic core minutes/usage projection helpers."""
 
 from __future__ import annotations
 
 
-def minutes_usage_v0(
+def minutes_usage_core(
     *,
     market: str,
     injury_status: str,
@@ -11,7 +11,7 @@ def minutes_usage_v0(
     teammate_counts: dict[str, int],
     spread_abs: float | None,
 ) -> dict[str, float]:
-    """Simple deterministic minutes/usage projection layer (v0)."""
+    """Simple deterministic minutes/usage projection layer (core model)."""
     baseline_minutes_by_market = {
         "player_points": 31.0,
         "player_rebounds": 30.0,
@@ -57,7 +57,7 @@ def minutes_usage_v0(
     }
 
 
-def market_side_adjustment_v0(
+def market_side_adjustment_core(
     *,
     market: str,
     minutes_projection: dict[str, float],

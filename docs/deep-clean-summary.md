@@ -14,8 +14,8 @@
 - Centralized context source readiness logic:
   - `src/prop_ev/context_health.py`
   - wrapper-compatible usage in `src/prop_ev/cli.py` and `src/prop_ev/strategy.py`.
-- Extracted v0 minutes/usage model logic:
-  - `src/prop_ev/models/v0_minutes_usage.py`
+- Extracted core minutes/usage model logic:
+  - `src/prop_ev/models/core_minutes_usage.py`
   - wrapper-compatible strategy integration.
 - Added low-risk CLI internal delegation:
   - `src/prop_ev/cli_internal.py`
@@ -25,7 +25,7 @@
   - `tests/test_time_utils.py`
   - `tests/test_odds_math.py`
   - `tests/test_context_health.py`
-  - `tests/test_v0_minutes_usage.py`
+  - `tests/test_core_minutes_usage.py`
 - Added operator and contract docs:
   - `docs/runbook.md`
   - `docs/contracts.md`

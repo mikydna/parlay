@@ -16,7 +16,7 @@ def test_get_strategy_accepts_s00x_ids() -> None:
 
 def test_get_strategy_rejects_legacy_ids() -> None:
     with pytest.raises(ValueError, match="unknown strategy id"):
-        get_strategy("v0")
+        get_strategy("legacy_core")
 
 
 def test_parse_strategy_ids_dedupes_s00x_ids() -> None:

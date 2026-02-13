@@ -14,7 +14,7 @@ from prop_ev.brief_builder import TEAM_ABBREVIATIONS
 from prop_ev.context_health import official_rows_count
 from prop_ev.context_sources import canonical_team_name, normalize_person_name
 from prop_ev.identity_map import name_aliases
-from prop_ev.models.v0_minutes_usage import market_side_adjustment_v0, minutes_usage_v0
+from prop_ev.models.core_minutes_usage import market_side_adjustment_core, minutes_usage_core
 from prop_ev.odds_math import (
     american_to_decimal,
     decimal_to_american,
@@ -558,7 +558,7 @@ def _count_team_status(rows: list[dict[str, Any]], exclude_player_norm: str) -> 
     return counts
 
 
-def _minutes_usage_v0(
+def _minutes_usage_core(
     *,
     market: str,
     injury_status: str,
@@ -566,7 +566,7 @@ def _minutes_usage_v0(
     teammate_counts: dict[str, int],
     spread_abs: float | None,
 ) -> dict[str, float]:
-    return minutes_usage_v0(
+    return minutes_usage_core(
         market=market,
         injury_status=injury_status,
         roster_status=roster_status,
@@ -575,13 +575,13 @@ def _minutes_usage_v0(
     )
 
 
-def _market_side_adjustment_v0(
+def _market_side_adjustment_core(
     *,
     market: str,
     minutes_projection: dict[str, float],
     opponent_counts: dict[str, int],
 ) -> float:
-    return market_side_adjustment_v0(
+    return market_side_adjustment_core(
         market=market,
         minutes_projection=minutes_projection,
         opponent_counts=opponent_counts,
@@ -1114,7 +1114,7 @@ def _compose_rationale(
         )
     if projected_minutes is not None and usage_delta is not None:
         bits.append(
-            f"Minutes/usage v0 projects about {projected_minutes:.1f} minutes "
+            f"Minutes/usage core model projects about {projected_minutes:.1f} minutes "
             f"with usage delta {usage_delta:+.2%}."
         )
     if injury_status in {"questionable", "doubtful", "day_to_day"}:
@@ -1483,14 +1483,14 @@ def build_strategy_report(
             opponent_counts=opponent_counts,
             spread_abs=spread_abs,
         )
-        minutes_projection = _minutes_usage_v0(
+        minutes_projection = _minutes_usage_core(
             market=market,
             injury_status=injury_status,
             roster_status=roster_status,
             teammate_counts=teammate_counts,
             spread_abs=spread_abs,
         )
-        market_delta = _market_side_adjustment_v0(
+        market_delta = _market_side_adjustment_core(
             market=market,
             minutes_projection=minutes_projection,
             opponent_counts=opponent_counts,
@@ -1857,8 +1857,8 @@ def build_strategy_report(
     gaps.extend(
         [
             "Model uses market-implied fair probabilities with injury/roster/opponent adjustments.",
-            "Minutes/usage projection uses deterministic v0 rules, not learned distributions.",
-            "SGP/SGPx correlation uses deterministic haircut rules (v0).",
+            "Minutes/usage projection uses deterministic core rules, not learned distributions.",
+            "SGP/SGPx correlation uses deterministic haircut rules (core model).",
         ]
     )
 
