@@ -742,4 +742,5 @@ def test_global_reports_dir_override_from_subcommand_position(
     )
     out = capsys.readouterr().out
     assert f"daily_dir={override_root / 'daily' / '2026-02-11' / f'snapshot={snapshot_id}'}" in out
-    assert (override_root / "latest" / "strategy-brief.md").exists()
+    assert (override_root / "latest" / "strategy-report.json").exists()
+    assert (override_root / "latest" / "strategy-brief.meta.json").exists()

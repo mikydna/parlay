@@ -682,10 +682,6 @@ def generate_brief_for_snapshot(
         landscape=True,
     )
 
-    latest_dir = report_outputs_root(store) / "latest"
-    published: dict[str, str] = {}
-    if not safe_tag:
-        published = _publish_latest(reports_dir, latest_dir, snapshot_id)
     meta = {
         "schema_version": 1,
         "generated_at_utc": _now_utc(),
@@ -710,8 +706,16 @@ def generate_brief_for_snapshot(
         "latest": {},
     }
     meta_path = reports_dir / f"strategy-brief.meta{suffix}.json"
-    meta["latest"] = published
     _write_json(meta_path, meta)
+    latest_dir = report_outputs_root(store) / "latest"
+    published: dict[str, str] = {}
+    if not safe_tag:
+        published = _publish_latest(reports_dir, latest_dir, snapshot_id)
+        meta["latest"] = published
+        _write_json(meta_path, meta)
+        latest_meta_path = latest_dir / meta_path.name
+        if latest_meta_path.exists():
+            copy2(meta_path, latest_meta_path)
 
     published_paths = _publish_snapshot_outputs(
         snapshot_output_dir=_snapshot_output_dir(store=store, snapshot_id=snapshot_id),
