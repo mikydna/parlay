@@ -54,6 +54,16 @@ uv run nba-data export raw-archive --data-dir data/nba_data --dst-data-dir ../pa
 
 Artifacts are written under `data/nba_data`. Ingest is resume-safe and skips already valid raw mirrors.
 
+## Unified NBA Handle
+
+Runtime NBA reads now flow through one repository handle (`NBARepository`) for:
+
+- settlement results (historical/live/cache policy),
+- injury context,
+- roster context.
+
+Consumer modules should not fetch NBA endpoints directly.
+
 ## Snapshot Workflow
 
 Create a slate snapshot (featured spreads/totals):
@@ -162,12 +172,14 @@ Rebuild backtest artifacts for any snapshot:
 
 ```bash
 uv run prop-ev strategy backtest-prep --snapshot-id <SNAPSHOT_ID> --selection eligible
+uv run prop-ev strategy settle --snapshot-id <SNAPSHOT_ID> --results-source auto --refresh-results
 uv run prop-ev strategy backtest-summarize --snapshot-id <SNAPSHOT_ID> --strategies v0,baseline_median_novig
 ```
 
 Strategy context caches are written to:
 - `data/odds_api/snapshots/<SNAPSHOT_ID>/context/injuries.json`
 - `data/odds_api/snapshots/<SNAPSHOT_ID>/context/roster.json`
+- `data/odds_api/snapshots/<SNAPSHOT_ID>/context/results.json`
 - `data/odds_api/snapshots/<SNAPSHOT_ID>/context/official_injury_pdf/latest.pdf`
 
 Global context mirrors (for fallback and reruns) are written to:

@@ -55,6 +55,14 @@ def run_verify(
         if dup.height > 0:
             failures.append(f"pbp_events duplicate (game_id,event_num) rows={dup.height}")
 
+    if {"home_team_id", "away_team_id"} <= set(games.columns):
+        missing_home = games.filter(pl.col("home_team_id").fill_null("").str.strip_chars() == "")
+        missing_away = games.filter(pl.col("away_team_id").fill_null("").str.strip_chars() == "")
+        if missing_home.height > 0:
+            failures.append(f"games missing home_team_id rows={missing_home.height}")
+        if missing_away.height > 0:
+            failures.append(f"games missing away_team_id rows={missing_away.height}")
+
     if {"game_id", "possession_id"} <= set(possessions.columns):
         dup = possessions.group_by(["game_id", "possession_id"]).len().filter(pl.col("len") > 1)
         if dup.height > 0:

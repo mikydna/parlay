@@ -159,3 +159,102 @@ def test_clean_build_and_verify(tmp_path: Path) -> None:
     assert code == 1
     assert report["counts"]["games"] == 1
     assert report["warnings"]
+
+
+def test_verify_fails_when_game_team_ids_missing(tmp_path: Path) -> None:
+    layout = build_layout(tmp_path / "nba_data")
+    season = "2025-26"
+    season_type = "Regular Season"
+    game_id = "g-missing-away"
+    schedule_path = layout.schedule_path(season=season, season_type=season_type)
+    atomic_write_json(
+        schedule_path,
+        {
+            "games": [
+                {
+                    "game_id": game_id,
+                    "date": "2026-01-01",
+                    "home_team_id": "1",
+                    "away_team_id": "",
+                }
+            ]
+        },
+    )
+    manifest_path = layout.manifest_path(season=season, season_type=season_type)
+    rows = {}
+    row = ensure_row(rows, season=season, season_type=season_type, game_id=game_id)
+    box_path = layout.raw_resource_path(
+        resource="boxscore",
+        season=season,
+        season_type="regular_season",
+        game_id=game_id,
+        ext="json",
+    )
+    atomic_write_json(
+        box_path,
+        {
+            "players": [
+                {
+                    "team_id": "1",
+                    "player_id": "11",
+                    "minutes": 30,
+                    "points": 10,
+                    "rebounds": 4,
+                    "assists": 3,
+                }
+            ]
+        },
+    )
+    pbp_path = layout.raw_resource_path(
+        resource="enhanced_pbp",
+        season=season,
+        season_type="regular_season",
+        game_id=game_id,
+        ext="jsonl",
+    )
+    atomic_write_jsonl(
+        pbp_path,
+        [
+            {"event_num": 1, "clock": "12:00", "event_type": "jump", "team_id": "1"},
+        ],
+    )
+    poss_path = layout.raw_resource_path(
+        resource="possessions",
+        season=season,
+        season_type="regular_season",
+        game_id=game_id,
+        ext="jsonl",
+    )
+    atomic_write_jsonl(
+        poss_path,
+        [
+            {"possession_id": 1, "start_event_num": 1, "end_event_num": 1, "offense_team_id": "1"},
+        ],
+    )
+    set_resource_ok(
+        root=layout.root, row=row, resource="boxscore", provider="data_nba", path=box_path
+    )
+    set_resource_ok(
+        root=layout.root, row=row, resource="enhanced_pbp", provider="data_nba", path=pbp_path
+    )
+    set_resource_ok(
+        root=layout.root, row=row, resource="possessions", provider="data_nba", path=poss_path
+    )
+    write_manifest_deterministic(manifest_path, rows)
+
+    build_clean(
+        layout=layout,
+        seasons=[season],
+        season_type=season_type,
+        overwrite=True,
+        schema_version=1,
+    )
+    code, report = run_verify(
+        layout=layout,
+        seasons=[season],
+        season_type=season_type,
+        schema_version=1,
+        fail_on_warn=False,
+    )
+    assert code == 1
+    assert "games missing away_team_id rows=1" in report["failures"]

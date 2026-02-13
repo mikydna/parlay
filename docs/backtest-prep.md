@@ -48,10 +48,10 @@ jq . data/odds_api/snapshots/<snapshot_id>/reports/backtest-readiness.json
 
 ## 4) Auto settlement (final + in-progress)
 
-Use the settlement command to fetch NBA live boxscores and grade seeded tickets.
+Use the settlement command to load NBA results via the unified repository and grade seeded tickets.
 
 ```bash
-uv run prop-ev strategy settle --snapshot-id <snapshot_id> --refresh-results
+uv run prop-ev strategy settle --snapshot-id <snapshot_id> --refresh-results --results-source auto
 ```
 
 Outputs:
@@ -66,6 +66,12 @@ Outputs:
 
 Behavior:
 
+- Source policy is controlled with `--results-source`:
+  - `auto` (default): historical-first for past snapshots, live-first for same-day snapshots.
+  - `historical`: use historical schedule + boxscores path only.
+  - `live`: use live scoreboard + boxscores path only.
+  - `cache_only`: require existing cached results.
+- `--offline` forces cache-only behavior and ignores `--refresh-results`.
 - Final games are graded `win|loss|push`.
 - In-progress and scheduled games remain `pending`.
 - Rows that cannot be resolved (missing player/game, unsupported market) are `unresolved`.

@@ -72,8 +72,11 @@ def test_strategy_settle_returns_pending_exit_code(
     _write_seed(seed_path, player="Player One", side="over", point=20.5)
 
     monkeypatch.setattr(
-        "prop_ev.settlement.fetch_nba_live_results",
-        lambda *, teams_in_scope: _results_payload(status="in_progress", points=12),
+        "prop_ev.settlement.NBARepository.load_results_for_settlement",
+        lambda self, *, seed_rows, offline, refresh, mode: (
+            _results_payload(status="in_progress", points=12),
+            self.snapshot_dir / "context" / "results.json",
+        ),
     )
 
     code = main(
@@ -108,8 +111,11 @@ def test_strategy_settle_returns_complete_exit_code(
     _write_seed(seed_path, player="Player One", side="over", point=20.5)
 
     monkeypatch.setattr(
-        "prop_ev.settlement.fetch_nba_live_results",
-        lambda *, teams_in_scope: _results_payload(status="final", points=25),
+        "prop_ev.settlement.NBARepository.load_results_for_settlement",
+        lambda self, *, seed_rows, offline, refresh, mode: (
+            _results_payload(status="final", points=25),
+            self.snapshot_dir / "context" / "results.json",
+        ),
     )
 
     code = main(["strategy", "settle", "--snapshot-id", snapshot_id, "--refresh-results"])
@@ -119,3 +125,47 @@ def test_strategy_settle_returns_complete_exit_code(
     assert payload["status"] == "complete"
     assert payload["counts"]["win"] == 1
     assert payload["exit_code"] == 0
+
+
+def test_strategy_settle_offline_forces_cache_only(
+    local_data_dir: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys,
+) -> None:
+    store = SnapshotStore(local_data_dir)
+    snapshot_id = "snap-1"
+    snapshot_dir = store.ensure_snapshot(snapshot_id)
+    seed_path = snapshot_dir / "reports" / "backtest-seed.jsonl"
+    _write_seed(seed_path, player="Player One", side="over", point=20.5)
+    captured: dict[str, object] = {}
+
+    def _fake_load_results(
+        self, *, seed_rows, offline: bool, refresh: bool, mode: str
+    ) -> tuple[dict, Path]:
+        captured["offline"] = offline
+        captured["refresh"] = refresh
+        captured["mode"] = mode
+        return _results_payload(
+            status="final", points=25
+        ), self.snapshot_dir / "context" / "results.json"
+
+    monkeypatch.setattr(
+        "prop_ev.settlement.NBARepository.load_results_for_settlement",
+        _fake_load_results,
+    )
+
+    code = main(
+        [
+            "strategy",
+            "settle",
+            "--snapshot-id",
+            snapshot_id,
+            "--offline",
+            "--refresh-results",
+            "--results-source",
+            "live",
+        ]
+    )
+    _ = capsys.readouterr()
+    assert code == 0
+    assert captured == {"offline": True, "refresh": False, "mode": "cache_only"}
