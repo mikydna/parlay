@@ -42,6 +42,24 @@ STRATEGY_HEALTH_GATE_DETAIL_KEY = {
     "roster_context_stale": "Roster context cache exceeds configured freshness TTL.",
 }
 
+STRATEGY_CODE_BY_ID = {
+    "v0": "s001",
+    "v0_tier_b": "s002",
+    "baseline_median_novig": "s003",
+    "gate_book_pairs_min2": "s004",
+    "gate_hold_cap": "s005",
+    "gate_dispersion_iqr": "s006",
+}
+
+STRATEGY_CODE_KEY = {
+    "s001": "Baseline best-over/best-under no-vig + deterministic v0 adjustments.",
+    "s002": "Same baseline as s001, but forces tier-B (single-book edges) with tighter floor.",
+    "s003": "Median per-book no-vig baseline with fallback to best-sides baseline.",
+    "s004": "Adds gate: require at least 2 books with both over+under at same point.",
+    "s005": "Adds gate: skip lines when median per-book hold exceeds configured cap.",
+    "s006": "Adds gate: skip lines when per-book no-vig IQR exceeds configured cap.",
+}
+
 PLAYBOOK_MODE_KEY = {
     "explicit_snapshot": "Used the exact snapshot id passed by the operator.",
     "offline_forced_latest": "Offline mode forced reuse of latest cached snapshot.",
@@ -73,14 +91,26 @@ def playbook_mode_key() -> dict[str, str]:
     return dict(PLAYBOOK_MODE_KEY)
 
 
+def strategy_code_for_id(strategy_id: str) -> str:
+    return STRATEGY_CODE_BY_ID.get(strategy_id, "")
+
+
+def strategy_code_key() -> dict[str, str]:
+    return dict(STRATEGY_CODE_KEY)
+
+
 def strategy_meta(
     *, strategy_id: str, strategy_name: str, strategy_description: str
 ) -> dict[str, str]:
-    return {
+    payload = {
         "id": strategy_id,
         "name": strategy_name,
         "description": strategy_description,
     }
+    strategy_code = strategy_code_for_id(strategy_id)
+    if strategy_code:
+        payload["code"] = strategy_code
+    return payload
 
 
 def attach_strategy_id_key(
@@ -94,4 +124,22 @@ def attach_strategy_id_key(
     strategy_map = dict(strategy_map)
     strategy_map[strategy_id] = strategy_description
     base["strategy_id"] = strategy_map
+    return base
+
+
+def attach_strategy_code_key(
+    state_key: dict[str, Any] | None, *, strategy_id: str, strategy_description: str
+) -> dict[str, Any]:
+    """Ensure state key includes strategy-code descriptions."""
+    base = dict(state_key) if isinstance(state_key, dict) else {}
+    code_map = base.get("strategy_code", {})
+    if not isinstance(code_map, dict):
+        code_map = {}
+    code_map = dict(STRATEGY_CODE_KEY) | dict(code_map)
+    strategy_code = strategy_code_for_id(strategy_id)
+    if strategy_code:
+        code_map[strategy_code] = STRATEGY_CODE_KEY.get(strategy_code, strategy_description)
+    else:
+        code_map[strategy_id] = strategy_description
+    base["strategy_code"] = code_map
     return base

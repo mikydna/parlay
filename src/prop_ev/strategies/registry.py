@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
+from prop_ev.state_keys import STRATEGY_CODE_BY_ID
 from prop_ev.strategies.base import StrategyPlugin, normalize_strategy_id
 from prop_ev.strategies.baseline_median_novig import BaselineMedianNoVigStrategy
 from prop_ev.strategies.gate_book_pairs_min2 import GateBookPairsMin2Strategy
@@ -15,6 +16,7 @@ STRATEGY_ALIASES = {
     "baseline_core": "v0",
     "baseline_tier_b": "v0_tier_b",
     "baseline_core_tier_b": "v0_tier_b",
+    **{code: strategy_id for strategy_id, code in STRATEGY_CODE_BY_ID.items()},
 }
 
 

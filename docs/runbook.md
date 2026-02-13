@@ -68,6 +68,7 @@ This is current behavior, not a pending proposal.
 
 Strategy IDs:
 - canonical: `v0`, `v0_tier_b`, `baseline_median_novig`, `gate_book_pairs_min2`, `gate_hold_cap`, `gate_dispersion_iqr`
+- code aliases: `s001`, `s002`, `s003`, `s004`, `s005`, `s006`
 - accepted aliases: `baseline`/`baseline_core` -> `v0`; `baseline_tier_b`/`baseline_core_tier_b` -> `v0_tier_b`
 
 ## Key Artifacts

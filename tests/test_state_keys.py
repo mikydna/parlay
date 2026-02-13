@@ -1,5 +1,7 @@
 from prop_ev.state_keys import (
     playbook_mode_key,
+    strategy_code_for_id,
+    strategy_code_key,
     strategy_health_state_key,
     strategy_report_state_key,
 )
@@ -25,6 +27,14 @@ def test_playbook_mode_key_has_live_and_offline_modes() -> None:
     assert "offline_context_gate" in mapping
 
 
+def test_strategy_code_key_has_stable_codes() -> None:
+    mapping = strategy_code_key()
+    assert mapping["s001"]
+    assert mapping["s006"]
+    assert strategy_code_for_id("v0") == "s001"
+    assert strategy_code_for_id("v0_tier_b") == "s002"
+
+
 def test_decorate_report_adds_strategy_id_map() -> None:
     report: dict[str, object] = {
         "summary": {},
@@ -45,8 +55,11 @@ def test_decorate_report_adds_strategy_id_map() -> None:
 
     assert decorated["strategy_id"] == "v0"
     assert decorated["strategy"] == {
+        "code": "s001",
         "id": "v0",
         "name": "v0",
         "description": "Baseline strategy",
     }
+    assert decorated["strategy_code"] == "s001"
     assert decorated["state_key"]["strategy_id"]["v0"] == "Baseline strategy"
+    assert decorated["state_key"]["strategy_code"]["s001"]

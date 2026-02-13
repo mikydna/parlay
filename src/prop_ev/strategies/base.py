@@ -3,7 +3,11 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 from typing import Any, Protocol
 
-from prop_ev.state_keys import attach_strategy_id_key, strategy_meta
+from prop_ev.state_keys import (
+    attach_strategy_code_key,
+    attach_strategy_id_key,
+    strategy_meta,
+)
 
 
 def normalize_strategy_id(value: str) -> str:
@@ -63,13 +67,20 @@ def decorate_report(
 ) -> dict[str, Any]:
     """Attach plugin identity and config to a report without changing its meaning."""
     strategy_id = normalize_strategy_id(strategy.id)
-    report["strategy_id"] = strategy_id
-    report["strategy"] = strategy_meta(
+    strategy_payload = strategy_meta(
         strategy_id=strategy_id,
         strategy_name=strategy.name,
         strategy_description=strategy.description,
     )
+    report["strategy_id"] = strategy_id
+    report["strategy"] = strategy_payload
+    report["strategy_code"] = strategy_payload.get("code", "")
     report["state_key"] = attach_strategy_id_key(
+        report.get("state_key"),
+        strategy_id=strategy_id,
+        strategy_description=strategy.description,
+    )
+    report["state_key"] = attach_strategy_code_key(
         report.get("state_key"),
         strategy_id=strategy_id,
         strategy_description=strategy.description,
