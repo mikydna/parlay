@@ -3,22 +3,22 @@ from __future__ import annotations
 from collections.abc import Iterable
 
 from prop_ev.strategies.base import StrategyPlugin, normalize_strategy_id
-from prop_ev.strategies.baseline_median_novig import BaselineMedianNoVigStrategy
-from prop_ev.strategies.gate_book_pairs_min2 import GateBookPairsMin2Strategy
-from prop_ev.strategies.gate_dispersion_iqr import GateDispersionIQRStrategy
-from prop_ev.strategies.gate_hold_cap import GateHoldCapStrategy
-from prop_ev.strategies.v0 import V0Strategy
-from prop_ev.strategies.v0_tier_b import V0TierBStrategy
+from prop_ev.strategies.s001_baseline_core import S001BaselineCoreStrategy
+from prop_ev.strategies.s002_baseline_core_tier_b import S002BaselineCoreTierBStrategy
+from prop_ev.strategies.s003_median_no_vig_baseline import S003MedianNoVigBaselineStrategy
+from prop_ev.strategies.s004_min2_book_pair_gate import S004Min2BookPairGateStrategy
+from prop_ev.strategies.s005_hold_cap_gate import S005HoldCapGateStrategy
+from prop_ev.strategies.s006_dispersion_iqr_gate import S006DispersionIQRGateStrategy
 
 
 def _registry() -> dict[str, StrategyPlugin]:
     plugins: Iterable[StrategyPlugin] = [
-        V0Strategy(),
-        V0TierBStrategy(),
-        BaselineMedianNoVigStrategy(),
-        GateBookPairsMin2Strategy(),
-        GateHoldCapStrategy(),
-        GateDispersionIQRStrategy(),
+        S001BaselineCoreStrategy(),
+        S002BaselineCoreTierBStrategy(),
+        S003MedianNoVigBaselineStrategy(),
+        S004Min2BookPairGateStrategy(),
+        S005HoldCapGateStrategy(),
+        S006DispersionIQRGateStrategy(),
     ]
     out: dict[str, StrategyPlugin] = {}
     for plugin in plugins:

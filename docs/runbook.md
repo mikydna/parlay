@@ -76,6 +76,11 @@ Strategy IDs:
 
 Legacy IDs are not accepted.
 
+Implementation model:
+- each strategy is a plugin in `src/prop_ev/strategies/`,
+- plugins share a composable recipe layer stack (baseline + optional gates),
+- `uv run prop-ev strategy ls` prints `strategy_id`, title, and description.
+
 ## Key Artifacts
 
 Per snapshot:

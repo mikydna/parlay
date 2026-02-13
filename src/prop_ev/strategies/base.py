@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from typing import Any, Protocol
 
 from prop_ev.state_keys import (
@@ -55,11 +55,86 @@ class StrategyResult:
     config: StrategyRunConfig
 
 
+@dataclass(frozen=True)
+class StrategyRecipe:
+    force_allow_tier_b: bool = False
+    market_baseline_method: str | None = None
+    market_baseline_fallback: str | None = None
+    min_book_pairs: int | None = None
+    hold_cap: float | None = None
+    p_over_iqr_cap: float | None = None
+
+
 class StrategyPlugin(Protocol):
     info: StrategyInfo
 
     def run(self, *, inputs: StrategyInputs, config: StrategyRunConfig) -> StrategyResult:
         raise NotImplementedError
+
+
+def compose_strategy_recipes(*recipes: StrategyRecipe) -> StrategyRecipe:
+    merged = StrategyRecipe()
+    for recipe in recipes:
+        merged = StrategyRecipe(
+            force_allow_tier_b=merged.force_allow_tier_b or bool(recipe.force_allow_tier_b),
+            market_baseline_method=(
+                recipe.market_baseline_method
+                if recipe.market_baseline_method is not None
+                else merged.market_baseline_method
+            ),
+            market_baseline_fallback=(
+                recipe.market_baseline_fallback
+                if recipe.market_baseline_fallback is not None
+                else merged.market_baseline_fallback
+            ),
+            min_book_pairs=(
+                recipe.min_book_pairs
+                if recipe.min_book_pairs is not None
+                else merged.min_book_pairs
+            ),
+            hold_cap=recipe.hold_cap if recipe.hold_cap is not None else merged.hold_cap,
+            p_over_iqr_cap=(
+                recipe.p_over_iqr_cap
+                if recipe.p_over_iqr_cap is not None
+                else merged.p_over_iqr_cap
+            ),
+        )
+    return merged
+
+
+def run_strategy_recipe(
+    *, inputs: StrategyInputs, config: StrategyRunConfig, recipe: StrategyRecipe
+) -> StrategyResult:
+    """Run one strategy as baseline + composable recipe adjustments."""
+    from prop_ev.strategy import build_strategy_report
+
+    effective_config = (
+        replace(config, allow_tier_b=True)
+        if recipe.force_allow_tier_b and not config.allow_tier_b
+        else config
+    )
+    report = build_strategy_report(
+        snapshot_id=inputs.snapshot_id,
+        manifest=inputs.manifest,
+        rows=inputs.rows,
+        top_n=effective_config.top_n,
+        injuries=inputs.injuries,
+        roster=inputs.roster,
+        event_context=inputs.event_context,
+        slate_rows=inputs.slate_rows,
+        player_identity_map=inputs.player_identity_map,
+        min_ev=effective_config.min_ev,
+        allow_tier_b=effective_config.allow_tier_b,
+        require_official_injuries=effective_config.require_official_injuries,
+        stale_quote_minutes=effective_config.stale_quote_minutes,
+        require_fresh_context=effective_config.require_fresh_context,
+        market_baseline_method=recipe.market_baseline_method or "best_sides",
+        market_baseline_fallback=recipe.market_baseline_fallback or "best_sides",
+        min_book_pairs=recipe.min_book_pairs if recipe.min_book_pairs is not None else 0,
+        hold_cap=recipe.hold_cap,
+        p_over_iqr_cap=recipe.p_over_iqr_cap,
+    )
+    return StrategyResult(report=report, config=effective_config)
 
 
 def decorate_report(
