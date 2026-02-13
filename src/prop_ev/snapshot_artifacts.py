@@ -17,9 +17,19 @@ from prop_ev.archive_utils import (
     sha256_file,
     write_tar,
 )
+from prop_ev.quote_table import (
+    EVENT_PROPS_SORT_COLUMNS,
+    EVENT_PROPS_TABLE,
+    FEATURED_ODDS_SORT_COLUMNS,
+    FEATURED_ODDS_TABLE,
+    canonicalize_event_props_rows,
+    canonicalize_featured_odds_rows,
+    validate_event_props_rows,
+    validate_featured_odds_rows,
+)
 
 _TABLE_SCHEMAS: dict[str, list[tuple[str, Any]]] = {
-    "event_props": [
+    EVENT_PROPS_TABLE: [
         ("provider", pl.Utf8),
         ("snapshot_id", pl.Utf8),
         ("schema_version", pl.Int64),
@@ -33,7 +43,7 @@ _TABLE_SCHEMAS: dict[str, list[tuple[str, Any]]] = {
         ("last_update", pl.Utf8),
         ("link", pl.Utf8),
     ],
-    "featured_odds": [
+    FEATURED_ODDS_TABLE: [
         ("provider", pl.Utf8),
         ("snapshot_id", pl.Utf8),
         ("schema_version", pl.Int64),
@@ -48,8 +58,8 @@ _TABLE_SCHEMAS: dict[str, list[tuple[str, Any]]] = {
 }
 
 _SORT_KEYS: dict[str, list[str]] = {
-    "event_props": ["event_id", "market", "player", "side", "book", "point", "price"],
-    "featured_odds": ["game_id", "market", "book", "side", "point", "price"],
+    EVENT_PROPS_TABLE: list(EVENT_PROPS_SORT_COLUMNS),
+    FEATURED_ODDS_TABLE: list(FEATURED_ODDS_SORT_COLUMNS),
 }
 
 
@@ -102,6 +112,12 @@ def lake_snapshot_derived(snapshot_dir: Path) -> list[Path]:
         rows = _load_jsonl(jsonl_path)
         table_name = jsonl_path.stem
         if table_name in _TABLE_SCHEMAS:
+            if table_name == EVENT_PROPS_TABLE:
+                rows = canonicalize_event_props_rows(rows)
+                validate_event_props_rows(rows)
+            elif table_name == FEATURED_ODDS_TABLE:
+                rows = canonicalize_featured_odds_rows(rows)
+                validate_featured_odds_rows(rows)
             frame = _enforce_schema(table_name, pl.DataFrame(rows))
             sort_keys = _SORT_KEYS.get(table_name, [])
             if sort_keys and frame.height > 0:

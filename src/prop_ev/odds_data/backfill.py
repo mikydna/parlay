@@ -21,6 +21,7 @@ from prop_ev.odds_data.day_index import (
     save_dataset_spec,
     save_day_status,
     snapshot_id_for_day,
+    with_day_error,
 )
 from prop_ev.odds_data.errors import CreditBudgetExceeded, OfflineCacheMiss, SpendBlockedError
 from prop_ev.odds_data.policy import SpendPolicy, effective_max_credits
@@ -240,9 +241,7 @@ def backfill_days(
                         day=day,
                         tz_name=tz_name,
                     )
-                    status["error"] = day_error
-                    status["complete"] = False
-                    save_day_status(data_root, spec, day, status)
+                    save_day_status(data_root, spec, day, with_day_error(status, error=day_error))
                     summaries.append(
                         {
                             "day": day,
@@ -330,9 +329,7 @@ def backfill_days(
                         day=day,
                         tz_name=tz_name,
                     )
-                    status["error"] = day_error
-                    status["complete"] = False
-                    save_day_status(data_root, spec, day, status)
+                    save_day_status(data_root, spec, day, with_day_error(status, error=day_error))
                     summaries.append(
                         {
                             "day": day,
@@ -449,8 +446,7 @@ def backfill_days(
                     tz_name=tz_name,
                 )
                 if day_error:
-                    status["error"] = day_error
-                    status["complete"] = False
+                    status = with_day_error(status, error=day_error)
                 save_day_status(data_root, spec, day, status)
 
                 summaries.append(

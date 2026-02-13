@@ -17,6 +17,33 @@ from prop_ev.odds_data.window import day_window
 from prop_ev.storage import SnapshotStore, request_hash
 from prop_ev.time_utils import utc_now_str
 
+DAY_STATUS_SCHEMA_VERSION = 1
+
+REASON_COMPLETE = "complete"
+REASON_MISSING_EVENTS_LIST = "missing_events_list"
+REASON_INVALID_EVENTS_LIST_PAYLOAD = "invalid_events_list_payload"
+REASON_MISSING_EVENT_ODDS = "missing_event_odds"
+REASON_OFFLINE_CACHE_MISS = "offline_cache_miss"
+REASON_SPEND_BLOCKED = "spend_blocked"
+REASON_BUDGET_EXCEEDED = "budget_exceeded"
+REASON_UPSTREAM_404 = "upstream_404"
+REASON_UPSTREAM_ERROR = "upstream_error"
+REASON_NOTE = "note"
+REASON_INCOMPLETE_UNKNOWN = "incomplete_unknown"
+
+_INCOMPLETE_REASON_PRIORITY = (
+    REASON_BUDGET_EXCEEDED,
+    REASON_SPEND_BLOCKED,
+    REASON_OFFLINE_CACHE_MISS,
+    REASON_UPSTREAM_404,
+    REASON_UPSTREAM_ERROR,
+    REASON_MISSING_EVENTS_LIST,
+    REASON_INVALID_EVENTS_LIST_PAYLOAD,
+    REASON_MISSING_EVENT_ODDS,
+    REASON_NOTE,
+    REASON_INCOMPLETE_UNKNOWN,
+)
+
 
 def _atomic_write_json(path: Path, value: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -98,14 +125,16 @@ def load_day_status(data_root: Path | str, spec: DatasetSpec, day: str) -> dict[
     if not path.exists():
         return None
     payload = json.loads(path.read_text(encoding="utf-8"))
-    return payload if isinstance(payload, dict) else None
+    if not isinstance(payload, dict):
+        return None
+    return canonicalize_day_status(payload, day=day)
 
 
 def save_day_status(
     data_root: Path | str, spec: DatasetSpec, day: str, status: dict[str, Any]
 ) -> Path:
     path = _day_status_path(data_root, spec, day)
-    _atomic_write_json(path, status)
+    _atomic_write_json(path, canonicalize_day_status(status, day=day))
     return path
 
 
@@ -165,6 +194,171 @@ def _event_odds_request(
     return path, params
 
 
+def _parse_positive_int(value: Any) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return 0
+    return max(0, parsed)
+
+
+def _parse_reason_codes(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    codes: list[str] = []
+    for item in value:
+        code = str(item).strip()
+        if not code:
+            continue
+        if code == REASON_COMPLETE:
+            continue
+        if code not in codes:
+            codes.append(code)
+    return codes
+
+
+def _reason_codes_from_error(error: str) -> list[str]:
+    text = error.strip().lower()
+    if not text:
+        return []
+    if "offline cache miss" in text:
+        return [REASON_OFFLINE_CACHE_MISS]
+    if "paid cache miss blocked" in text or "blocked" in text:
+        return [REASON_SPEND_BLOCKED]
+    if "exceed remaining budget" in text:
+        return [REASON_BUDGET_EXCEEDED]
+    if "404" in text:
+        return [REASON_UPSTREAM_404]
+    return [REASON_UPSTREAM_ERROR]
+
+
+def _reason_codes_from_note(note: str) -> list[str]:
+    text = note.strip().lower()
+    if not text:
+        return []
+    if text == "missing events list response":
+        return [REASON_MISSING_EVENTS_LIST]
+    if text == "invalid events list payload":
+        return [REASON_INVALID_EVENTS_LIST_PAYLOAD]
+    return [REASON_NOTE]
+
+
+def _reason_codes_from_status(
+    *,
+    complete: bool,
+    existing_codes: list[str],
+    error: str,
+    note: str,
+    missing_count: int,
+) -> list[str]:
+    if complete:
+        return [REASON_COMPLETE]
+    if existing_codes:
+        return existing_codes
+    error_codes = _reason_codes_from_error(error)
+    if error_codes:
+        return error_codes
+    note_codes = _reason_codes_from_note(note)
+    if note_codes:
+        return note_codes
+    if missing_count > 0:
+        return [REASON_MISSING_EVENT_ODDS]
+    return [REASON_INCOMPLETE_UNKNOWN]
+
+
+def primary_incomplete_reason_code(reason_codes: list[str]) -> str:
+    for preferred in _INCOMPLETE_REASON_PRIORITY:
+        if preferred in reason_codes:
+            return preferred
+    if reason_codes:
+        return reason_codes[0]
+    return REASON_INCOMPLETE_UNKNOWN
+
+
+def _status_code_for_row(*, complete: bool, reason_codes: list[str]) -> str:
+    if complete:
+        return "complete"
+    primary = primary_incomplete_reason_code(reason_codes)
+    return f"incomplete_{primary}"
+
+
+def _coverage_ratio(
+    *,
+    present_event_odds: int,
+    total_events: int,
+    has_events_payload: bool,
+) -> float:
+    if total_events <= 0:
+        return 1.0 if has_events_payload else 0.0
+    ratio = present_event_odds / float(total_events)
+    return max(0.0, min(1.0, ratio))
+
+
+def canonicalize_day_status(status: dict[str, Any], *, day: str | None = None) -> dict[str, Any]:
+    day_value = str(status.get("day", day or "")).strip()
+    note = str(status.get("note", "")).strip()
+    error = str(status.get("error", "")).strip()
+    complete = bool(status.get("complete", False))
+    missing_count = _parse_positive_int(status.get("missing_count", 0))
+    total_events = _parse_positive_int(status.get("total_events", 0))
+    if "present_event_odds" in status:
+        present_event_odds = _parse_positive_int(status.get("present_event_odds", 0))
+    else:
+        present_event_odds = max(0, total_events - missing_count)
+    note_indicates_missing_payload = note in {
+        "missing events list response",
+        "invalid events list payload",
+    }
+    has_events_payload = (
+        bool(complete)
+        or total_events > 0
+        or str(status.get("events_payload_state", "")).strip().lower() == "ok"
+        or (status.get("events_key") is not None and not note_indicates_missing_payload)
+    )
+    existing_reason_codes = _parse_reason_codes(status.get("reason_codes", []))
+    reason_codes = _reason_codes_from_status(
+        complete=complete,
+        existing_codes=existing_reason_codes,
+        error=error,
+        note=note,
+        missing_count=missing_count,
+    )
+    status_code = str(status.get("status_code", "")).strip() or _status_code_for_row(
+        complete=complete,
+        reason_codes=reason_codes,
+    )
+    ratio = status.get("odds_coverage_ratio")
+    if isinstance(ratio, (float, int)):
+        coverage_ratio = float(ratio)
+    else:
+        coverage_ratio = _coverage_ratio(
+            present_event_odds=present_event_odds,
+            total_events=total_events,
+            has_events_payload=has_events_payload,
+        )
+    return {
+        **status,
+        "day": day_value,
+        "complete": complete,
+        "missing_count": missing_count,
+        "total_events": total_events,
+        "present_event_odds": present_event_odds,
+        "note": note,
+        "error": error,
+        "reason_codes": reason_codes,
+        "status_code": status_code,
+        "status_schema_version": int(
+            status.get("status_schema_version", DAY_STATUS_SCHEMA_VERSION)
+        ),
+        "odds_coverage_ratio": max(0.0, min(1.0, coverage_ratio)),
+    }
+
+
+def with_day_error(status: dict[str, Any], *, error: str) -> dict[str, Any]:
+    updated = {**status, "error": str(error).strip(), "complete": False}
+    return canonicalize_day_status(updated)
+
+
 def compute_day_status_from_cache(
     *,
     data_root: Path | str,
@@ -186,16 +380,23 @@ def compute_day_status_from_cache(
     events_key = request_hash("GET", events_path, events_params)
 
     events_payload: Any | None = None
+    events_payload_source = "missing"
     if store.has_response(snapshot_id, events_key):
         events_payload = store.load_response(snapshot_id, events_key)
+        events_payload_source = "snapshot"
     elif cache.has_response(events_key):
         events_payload = cache.load_response(events_key)
+        events_payload_source = "global_cache"
 
     event_rows: list[dict[str, Any]] = []
+    events_payload_state = "missing"
     if isinstance(events_payload, dict):
         events_payload = events_payload.get("data")
     if isinstance(events_payload, list):
         event_rows = [item for item in events_payload if isinstance(item, dict)]
+        events_payload_state = "ok"
+    elif events_payload is not None:
+        events_payload_state = "invalid"
 
     event_ids: list[str] = []
     for event_row in event_rows:
@@ -237,7 +438,26 @@ def compute_day_status_from_cache(
     elif not isinstance(events_payload, list):
         note = "invalid events list payload"
 
+    has_events_payload = events_payload_state == "ok"
+    complete = bool(has_events_payload and not missing_event_ids)
+    missing_count = len(missing_event_ids)
+    total_events = len(event_ids)
+    reason_codes = _reason_codes_from_status(
+        complete=complete,
+        existing_codes=[],
+        error="",
+        note=note,
+        missing_count=missing_count,
+    )
+    status_code = _status_code_for_row(complete=complete, reason_codes=reason_codes)
+    odds_coverage_ratio = _coverage_ratio(
+        present_event_odds=present_event_odds,
+        total_events=total_events,
+        has_events_payload=has_events_payload,
+    )
+
     return {
+        "status_schema_version": DAY_STATUS_SCHEMA_VERSION,
         "dataset_id": dataset_id(spec),
         "historical": bool(spec.historical),
         "day": day,
@@ -252,9 +472,14 @@ def compute_day_status_from_cache(
         "event_odds_dates": event_odds_dates,
         "present_event_odds": present_event_odds,
         "missing_event_ids": missing_event_ids,
-        "complete": bool(events_payload is not None and not missing_event_ids),
-        "total_events": len(event_ids),
-        "missing_count": len(missing_event_ids),
+        "odds_coverage_ratio": odds_coverage_ratio,
+        "complete": complete,
+        "total_events": total_events,
+        "missing_count": missing_count,
+        "reason_codes": reason_codes,
+        "status_code": status_code,
+        "events_payload_state": events_payload_state,
+        "events_payload_source": events_payload_source,
         "updated_at_utc": utc_now_str(),
         "note": note,
     }

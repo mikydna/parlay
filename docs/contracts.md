@@ -81,6 +81,74 @@ Strategy health command degraded/broken gates:
 - `roster_fallback_used`
 - `official_injury_secondary_override`
 
+## Odds Day-Index Contract
+
+Path:
+- `data/odds_api/datasets/<dataset_id>/days/<YYYY-MM-DD>.json`
+
+Required operational keys:
+- `day`
+- `complete`
+- `status_code`
+- `reason_codes`
+- `missing_count`
+- `total_events`
+- `present_event_odds`
+- `odds_coverage_ratio`
+
+Completeness semantics:
+- `complete=true` only when events payload is present/valid and all expected event-odds payloads exist.
+- `complete=false` must include a stable `reason_codes` entry and matching `status_code`.
+
+Primary incomplete reasons currently emitted:
+- `missing_events_list`
+- `invalid_events_list_payload`
+- `missing_event_odds`
+- `offline_cache_miss`
+- `spend_blocked`
+- `budget_exceeded`
+- `upstream_404`
+- `upstream_error`
+- `incomplete_unknown`
+
+## QuoteTable Contract (Derived Odds)
+
+Canonical derived paths:
+- `data/odds_api/snapshots/<snapshot_id>/derived/event_props.jsonl`
+- `data/odds_api/snapshots/<snapshot_id>/derived/featured_odds.jsonl`
+
+`event_props` required columns:
+- `provider`
+- `snapshot_id`
+- `schema_version`
+- `event_id`
+- `market`
+- `player`
+- `side`
+- `price`
+- `point`
+- `book`
+- `last_update`
+- `link`
+
+`featured_odds` required columns:
+- `provider`
+- `snapshot_id`
+- `schema_version`
+- `game_id`
+- `market`
+- `book`
+- `price`
+- `point`
+- `side`
+- `last_update`
+
+Canonical event-props identity tuple:
+- `(event_id, player, market, point, side, book)`
+
+Canonical featured identity tuple:
+- `(game_id, market, point, side, book)`
+
 ## State ID Maps
 
 To keep machine IDs stable and operator text readable, artifacts include map objects:

@@ -53,8 +53,10 @@ from prop_ev.odds_client import (
 from prop_ev.odds_data.backfill import backfill_days
 from prop_ev.odds_data.cache_store import GlobalCacheStore
 from prop_ev.odds_data.day_index import (
+    canonicalize_day_status,
     compute_day_status_from_cache,
     load_day_status,
+    primary_incomplete_reason_code,
 )
 from prop_ev.odds_data.errors import CreditBudgetExceeded, OfflineCacheMiss, SpendBlockedError
 from prop_ev.odds_data.policy import SpendPolicy
@@ -854,19 +856,35 @@ def _load_day_status_for_dataset(
 
 
 def _day_row_from_status(day: str, status: dict[str, Any]) -> dict[str, Any]:
+    normalized = canonicalize_day_status(status, day=day)
     return {
         "day": day,
-        "complete": bool(status.get("complete", False)),
-        "missing_count": int(status.get("missing_count", 0)),
-        "total_events": int(status.get("total_events", 0)),
-        "snapshot_id": str(status.get("snapshot_id_for_day", "")),
-        "note": str(status.get("note", "")),
-        "error": str(status.get("error", "")),
-        "updated_at_utc": str(status.get("updated_at_utc", "")),
+        "complete": bool(normalized.get("complete", False)),
+        "missing_count": int(normalized.get("missing_count", 0)),
+        "total_events": int(normalized.get("total_events", 0)),
+        "snapshot_id": str(normalized.get("snapshot_id_for_day", "")),
+        "note": str(normalized.get("note", "")),
+        "error": str(normalized.get("error", "")),
+        "status_code": str(normalized.get("status_code", "")),
+        "reason_codes": [
+            str(item)
+            for item in normalized.get("reason_codes", [])
+            if isinstance(item, str) and str(item).strip()
+        ],
+        "odds_coverage_ratio": float(normalized.get("odds_coverage_ratio", 0.0)),
+        "updated_at_utc": str(normalized.get("updated_at_utc", "")),
     }
 
 
 def _incomplete_reason_code(row: dict[str, Any]) -> str:
+    reason_codes_raw = row.get("reason_codes", [])
+    if isinstance(reason_codes_raw, list):
+        reason_codes = [str(item).strip() for item in reason_codes_raw if str(item).strip()]
+        if reason_codes:
+            return primary_incomplete_reason_code(reason_codes)
+    status_code = str(row.get("status_code", "")).strip()
+    if status_code.startswith("incomplete_"):
+        return status_code.removeprefix("incomplete_")
     error_text = str(row.get("error", "")).strip().lower()
     if error_text:
         if "404" in error_text:
@@ -879,6 +897,8 @@ def _incomplete_reason_code(row: dict[str, Any]) -> str:
     note_text = str(row.get("note", "")).strip().lower()
     if note_text == "missing events list response":
         return "missing_events_list"
+    if note_text == "missing day status":
+        return "missing_day_status"
     if note_text:
         return "note"
     if int(row.get("missing_count", 0)) > 0:
@@ -901,6 +921,7 @@ def _build_status_summary_payload(
     incomplete_reason_counts: Counter[str] = Counter(
         _incomplete_reason_code(row) for row in rows if not bool(row["complete"])
     )
+    coverage_values = [float(row.get("odds_coverage_ratio", 0.0)) for row in rows]
     payload: dict[str, Any] = {
         "dataset_id": dataset_id_value,
         "sport_key": spec.sport_key,
@@ -915,6 +936,10 @@ def _build_status_summary_payload(
         "complete_count": len(complete_days),
         "incomplete_count": len(incomplete_days),
         "missing_events_total": sum(int(row["missing_count"]) for row in rows),
+        "avg_odds_coverage_ratio": (
+            sum(coverage_values) / len(coverage_values) if coverage_values else 0.0
+        ),
+        "minimum_odds_coverage_ratio": min(coverage_values) if coverage_values else 0.0,
         "complete_days": complete_days,
         "incomplete_days": incomplete_days,
         "incomplete_reason_counts": dict(sorted(incomplete_reason_counts.items())),
@@ -928,12 +953,20 @@ def _build_status_summary_payload(
 
 def _print_day_rows(rows: list[dict[str, Any]]) -> None:
     for row in rows:
+        reason_code = (
+            _incomplete_reason_code(row) if not bool(row.get("complete", False)) else "complete"
+        )
         print(
-            ("day={} complete={} missing={} events={} snapshot_id={} note={}").format(
+            (
+                "day={} complete={} reason={} missing={} events={} coverage={} "
+                "snapshot_id={} note={}"
+            ).format(
                 row["day"],
                 str(row["complete"]).lower(),
+                reason_code,
                 row["missing_count"],
                 row["total_events"],
+                f"{float(row.get('odds_coverage_ratio', 0.0)):.3f}",
                 row["snapshot_id"],
                 row["note"],
             )
@@ -997,6 +1030,9 @@ def _cmd_data_datasets_ls(args: argparse.Namespace) -> int:
                         "snapshot_id": "",
                         "note": "missing day status",
                         "error": "",
+                        "status_code": "incomplete_missing_day_status",
+                        "reason_codes": ["missing_day_status"],
+                        "odds_coverage_ratio": 0.0,
                         "updated_at_utc": "",
                     }
                 )
@@ -1011,6 +1047,7 @@ def _cmd_data_datasets_ls(args: argparse.Namespace) -> int:
         reason_counts: Counter[str] = Counter(
             _incomplete_reason_code(row) for row in rows if not bool(row.get("complete", False))
         )
+        coverage_values = [float(row.get("odds_coverage_ratio", 0.0)) for row in rows]
         summary = {
             "dataset_id": dataset_id_value,
             "sport_key": spec.sport_key,
@@ -1022,6 +1059,10 @@ def _cmd_data_datasets_ls(args: argparse.Namespace) -> int:
             "complete_count": complete_count,
             "incomplete_count": len(day_names) - complete_count,
             "missing_events_total": sum(int(row.get("missing_count", 0)) for row in rows),
+            "avg_odds_coverage_ratio": (
+                sum(coverage_values) / len(coverage_values) if coverage_values else 0.0
+            ),
+            "minimum_odds_coverage_ratio": min(coverage_values) if coverage_values else 0.0,
             "incomplete_reason_counts": dict(sorted(reason_counts.items())),
             "from_day": day_names[0] if day_names else "",
             "to_day": day_names[-1] if day_names else "",
@@ -1107,6 +1148,9 @@ def _cmd_data_datasets_show(args: argparse.Namespace) -> int:
                     "snapshot_id": "",
                     "note": "missing day status",
                     "error": "",
+                    "status_code": "incomplete_missing_day_status",
+                    "reason_codes": ["missing_day_status"],
+                    "odds_coverage_ratio": 0.0,
                     "updated_at_utc": "",
                 }
             )
