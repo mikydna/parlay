@@ -162,13 +162,13 @@ def test_strategy_run_from_snapshot(local_data_dir: Path) -> None:
     )
     assert (snapshot_dir / "reports" / "strategy-report.json").exists()
     assert (snapshot_dir / "reports" / "strategy-report.md").exists()
-    assert (snapshot_dir / "reports" / "strategy-report.v0.json").exists()
-    assert (snapshot_dir / "reports" / "strategy-report.v0.md").exists()
+    assert (snapshot_dir / "reports" / "strategy-report.s001.json").exists()
+    assert (snapshot_dir / "reports" / "strategy-report.s001.md").exists()
     assert (snapshot_dir / "reports" / "backtest-seed.jsonl").exists()
     assert (snapshot_dir / "reports" / "backtest-readiness.json").exists()
-    assert (snapshot_dir / "reports" / "backtest-seed.v0.jsonl").exists()
-    assert (snapshot_dir / "reports" / "backtest-results-template.v0.csv").exists()
-    assert (snapshot_dir / "reports" / "backtest-readiness.v0.json").exists()
+    assert (snapshot_dir / "reports" / "backtest-seed.s001.jsonl").exists()
+    assert (snapshot_dir / "reports" / "backtest-results-template.s001.csv").exists()
+    assert (snapshot_dir / "reports" / "backtest-readiness.s001.json").exists()
 
     assert (
         main(
@@ -229,7 +229,7 @@ def test_strategy_compare_writes_suffixed_outputs(
                 "--snapshot-id",
                 snapshot_id,
                 "--strategies",
-                "v0,v0_tier_b",
+                "s001,s002",
                 "--top-n",
                 "5",
                 "--offline",
@@ -239,8 +239,8 @@ def test_strategy_compare_writes_suffixed_outputs(
     )
     assert (snapshot_dir / "reports" / "strategy-compare.json").exists()
     assert (snapshot_dir / "reports" / "strategy-compare.md").exists()
-    assert (snapshot_dir / "reports" / "strategy-report.v0.json").exists()
-    assert (snapshot_dir / "reports" / "strategy-report.v0_tier_b.json").exists()
+    assert (snapshot_dir / "reports" / "strategy-report.s001.json").exists()
+    assert (snapshot_dir / "reports" / "strategy-report.s002.json").exists()
 
 
 def test_run_strategy_for_playbook_passes_strategy_id(
@@ -256,7 +256,7 @@ def test_run_strategy_for_playbook_passes_strategy_id(
     monkeypatch.setattr("prop_ev.cli._cmd_strategy_run", _fake_cmd)
     code = _run_strategy_for_playbook(
         snapshot_id="snap-1",
-        strategy_id="v0_tier_b",
+        strategy_id="s002",
         top_n=25,
         min_ev=0.01,
         allow_tier_b=False,
@@ -267,5 +267,5 @@ def test_run_strategy_for_playbook_passes_strategy_id(
     )
 
     assert code == 0
-    assert captured["strategy"] == "v0_tier_b"
+    assert captured["strategy"] == "s002"
     assert captured["write_canonical"] is True

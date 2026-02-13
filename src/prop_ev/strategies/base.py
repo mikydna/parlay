@@ -4,7 +4,7 @@ from dataclasses import asdict, dataclass
 from typing import Any, Protocol
 
 from prop_ev.state_keys import (
-    attach_strategy_code_key,
+    attach_strategy_description_key,
     attach_strategy_id_key,
     strategy_meta,
 )
@@ -74,13 +74,12 @@ def decorate_report(
     )
     report["strategy_id"] = strategy_id
     report["strategy"] = strategy_payload
-    report["strategy_code"] = strategy_payload.get("code", "")
     report["state_key"] = attach_strategy_id_key(
         report.get("state_key"),
         strategy_id=strategy_id,
-        strategy_description=strategy.description,
+        strategy_title=strategy.name,
     )
-    report["state_key"] = attach_strategy_code_key(
+    report["state_key"] = attach_strategy_description_key(
         report.get("state_key"),
         strategy_id=strategy_id,
         strategy_description=strategy.description,

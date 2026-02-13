@@ -1,9 +1,9 @@
 from prop_ev.state_keys import (
     playbook_mode_key,
-    strategy_code_for_id,
-    strategy_code_key,
+    strategy_description_for_id,
     strategy_health_state_key,
     strategy_report_state_key,
+    strategy_title_for_id,
 )
 from prop_ev.strategies.base import StrategyInfo, StrategyRunConfig, decorate_report
 
@@ -27,12 +27,12 @@ def test_playbook_mode_key_has_live_and_offline_modes() -> None:
     assert "offline_context_gate" in mapping
 
 
-def test_strategy_code_key_has_stable_codes() -> None:
-    mapping = strategy_code_key()
-    assert mapping["s001"]
-    assert mapping["s006"]
-    assert strategy_code_for_id("v0") == "s001"
-    assert strategy_code_for_id("v0_tier_b") == "s002"
+def test_strategy_id_map_has_titles_and_descriptions() -> None:
+    mapping = strategy_report_state_key()
+    assert mapping["strategy_id"]["s001"] == "Baseline Core"
+    assert mapping["strategy_description"]["s006"]
+    assert strategy_title_for_id("s001") == "Baseline Core"
+    assert strategy_description_for_id("s002")
 
 
 def test_decorate_report_adds_strategy_id_map() -> None:
@@ -41,7 +41,11 @@ def test_decorate_report_adds_strategy_id_map() -> None:
         "audit": {},
         "state_key": strategy_report_state_key(),
     }
-    strategy = StrategyInfo(id="v0", name="v0", description="Baseline strategy")
+    strategy = StrategyInfo(
+        id="s001",
+        name="Baseline Core",
+        description="Best-over/best-under no-vig baseline with deterministic gates.",
+    )
     config = StrategyRunConfig(
         top_n=5,
         min_ev=0.01,
@@ -53,13 +57,12 @@ def test_decorate_report_adds_strategy_id_map() -> None:
 
     decorated = decorate_report(report, strategy=strategy, config=config)
 
-    assert decorated["strategy_id"] == "v0"
+    assert decorated["strategy_id"] == "s001"
     assert decorated["strategy"] == {
-        "code": "s001",
-        "id": "v0",
-        "name": "v0",
-        "description": "Baseline strategy",
+        "id": "s001",
+        "title": "Baseline Core",
+        "name": "Baseline Core",
+        "description": "Best-over/best-under no-vig baseline with deterministic gates.",
     }
-    assert decorated["strategy_code"] == "s001"
-    assert decorated["state_key"]["strategy_id"]["v0"] == "Baseline strategy"
-    assert decorated["state_key"]["strategy_code"]["s001"]
+    assert decorated["state_key"]["strategy_id"]["s001"] == "Baseline Core"
+    assert decorated["state_key"]["strategy_description"]["s001"]

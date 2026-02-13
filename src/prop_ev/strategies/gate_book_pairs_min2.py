@@ -12,9 +12,11 @@ from prop_ev.strategy import build_strategy_report
 
 class GateBookPairsMin2Strategy:
     info = StrategyInfo(
-        id="gate_book_pairs_min2",
-        name="gate_book_pairs_min2",
-        description="Skips lines with fewer than 2 books offering both over+under for the point.",
+        id="s004",
+        name="Min-2 Book-Pair Gate",
+        description=(
+            "Skips lines unless at least 2 books post both over and under at the same point."
+        ),
     )
 
     def run(self, *, inputs: StrategyInputs, config: StrategyRunConfig) -> StrategyResult:

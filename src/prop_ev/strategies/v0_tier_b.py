@@ -14,11 +14,10 @@ from prop_ev.strategy import build_strategy_report
 
 class V0TierBStrategy:
     info = StrategyInfo(
-        id="v0_tier_b",
-        name="v0_tier_b",
+        id="s002",
+        name="Baseline Core + Tier B",
         description=(
-            "v0 strategy but forces allow_tier_b=true (single-book lines included with "
-            "higher thresholds)."
+            "Same core model as s001, but includes tier-B single-book edges with stricter EV floor."
         ),
     )
 

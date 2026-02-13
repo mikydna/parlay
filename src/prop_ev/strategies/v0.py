@@ -12,10 +12,11 @@ from prop_ev.strategy import build_strategy_report
 
 class V0Strategy:
     info = StrategyInfo(
-        id="v0",
-        name="v0",
+        id="s001",
+        name="Baseline Core",
         description=(
-            "Baseline strategy using best-over + best-under no-vig baseline plus v0 adjustments."
+            "Best-over/best-under no-vig baseline with deterministic minutes/usage and context "
+            "gates."
         ),
     )
 

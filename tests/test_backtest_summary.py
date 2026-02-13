@@ -20,7 +20,7 @@ def test_summarize_backtest_rows_roi_and_brier(tmp_path: Path) -> None:
         csv_path,
         [
             {
-                "strategy_id": "v0",
+                "strategy_id": "s001",
                 "selected_price_american": 100,
                 "stake_units": 1,
                 "model_p_hit": 0.6,
@@ -28,7 +28,7 @@ def test_summarize_backtest_rows_roi_and_brier(tmp_path: Path) -> None:
                 "result": "win",
             },
             {
-                "strategy_id": "v0",
+                "strategy_id": "s001",
                 "selected_price_american": -110,
                 "stake_units": 1,
                 "model_p_hit": 0.55,
@@ -36,7 +36,7 @@ def test_summarize_backtest_rows_roi_and_brier(tmp_path: Path) -> None:
                 "result": "loss",
             },
             {
-                "strategy_id": "v0",
+                "strategy_id": "s001",
                 "selected_price_american": -110,
                 "stake_units": 1,
                 "model_p_hit": 0.5,
@@ -53,7 +53,7 @@ def test_summarize_backtest_rows_roi_and_brier(tmp_path: Path) -> None:
     summary = summarize_backtest_rows(
         [
             {
-                "strategy_id": "v0",
+                "strategy_id": "s001",
                 "selected_price_american": "100",
                 "stake_units": "1",
                 "model_p_hit": "0.6",
@@ -61,7 +61,7 @@ def test_summarize_backtest_rows_roi_and_brier(tmp_path: Path) -> None:
                 "result": "win",
             },
             {
-                "strategy_id": "v0",
+                "strategy_id": "s001",
                 "selected_price_american": "-110",
                 "stake_units": "1",
                 "model_p_hit": "0.55",
@@ -69,7 +69,7 @@ def test_summarize_backtest_rows_roi_and_brier(tmp_path: Path) -> None:
                 "result": "loss",
             },
             {
-                "strategy_id": "v0",
+                "strategy_id": "s001",
                 "selected_price_american": "-110",
                 "stake_units": "1",
                 "model_p_hit": "0.5",
@@ -77,7 +77,7 @@ def test_summarize_backtest_rows_roi_and_brier(tmp_path: Path) -> None:
                 "result": "push",
             },
         ],
-        strategy_id="v0",
+        strategy_id="s001",
         bin_size=0.1,
     )
     assert summary.rows_graded == 3

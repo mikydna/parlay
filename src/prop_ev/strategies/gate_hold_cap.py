@@ -12,9 +12,9 @@ from prop_ev.strategy import build_strategy_report
 
 class GateHoldCapStrategy:
     info = StrategyInfo(
-        id="gate_hold_cap",
-        name="gate_hold_cap",
-        description="Skips lines when median per-book hold exceeds a fixed threshold.",
+        id="s005",
+        name="Hold-Cap Gate",
+        description="Skips lines when median per-book hold exceeds the configured cap.",
     )
 
     def run(self, *, inputs: StrategyInputs, config: StrategyRunConfig) -> StrategyResult:

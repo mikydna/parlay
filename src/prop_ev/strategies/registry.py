@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
-from prop_ev.state_keys import STRATEGY_CODE_BY_ID
 from prop_ev.strategies.base import StrategyPlugin, normalize_strategy_id
 from prop_ev.strategies.baseline_median_novig import BaselineMedianNoVigStrategy
 from prop_ev.strategies.gate_book_pairs_min2 import GateBookPairsMin2Strategy
@@ -10,14 +9,6 @@ from prop_ev.strategies.gate_dispersion_iqr import GateDispersionIQRStrategy
 from prop_ev.strategies.gate_hold_cap import GateHoldCapStrategy
 from prop_ev.strategies.v0 import V0Strategy
 from prop_ev.strategies.v0_tier_b import V0TierBStrategy
-
-STRATEGY_ALIASES = {
-    "baseline": "v0",
-    "baseline_core": "v0",
-    "baseline_tier_b": "v0_tier_b",
-    "baseline_core_tier_b": "v0_tier_b",
-    **{code: strategy_id for strategy_id, code in STRATEGY_CODE_BY_ID.items()},
-}
 
 
 def _registry() -> dict[str, StrategyPlugin]:
@@ -39,12 +30,11 @@ def _registry() -> dict[str, StrategyPlugin]:
 
 
 def strategy_aliases() -> dict[str, str]:
-    return dict(STRATEGY_ALIASES)
+    return {}
 
 
 def resolve_strategy_id(strategy_id: str) -> str:
-    normalized = normalize_strategy_id(strategy_id)
-    return STRATEGY_ALIASES.get(normalized, normalized)
+    return normalize_strategy_id(strategy_id)
 
 
 def list_strategies() -> list[StrategyPlugin]:
@@ -59,12 +49,5 @@ def get_strategy(strategy_id: str) -> StrategyPlugin:
     plugin = registry.get(normalized)
     if plugin is None:
         options = ",".join(sorted(registry.keys()))
-        aliases = ",".join(
-            sorted(f"{alias}->{target}" for alias, target in STRATEGY_ALIASES.items())
-        )
-        if aliases:
-            raise ValueError(
-                f"unknown strategy id: {strategy_id} (options: {options}; aliases: {aliases})"
-            )
         raise ValueError(f"unknown strategy id: {strategy_id} (options: {options})")
     return plugin

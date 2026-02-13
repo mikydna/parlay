@@ -42,22 +42,26 @@ STRATEGY_HEALTH_GATE_DETAIL_KEY = {
     "roster_context_stale": "Roster context cache exceeds configured freshness TTL.",
 }
 
-STRATEGY_CODE_BY_ID = {
-    "v0": "s001",
-    "v0_tier_b": "s002",
-    "baseline_median_novig": "s003",
-    "gate_book_pairs_min2": "s004",
-    "gate_hold_cap": "s005",
-    "gate_dispersion_iqr": "s006",
+STRATEGY_TITLE_KEY = {
+    "s001": "Baseline Core",
+    "s002": "Baseline Core + Tier B",
+    "s003": "Median No-Vig Baseline",
+    "s004": "Min-2 Book-Pair Gate",
+    "s005": "Hold-Cap Gate",
+    "s006": "Dispersion-IQR Gate",
 }
 
-STRATEGY_CODE_KEY = {
-    "s001": "Baseline best-over/best-under no-vig + deterministic v0 adjustments.",
-    "s002": "Same baseline as s001, but forces tier-B (single-book edges) with tighter floor.",
-    "s003": "Median per-book no-vig baseline with fallback to best-sides baseline.",
-    "s004": "Adds gate: require at least 2 books with both over+under at same point.",
-    "s005": "Adds gate: skip lines when median per-book hold exceeds configured cap.",
-    "s006": "Adds gate: skip lines when per-book no-vig IQR exceeds configured cap.",
+STRATEGY_DESCRIPTION_KEY = {
+    "s001": (
+        "Best-over/best-under no-vig baseline with deterministic minutes/usage and context gates."
+    ),
+    "s002": (
+        "Same core model as s001, but includes tier-B single-book edges with stricter EV floor."
+    ),
+    "s003": "Uses median per-book no-vig baseline, with fallback to best-sides baseline.",
+    "s004": "Skips lines unless at least 2 books post both over and under at the same point.",
+    "s005": "Skips lines when median per-book hold exceeds the configured cap.",
+    "s006": "Skips lines when per-book no-vig probability IQR exceeds the configured cap.",
 }
 
 PLAYBOOK_MODE_KEY = {
@@ -77,6 +81,8 @@ def strategy_report_state_key() -> dict[str, dict[str, str]]:
         "strategy_status": dict(STRATEGY_STATUS_KEY),
         "strategy_mode": dict(STRATEGY_MODE_KEY),
         "health_gates": dict(STRATEGY_HEALTH_GATE_KEY),
+        "strategy_id": dict(STRATEGY_TITLE_KEY),
+        "strategy_description": dict(STRATEGY_DESCRIPTION_KEY),
     }
 
 
@@ -91,12 +97,12 @@ def playbook_mode_key() -> dict[str, str]:
     return dict(PLAYBOOK_MODE_KEY)
 
 
-def strategy_code_for_id(strategy_id: str) -> str:
-    return STRATEGY_CODE_BY_ID.get(strategy_id, "")
+def strategy_title_for_id(strategy_id: str) -> str:
+    return STRATEGY_TITLE_KEY.get(strategy_id, "")
 
 
-def strategy_code_key() -> dict[str, str]:
-    return dict(STRATEGY_CODE_KEY)
+def strategy_description_for_id(strategy_id: str) -> str:
+    return STRATEGY_DESCRIPTION_KEY.get(strategy_id, "")
 
 
 def strategy_meta(
@@ -104,42 +110,36 @@ def strategy_meta(
 ) -> dict[str, str]:
     payload = {
         "id": strategy_id,
+        "title": strategy_name,
         "name": strategy_name,
         "description": strategy_description,
     }
-    strategy_code = strategy_code_for_id(strategy_id)
-    if strategy_code:
-        payload["code"] = strategy_code
     return payload
 
 
 def attach_strategy_id_key(
-    state_key: dict[str, Any] | None, *, strategy_id: str, strategy_description: str
+    state_key: dict[str, Any] | None, *, strategy_id: str, strategy_title: str
 ) -> dict[str, Any]:
-    """Ensure state key includes a strategy-id description map."""
+    """Ensure state key includes a strategy-id title map."""
     base = dict(state_key) if isinstance(state_key, dict) else {}
     strategy_map = base.get("strategy_id", {})
     if not isinstance(strategy_map, dict):
         strategy_map = {}
-    strategy_map = dict(strategy_map)
-    strategy_map[strategy_id] = strategy_description
+    strategy_map = dict(STRATEGY_TITLE_KEY) | dict(strategy_map)
+    strategy_map[strategy_id] = strategy_title
     base["strategy_id"] = strategy_map
     return base
 
 
-def attach_strategy_code_key(
+def attach_strategy_description_key(
     state_key: dict[str, Any] | None, *, strategy_id: str, strategy_description: str
 ) -> dict[str, Any]:
-    """Ensure state key includes strategy-code descriptions."""
+    """Ensure state key includes strategy-id descriptions."""
     base = dict(state_key) if isinstance(state_key, dict) else {}
-    code_map = base.get("strategy_code", {})
-    if not isinstance(code_map, dict):
-        code_map = {}
-    code_map = dict(STRATEGY_CODE_KEY) | dict(code_map)
-    strategy_code = strategy_code_for_id(strategy_id)
-    if strategy_code:
-        code_map[strategy_code] = STRATEGY_CODE_KEY.get(strategy_code, strategy_description)
-    else:
-        code_map[strategy_id] = strategy_description
-    base["strategy_code"] = code_map
+    description_map = base.get("strategy_description", {})
+    if not isinstance(description_map, dict):
+        description_map = {}
+    description_map = dict(STRATEGY_DESCRIPTION_KEY) | dict(description_map)
+    description_map[strategy_id] = strategy_description
+    base["strategy_description"] = description_map
     return base

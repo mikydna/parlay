@@ -52,8 +52,8 @@ from prop_ev.settings import Settings
 from prop_ev.settlement import settle_snapshot
 from prop_ev.state_keys import (
     playbook_mode_key,
-    strategy_code_for_id,
     strategy_health_state_key,
+    strategy_title_for_id,
 )
 from prop_ev.storage import SnapshotStore, make_snapshot_id, request_hash
 from prop_ev.strategies import get_strategy, list_strategies, resolve_strategy_id
@@ -145,7 +145,7 @@ def _env_float(name: str, default: float) -> float:
 
 def _resolve_strategy_id(raw: str, *, default_id: str) -> str:
     requested = raw.strip() if isinstance(raw, str) else ""
-    candidate = requested or default_id.strip() or "v0"
+    candidate = requested or default_id.strip() or "s001"
     plugin = get_strategy(resolve_strategy_id(candidate))
     return normalize_strategy_id(plugin.info.id)
 
@@ -1353,7 +1353,7 @@ def _cmd_strategy_run(args: argparse.Namespace) -> int:
     if secondary_override_active:
         print("note=official_injury_missing_using_secondary_override")
 
-    strategy_requested = str(getattr(args, "strategy", "v0"))
+    strategy_requested = str(getattr(args, "strategy", "s001"))
     plugin = get_strategy(strategy_requested)
     config = StrategyRunConfig(
         top_n=int(args.top_n),
@@ -1378,7 +1378,7 @@ def _cmd_strategy_run(args: argparse.Namespace) -> int:
     strategy_id = normalize_strategy_id(plugin.info.id)
     write_canonical_raw = getattr(args, "write_canonical", None)
     if write_canonical_raw is None:
-        write_canonical = bool(strategy_id == "v0")
+        write_canonical = bool(strategy_id == "s001")
     else:
         write_canonical = bool(write_canonical_raw)
 
@@ -1420,9 +1420,9 @@ def _cmd_strategy_run(args: argparse.Namespace) -> int:
         )
     )
     print(f"strategy_id={strategy_id}")
-    strategy_code = strategy_code_for_id(strategy_id)
-    if strategy_code:
-        print(f"strategy_code={strategy_code}")
+    strategy_title = strategy_title_for_id(strategy_id)
+    if strategy_title:
+        print(f"strategy_title={strategy_title}")
     print(f"health_gates={','.join(health_gates) if health_gates else 'none'}")
     print(f"report_json={json_path}")
     print(f"report_md={md_path}")
@@ -1449,8 +1449,7 @@ def _cmd_strategy_ls(args: argparse.Namespace) -> int:
     del args
     for plugin in list_strategies():
         strategy_id = normalize_strategy_id(plugin.info.id)
-        strategy_code = strategy_code_for_id(strategy_id)
-        print(f"{strategy_code}\t{strategy_id}\t{plugin.info.description}")
+        print(f"{strategy_id}\t{plugin.info.name}\t{plugin.info.description}")
     return 0
 
 
@@ -1726,7 +1725,7 @@ def _cmd_strategy_backtest_summarize(args: argparse.Namespace) -> int:
             raise CLIError("backtest-summarize requires --strategies or --results")
         for strategy_id in strategy_ids:
             path = reports_dir / f"backtest-results-template.{strategy_id}.csv"
-            if strategy_id == "v0" and not path.exists():
+            if strategy_id == "s001" and not path.exists():
                 path = reports_dir / "backtest-results-template.csv"
             paths.append((strategy_id, path))
 
@@ -2269,9 +2268,9 @@ def _cmd_playbook_run(args: argparse.Namespace) -> int:
     if mode_desc:
         print(f"mode_desc={mode_desc}")
     print(f"strategy_id={strategy_id}")
-    strategy_code = strategy_code_for_id(strategy_id)
-    if strategy_code:
-        print(f"strategy_code={strategy_code}")
+    strategy_title = strategy_title_for_id(strategy_id)
+    if strategy_title:
+        print(f"strategy_title={strategy_title}")
     preflight_gates = (
         preflight_context.get("health_gates", [])
         if isinstance(preflight_context.get("health_gates"), list)
@@ -2320,7 +2319,7 @@ def _cmd_playbook_render(args: argparse.Namespace) -> int:
             existing_id = ""
             if isinstance(existing, dict):
                 existing_id = str(existing.get("strategy_id", "")).strip()
-            existing_id = normalize_strategy_id(existing_id) if existing_id else "v0"
+            existing_id = normalize_strategy_id(existing_id) if existing_id else "s001"
             strategy_needs_refresh = existing_id != strategy_id
     if strategy_needs_refresh:
         code = _run_strategy_for_playbook(
@@ -2352,9 +2351,9 @@ def _cmd_playbook_render(args: argparse.Namespace) -> int:
     )
     print(f"snapshot_id={snapshot_id}")
     print(f"strategy_id={strategy_id}")
-    strategy_code = strategy_code_for_id(strategy_id)
-    if strategy_code:
-        print(f"strategy_code={strategy_code}")
+    strategy_title = strategy_title_for_id(strategy_id)
+    if strategy_title:
+        print(f"strategy_title={strategy_title}")
     print(f"strategy_brief_md={brief['report_markdown']}")
     print(f"strategy_brief_tex={brief['report_tex']}")
     print(f"strategy_brief_pdf={brief['report_pdf']}")
@@ -2541,9 +2540,9 @@ def _cmd_playbook_discover_execute(args: argparse.Namespace) -> int:
     print(f"discovery_snapshot_id={discovery_snapshot_id}")
     print(f"execution_snapshot_id={execution_snapshot_id}")
     print(f"strategy_id={strategy_id}")
-    strategy_code = strategy_code_for_id(strategy_id)
-    if strategy_code:
-        print(f"strategy_code={strategy_code}")
+    strategy_title = strategy_title_for_id(strategy_id)
+    if strategy_title:
+        print(f"strategy_title={strategy_title}")
     print(
         "actionable_rows={} matched_rows={} discovery_eligible_rows={}".format(
             summary.get("actionable_rows", 0),
@@ -2641,7 +2640,7 @@ def _build_parser() -> argparse.ArgumentParser:
     strategy_run = strategy_subparsers.add_parser("run", help="Generate strategy report")
     strategy_run.set_defaults(func=_cmd_strategy_run)
     strategy_run.add_argument("--snapshot-id", default="")
-    strategy_run.add_argument("--strategy", default="v0")
+    strategy_run.add_argument("--strategy", default="s001")
     strategy_run.add_argument("--top-n", type=int, default=25)
     strategy_run.add_argument("--min-ev", type=float, default=0.01)
     strategy_run.add_argument("--allow-tier-b", action="store_true")

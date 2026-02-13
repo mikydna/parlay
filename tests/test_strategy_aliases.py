@@ -1,26 +1,32 @@
+import pytest
+
 from prop_ev.cli import _parse_strategy_ids
-from prop_ev.strategies import get_strategy, resolve_strategy_id, strategy_aliases
+from prop_ev.strategies import get_strategy, list_strategies, resolve_strategy_id, strategy_aliases
 
 
-def test_strategy_aliases_resolve_to_canonical_ids() -> None:
-    aliases = strategy_aliases()
-    assert aliases["baseline"] == "v0"
-    assert aliases["baseline_tier_b"] == "v0_tier_b"
-    assert aliases["s001"] == "v0"
-    assert aliases["s006"] == "gate_dispersion_iqr"
-    assert resolve_strategy_id("baseline_core") == "v0"
-    assert resolve_strategy_id("baseline_core_tier_b") == "v0_tier_b"
-    assert resolve_strategy_id("s001") == "v0"
-    assert resolve_strategy_id("s002") == "v0_tier_b"
+def test_strategy_aliases_disabled() -> None:
+    assert strategy_aliases() == {}
+    assert resolve_strategy_id("s001") == "s001"
 
 
-def test_get_strategy_accepts_alias_names() -> None:
-    assert get_strategy("baseline").info.id == "v0"
-    assert get_strategy("baseline_tier_b").info.id == "v0_tier_b"
-    assert get_strategy("s001").info.id == "v0"
-    assert get_strategy("s004").info.id == "gate_book_pairs_min2"
+def test_get_strategy_accepts_s00x_ids() -> None:
+    assert get_strategy("s001").info.id == "s001"
+    assert get_strategy("s004").info.id == "s004"
 
 
-def test_parse_strategy_ids_dedupes_aliases_to_canonical() -> None:
-    parsed = _parse_strategy_ids("baseline,s001,v0,baseline_tier_b,s002,v0_tier_b")
-    assert parsed == ["v0", "v0_tier_b"]
+def test_get_strategy_rejects_legacy_ids() -> None:
+    with pytest.raises(ValueError, match="unknown strategy id"):
+        get_strategy("v0")
+
+
+def test_parse_strategy_ids_dedupes_s00x_ids() -> None:
+    parsed = _parse_strategy_ids("s001,s001,s002,s002")
+    assert parsed == ["s001", "s002"]
+
+
+def test_strategy_registry_has_titles_and_descriptions() -> None:
+    rows = list_strategies()
+    by_id = {row.info.id: row.info for row in rows}
+    assert by_id["s001"].name == "Baseline Core"
+    assert by_id["s002"].name == "Baseline Core + Tier B"
+    assert by_id["s003"].description

@@ -12,9 +12,9 @@ from prop_ev.strategy import build_strategy_report
 
 class GateDispersionIQRStrategy:
     info = StrategyInfo(
-        id="gate_dispersion_iqr",
-        name="gate_dispersion_iqr",
-        description="Skips lines when per-book no-vig probability IQR exceeds a fixed threshold.",
+        id="s006",
+        name="Dispersion-IQR Gate",
+        description="Skips lines when per-book no-vig probability IQR exceeds the configured cap.",
     )
 
     def run(self, *, inputs: StrategyInputs, config: StrategyRunConfig) -> StrategyResult:

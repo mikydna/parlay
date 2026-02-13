@@ -67,9 +67,14 @@ Current strategy enforces EV floors as:
 This is current behavior, not a pending proposal.
 
 Strategy IDs:
-- canonical: `v0`, `v0_tier_b`, `baseline_median_novig`, `gate_book_pairs_min2`, `gate_hold_cap`, `gate_dispersion_iqr`
-- code aliases: `s001`, `s002`, `s003`, `s004`, `s005`, `s006`
-- accepted aliases: `baseline`/`baseline_core` -> `v0`; `baseline_tier_b`/`baseline_core_tier_b` -> `v0_tier_b`
+- `s001` — Baseline Core
+- `s002` — Baseline Core + Tier B
+- `s003` — Median No-Vig Baseline
+- `s004` — Min-2 Book-Pair Gate
+- `s005` — Hold-Cap Gate
+- `s006` — Dispersion-IQR Gate
+
+Legacy IDs are not accepted.
 
 ## Key Artifacts
 

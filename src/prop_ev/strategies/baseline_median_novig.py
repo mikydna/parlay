@@ -12,12 +12,9 @@ from prop_ev.strategy import build_strategy_report
 
 class BaselineMedianNoVigStrategy:
     info = StrategyInfo(
-        id="baseline_median_novig",
-        name="baseline_median_novig",
-        description=(
-            "Uses median per-book no-vig baseline when available; "
-            "falls back to best-sides baseline."
-        ),
+        id="s003",
+        name="Median No-Vig Baseline",
+        description=("Uses median per-book no-vig baseline, with fallback to best-sides baseline."),
     )
 
     def run(self, *, inputs: StrategyInputs, config: StrategyRunConfig) -> StrategyResult:
