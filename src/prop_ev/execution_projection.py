@@ -6,7 +6,7 @@ from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any
 
-from prop_ev.context_sources import normalize_person_name
+from prop_ev.nba_data.normalize import normalize_person_name
 from prop_ev.odds_math import american_to_decimal, ev_from_prob_and_price
 from prop_ev.time_utils import utc_now_str
 
