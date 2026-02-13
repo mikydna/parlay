@@ -57,7 +57,7 @@ Deliverables:
   - the exact execution price used for grading (graded_price_american)
 
 Acceptance:
-- `make ci` passes
+- `uv run ruff check .`, `uv run pyright`, and `uv run pytest -q` pass
 - The same snapshot rerun produces identical reports.
 
 ### M1: Strategy Plugin Framework + CLI Harness

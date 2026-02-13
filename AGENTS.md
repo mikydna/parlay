@@ -17,14 +17,17 @@ Prefer the smallest correct change with clear tests.
 ```bash
 uv sync --all-groups
 uv run prop-ev --help
-make ci
+uv run ruff format --check .
+uv run ruff check .
+uv run pyright
+uv run pytest -q
 ```
 
 ## Non-negotiables
 
 - Use `uv` for dependency and environment management.
 - Keep code under `src/prop_ev` with tests in `tests/`.
-- Run `make ci` before opening or merging a PR.
+- Run `uv run ruff format --check .`, `uv run ruff check .`, `uv run pyright`, and `uv run pytest -q` before opening or merging a PR.
 - Keep modules small and typed; avoid hidden side effects at import time.
 - Python 3.12+ features are allowed; keep runtime compatibility aligned with `pyproject.toml`.
 - Max line length is 100 (Ruff).
@@ -41,7 +44,6 @@ make ci
    - `uv run ruff check .`
    - `uv run pyright`
    - `uv run pytest -q`
-   - `make ci`
 5. Keep output artifacts deterministic where possible.
 
 ## Branches and commits

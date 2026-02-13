@@ -1,4 +1,4 @@
-.PHONY: fmt lint type test ci
+.PHONY: fmt lint type test
 
 fmt:
 	uv run ruff format .
@@ -11,9 +11,3 @@ type:
 
 test:
 	uv run pytest
-
-ci:
-	uv run ruff format --check .
-	$(MAKE) lint
-	$(MAKE) type
-	$(MAKE) test
