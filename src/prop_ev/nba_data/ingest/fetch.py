@@ -206,9 +206,7 @@ def _normalize_cdn_boxscore(payload: dict[str, Any]) -> dict[str, Any]:
                     "player_id": str(player.get("personId", "")).strip(),
                     "minutes": minutes,
                     "points": _as_float(stats.get("points", 0)),
-                    "rebounds": _as_float(
-                        stats.get("reboundsTotal", stats.get("rebounds", 0))
-                    ),
+                    "rebounds": _as_float(stats.get("reboundsTotal", stats.get("rebounds", 0))),
                     "assists": _as_float(stats.get("assists", 0)),
                 }
             )
