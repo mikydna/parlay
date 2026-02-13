@@ -298,12 +298,17 @@ def write_discovery_execution_reports(
     store: SnapshotStore,
     execution_snapshot_id: str,
     report: dict[str, Any],
-) -> tuple[Path, Path]:
-    """Write discovery-vs-execution JSON + markdown artifacts."""
+    write_markdown: bool = False,
+) -> tuple[Path, Path | None]:
+    """Write discovery-vs-execution JSON and optional markdown artifacts."""
     reports_dir = snapshot_reports_dir(store, execution_snapshot_id)
     reports_dir.mkdir(parents=True, exist_ok=True)
     json_path = reports_dir / "discovery-execution.json"
     md_path = reports_dir / "discovery-execution.md"
     json_path.write_text(json.dumps(report, sort_keys=True, indent=2) + "\n", encoding="utf-8")
-    md_path.write_text(_render_discovery_execution_markdown(report), encoding="utf-8")
-    return json_path, md_path
+    if write_markdown:
+        md_path.write_text(_render_discovery_execution_markdown(report), encoding="utf-8")
+        return json_path, md_path
+    if md_path.exists():
+        md_path.unlink()
+    return json_path, None

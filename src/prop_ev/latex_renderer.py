@@ -385,3 +385,23 @@ def render_pdf_from_markdown(
     """Write LaTeX and attempt PDF compilation."""
     write_latex(markdown, tex_path=tex_path, title=title, landscape=landscape)
     return compile_pdf(tex_path=tex_path, pdf_path=pdf_path)
+
+
+_LATEX_INTERMEDIATE_SUFFIXES: tuple[str, ...] = (
+    ".aux",
+    ".log",
+    ".out",
+    ".toc",
+    ".xdv",
+    ".synctex.gz",
+)
+
+
+def cleanup_latex_artifacts(*, tex_path: Path, keep_tex: bool) -> None:
+    """Delete LaTeX intermediate files and optionally remove the .tex source."""
+    for suffix in _LATEX_INTERMEDIATE_SUFFIXES:
+        path = tex_path.with_suffix(suffix)
+        if path.exists():
+            path.unlink()
+    if not keep_tex and tex_path.exists():
+        tex_path.unlink()

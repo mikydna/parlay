@@ -2492,8 +2492,9 @@ def write_strategy_reports(
     top_n: int,
     strategy_id: str | None = None,
     write_canonical: bool = True,
+    write_markdown: bool = False,
 ) -> tuple[Path, Path]:
-    """Write json and markdown strategy reports."""
+    """Write JSON strategy report and optional markdown companions."""
     from prop_ev.strategies.base import normalize_strategy_id
 
     reports_dir.mkdir(parents=True, exist_ok=True)
@@ -2518,8 +2519,13 @@ def write_strategy_reports(
 
     def _write(json_path: Path, md_path: Path, card_path: Path) -> None:
         json_path.write_text(json.dumps(report, sort_keys=True, indent=2) + "\n", encoding="utf-8")
-        md_path.write_text(markdown, encoding="utf-8")
-        card_path.write_text(markdown, encoding="utf-8")
+        if write_markdown:
+            md_path.write_text(markdown, encoding="utf-8")
+            card_path.write_text(markdown, encoding="utf-8")
+        else:
+            for path in (md_path, card_path):
+                if path.exists():
+                    path.unlink()
 
     if write_canonical:
         _write(canonical_json, canonical_md, canonical_card)
@@ -2541,6 +2547,7 @@ def write_tagged_strategy_reports(
     report: dict[str, Any],
     top_n: int,
     tag: str,
+    write_markdown: bool = False,
 ) -> tuple[Path, Path]:
     """Write one tagged strategy report bundle without touching canonical files."""
     safe_tag = _sanitize_artifact_tag(tag)
@@ -2555,6 +2562,11 @@ def write_tagged_strategy_reports(
     card_path = reports_dir / f"strategy-card.{safe_tag}.md"
 
     json_path.write_text(json.dumps(report, sort_keys=True, indent=2) + "\n", encoding="utf-8")
-    md_path.write_text(markdown, encoding="utf-8")
-    card_path.write_text(markdown, encoding="utf-8")
+    if write_markdown:
+        md_path.write_text(markdown, encoding="utf-8")
+        card_path.write_text(markdown, encoding="utf-8")
+    else:
+        for path in (md_path, card_path):
+            if path.exists():
+                path.unlink()
     return json_path, md_path

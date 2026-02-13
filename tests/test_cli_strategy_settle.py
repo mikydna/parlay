@@ -97,8 +97,8 @@ def test_strategy_settle_returns_pending_exit_code(
     assert "settlement_json=" in out
     assert "pending=1" in out
     assert (reports_dir / "backtest-settlement.json").exists()
-    assert (reports_dir / "backtest-settlement.md").exists()
-    assert (reports_dir / "backtest-settlement.tex").exists()
+    assert not (reports_dir / "backtest-settlement.md").exists()
+    assert not (reports_dir / "backtest-settlement.tex").exists()
 
 
 def test_strategy_settle_returns_complete_exit_code(

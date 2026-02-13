@@ -107,7 +107,7 @@ def test_generate_brief_writes_snapshot_and_latest(
     assert (reports_dir / "brief-pass1.json").exists()
     assert (reports_dir / "brief-analyst.json").exists()
     assert not (reports_dir / "strategy-brief.md").exists()
-    assert (reports_dir / "strategy-brief.tex").exists()
+    assert not (reports_dir / "strategy-brief.tex").exists()
     assert (reports_dir / "strategy-brief.pdf").exists()
     assert (reports_dir / "strategy-brief.meta.json").exists()
     assert result["report_markdown"] == ""
@@ -199,6 +199,37 @@ def test_generate_brief_includes_execution_books_in_markdown(
     assert "- execution_books: `draftkings, fanduel`" in markdown
 
 
+def test_generate_brief_keeps_tex_when_enabled(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("ODDS_API_KEY", "odds-test")
+    monkeypatch.setenv("PROP_EV_DATA_DIR", str(tmp_path / "data" / "odds_api"))
+
+    store = SnapshotStore(tmp_path / "data" / "odds_api")
+    snapshot_id = "2026-02-11T17-27-00Z"
+    store.ensure_snapshot(snapshot_id)
+    reports_dir = snapshot_reports_dir(store, snapshot_id)
+    reports_dir.mkdir(parents=True, exist_ok=True)
+    (reports_dir / "strategy-report.json").write_text(
+        json.dumps(_sample_strategy_report(), sort_keys=True, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+    settings = Settings(_env_file=None)
+    result = generate_brief_for_snapshot(
+        store=store,
+        settings=settings,
+        snapshot_id=snapshot_id,
+        top_n=5,
+        llm_refresh=False,
+        llm_offline=True,
+        keep_tex=True,
+    )
+
+    assert (reports_dir / "strategy-brief.tex").exists()
+    assert result["report_tex"].endswith("strategy-brief.tex")
+
+
 def test_generate_brief_non_canonical_strategy_report_writes_canonical_outputs(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -231,7 +262,7 @@ def test_generate_brief_non_canonical_strategy_report_writes_canonical_outputs(
     assert (reports_dir / "brief-input.json").exists()
     assert (reports_dir / "brief-pass1.json").exists()
     assert (reports_dir / "brief-analyst.json").exists()
-    assert (reports_dir / "strategy-brief.tex").exists()
+    assert not (reports_dir / "strategy-brief.tex").exists()
     assert (reports_dir / "strategy-brief.pdf").exists()
     assert (reports_dir / "strategy-brief.meta.json").exists()
     assert not (reports_dir / "strategy-brief.md").exists()

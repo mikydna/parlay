@@ -247,12 +247,62 @@ def test_settle_snapshot_writes_artifacts(tmp_path: Path, monkeypatch: pytest.Mo
     assert report["exit_code"] == 1
     artifacts = report["artifacts"]
     assert Path(str(artifacts["json"])).exists()
-    assert Path(str(artifacts["md"])).exists()
-    assert Path(str(artifacts["tex"])).exists()
+    assert artifacts["md"] == ""
+    assert artifacts["tex"] == ""
     assert Path(str(artifacts["meta"])).exists()
     assert Path(str(artifacts["csv"])).exists()
     assert report["source_details"]["results_source_mode"] == "live"
     assert report["pdf_status"] in {"ok", "missing_tool", "failed"}
+
+
+def test_settle_snapshot_writes_optional_markdown_and_tex(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    snapshot_dir = tmp_path / "data" / "odds_api" / "snapshots" / "snap-1"
+    store = SnapshotStore(tmp_path / "data" / "odds_api")
+    store.ensure_snapshot("snap-1")
+    reports_dir = snapshot_reports_dir(store, "snap-1")
+    reports_dir.mkdir(parents=True, exist_ok=True)
+    seed_path = reports_dir / "backtest-seed.jsonl"
+    seed_path.write_text(
+        json.dumps(
+            _seed_row(
+                ticket_key="t1",
+                player="Player One",
+                market="player_points",
+                side="over",
+                point=20.5,
+            ),
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(
+        "prop_ev.settlement.NBARepository.load_results_for_settlement",
+        lambda self, *, seed_rows, offline, refresh, mode: (
+            _results_payload(),
+            self.snapshot_dir / "context" / "results.json",
+        ),
+    )
+
+    report = settle_snapshot(
+        snapshot_dir=snapshot_dir,
+        reports_dir=reports_dir,
+        snapshot_id="snap-1",
+        seed_path=seed_path,
+        offline=False,
+        refresh_results=True,
+        write_csv=False,
+        results_source="live",
+        write_markdown=True,
+        keep_tex=True,
+    )
+
+    artifacts = report["artifacts"]
+    assert Path(str(artifacts["md"])).exists()
+    assert Path(str(artifacts["tex"])).exists()
 
 
 def test_settle_snapshot_default_schema_includes_auto_results_source_mode(

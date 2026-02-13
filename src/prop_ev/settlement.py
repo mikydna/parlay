@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from prop_ev.brief_builder import TEAM_ABBREVIATIONS
-from prop_ev.latex_renderer import render_pdf_from_markdown
+from prop_ev.latex_renderer import cleanup_latex_artifacts, render_pdf_from_markdown
 from prop_ev.nba_data.context_cache import now_utc
 from prop_ev.nba_data.normalize import canonical_team_name, normalize_person_name
 from prop_ev.nba_data.repo import NBARepository
@@ -582,6 +582,8 @@ def settle_snapshot(
     refresh_results: bool,
     write_csv: bool,
     results_source: str = "auto",
+    write_markdown: bool = False,
+    keep_tex: bool = False,
 ) -> dict[str, Any]:
     """Settle snapshot seed tickets and write report artifacts."""
     seed_rows = _load_jsonl(seed_path)
@@ -637,6 +639,8 @@ def settle_snapshot(
         "status": status,
         "offline": offline,
         "refresh_results": effective_refresh,
+        "write_markdown": bool(write_markdown),
+        "keep_tex": bool(keep_tex),
         "results_cache_path": str(results_cache_path),
         "results_errors": results_payload.get("errors", []),
     }
@@ -651,7 +655,10 @@ def settle_snapshot(
         "rows": rows,
     }
     markdown = render_settlement_markdown(report)
-    md_path.write_text(markdown, encoding="utf-8")
+    if write_markdown:
+        md_path.write_text(markdown, encoding="utf-8")
+    elif md_path.exists():
+        md_path.unlink()
     pdf_result = render_pdf_from_markdown(
         markdown,
         tex_path=tex_path,
@@ -659,13 +666,14 @@ def settle_snapshot(
         title="Backtest Settlement",
         landscape=True,
     )
+    cleanup_latex_artifacts(tex_path=tex_path, keep_tex=keep_tex)
     if write_csv:
         _write_csv(csv_path, rows)
 
     artifacts = {
         "json": str(json_path),
-        "md": str(md_path),
-        "tex": str(tex_path),
+        "md": str(md_path) if write_markdown else "",
+        "tex": str(tex_path) if keep_tex else "",
         "pdf": str(pdf_path),
         "csv": str(csv_path) if write_csv else "",
         "meta": str(meta_path),

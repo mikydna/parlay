@@ -270,7 +270,7 @@ def test_strategy_run_from_snapshot(local_data_dir: Path) -> None:
     )
     reports_dir = snapshot_reports_dir(store, snapshot_id)
     assert (reports_dir / "strategy-report.json").exists()
-    assert (reports_dir / "strategy-report.md").exists()
+    assert not (reports_dir / "strategy-report.md").exists()
     assert (reports_dir / "backtest-seed.jsonl").exists()
     assert (reports_dir / "backtest-readiness.json").exists()
     assert not (reports_dir / "strategy-report.s001.json").exists()
@@ -408,12 +408,12 @@ def test_strategy_run_writes_execution_tagged_report(
     assert code == 0
     reports_dir = snapshot_reports_dir(store, snapshot_id)
     assert (reports_dir / "strategy-report.execution-draftkings.json").exists()
-    assert (reports_dir / "strategy-report.execution-draftkings.md").exists()
-    assert (reports_dir / "strategy-card.execution-draftkings.md").exists()
+    assert not (reports_dir / "strategy-report.execution-draftkings.md").exists()
+    assert not (reports_dir / "strategy-card.execution-draftkings.md").exists()
     assert "execution_bookmakers=draftkings" in out
     assert "execution_tag=execution-draftkings" in out
     assert "execution_report_json=" in out
-    assert "execution_report_md=" in out
+    assert "execution_report_md=disabled" in out
 
 
 def test_run_strategy_for_playbook_passes_strategy_id(

@@ -2053,11 +2053,13 @@ def _write_discovery_execution_reports(
     store: SnapshotStore,
     execution_snapshot_id: str,
     report: dict[str, Any],
-) -> tuple[Path, Path]:
+    write_markdown: bool = False,
+) -> tuple[Path, Path | None]:
     return write_discovery_execution_reports(
         store=store,
         execution_snapshot_id=execution_snapshot_id,
         report=report,
+        write_markdown=write_markdown,
     )
 
 
@@ -2195,6 +2197,7 @@ def _cmd_strategy_run(args: argparse.Namespace) -> int:
     report = decorate_report(result.report, strategy=plugin.info, config=result.config)
     strategy_id = normalize_strategy_id(plugin.info.id)
     reports_dir = snapshot_reports_dir(store, snapshot_id)
+    write_markdown = bool(getattr(args, "write_markdown", False))
     write_canonical_raw = getattr(args, "write_canonical", None)
     if write_canonical_raw is None:
         write_canonical = bool(strategy_id == "s001")
@@ -2207,6 +2210,7 @@ def _cmd_strategy_run(args: argparse.Namespace) -> int:
         top_n=args.top_n,
         strategy_id=strategy_id,
         write_canonical=write_canonical,
+        write_markdown=write_markdown,
     )
     backtest = write_backtest_artifacts(
         snapshot_dir=snapshot_dir,
@@ -2248,11 +2252,17 @@ def _cmd_strategy_run(args: argparse.Namespace) -> int:
     print(f"require_fresh_context={str(bool(require_fresh_context)).lower()}")
     print(f"health_gates={','.join(health_gates) if health_gates else 'none'}")
     print(f"report_json={json_path}")
-    print(f"report_md={md_path}")
+    if write_markdown:
+        print(f"report_md={md_path}")
+    else:
+        print("report_md=disabled")
     card = reports_dir / "strategy-card.md"
     if not write_canonical:
         card = card.with_name(f"{card.stem}.{strategy_id}{card.suffix}")
-    print(f"report_card={card}")
+    if write_markdown:
+        print(f"report_card={card}")
+    else:
+        print("report_card=disabled")
     print(f"backtest_seed_jsonl={backtest['seed_jsonl']}")
     print(f"backtest_results_template_csv={backtest['results_template_csv']}")
     print(f"backtest_readiness_json={backtest['readiness_json']}")
@@ -2289,6 +2299,7 @@ def _cmd_strategy_run(args: argparse.Namespace) -> int:
             report=projected_report,
             top_n=max(0, execution_top_n),
             tag=execution_tag,
+            write_markdown=write_markdown,
         )
         execution_summary = (
             projected_report.get("summary", {})
@@ -2304,7 +2315,10 @@ def _cmd_strategy_run(args: argparse.Namespace) -> int:
             )
         )
         print(f"execution_report_json={execution_json}")
-        print(f"execution_report_md={execution_md}")
+        if write_markdown:
+            print(f"execution_report_md={execution_md}")
+        else:
+            print("execution_report_md=disabled")
     return 0
 
 
@@ -2386,6 +2400,7 @@ def _cmd_strategy_compare(args: argparse.Namespace) -> int:
     store = SnapshotStore(os.environ.get("PROP_EV_DATA_DIR", "data/odds_api"))
     snapshot_id = args.snapshot_id or _latest_snapshot_id(store)
     reports_dir = snapshot_reports_dir(store, snapshot_id)
+    write_markdown = bool(getattr(args, "write_markdown", False))
 
     strategy_ids = _parse_strategy_ids(getattr(args, "strategies", ""))
     if len(strategy_ids) < 2:
@@ -2445,6 +2460,7 @@ def _cmd_strategy_compare(args: argparse.Namespace) -> int:
             top_n=int(args.top_n),
             strategy_id=strategy_id,
             write_canonical=False,
+            write_markdown=write_markdown,
         )
         write_backtest_artifacts(
             snapshot_dir=snapshot_dir,
@@ -2616,14 +2632,21 @@ def _cmd_strategy_backtest_summarize(args: argparse.Namespace) -> int:
     }
 
     reports_dir.mkdir(parents=True, exist_ok=True)
+    write_markdown = bool(getattr(args, "write_markdown", False))
     json_path = reports_dir / "backtest-summary.json"
     md_path = reports_dir / "backtest-summary.md"
     json_path.write_text(json.dumps(report, sort_keys=True, indent=2) + "\n", encoding="utf-8")
-    md_path.write_text(_render_backtest_summary_markdown(report), encoding="utf-8")
+    if write_markdown:
+        md_path.write_text(_render_backtest_summary_markdown(report), encoding="utf-8")
+    elif md_path.exists():
+        md_path.unlink()
 
     print(f"snapshot_id={snapshot_id}")
     print(f"summary_json={json_path}")
-    print(f"summary_md={md_path}")
+    if write_markdown:
+        print(f"summary_md={md_path}")
+    else:
+        print("summary_md=disabled")
     if winner is not None:
         print(
             f"winner_strategy_id={winner.strategy_id} roi={winner.roi} graded={winner.rows_graded}"
@@ -2707,6 +2730,8 @@ def _cmd_strategy_settle(args: argparse.Namespace) -> int:
         refresh_results=bool(args.refresh_results),
         write_csv=bool(args.write_csv),
         results_source=str(getattr(args, "results_source", "auto")),
+        write_markdown=bool(getattr(args, "write_markdown", False)),
+        keep_tex=bool(getattr(args, "keep_tex", False)),
     )
 
     if bool(getattr(args, "json_output", True)):
@@ -2732,8 +2757,16 @@ def _cmd_strategy_settle(args: argparse.Namespace) -> int:
             )
         )
         print(f"settlement_json={artifacts.get('json', '')}")
-        print(f"settlement_md={artifacts.get('md', '')}")
-        print(f"settlement_tex={artifacts.get('tex', '')}")
+        settlement_md = str(artifacts.get("md", "")).strip()
+        if settlement_md:
+            print(f"settlement_md={settlement_md}")
+        else:
+            print("settlement_md=disabled")
+        settlement_tex = str(artifacts.get("tex", "")).strip()
+        if settlement_tex:
+            print(f"settlement_tex={settlement_tex}")
+        else:
+            print("settlement_tex=disabled")
         print(f"settlement_pdf={artifacts.get('pdf', '')}")
         print(f"settlement_meta={artifacts.get('meta', '')}")
         csv_artifact = str(artifacts.get("csv", "")).strip()
@@ -3160,6 +3193,7 @@ def _cmd_playbook_run(args: argparse.Namespace) -> int:
         game_card_min_ev=max(0.0, args.min_ev),
         month=month,
         write_markdown=bool(getattr(args, "write_markdown", False)),
+        keep_tex=bool(getattr(args, "keep_tex", False)),
     )
     end_budget = budget_snapshot(store=store, settings=settings, month=month)
     print(
@@ -3188,7 +3222,10 @@ def _cmd_playbook_run(args: argparse.Namespace) -> int:
         print(f"strategy_brief_md={brief['report_markdown']}")
     else:
         print("strategy_brief_md=disabled")
-    print(f"strategy_brief_tex={brief['report_tex']}")
+    if brief.get("report_tex"):
+        print(f"strategy_brief_tex={brief['report_tex']}")
+    else:
+        print("strategy_brief_tex=disabled")
     print(f"strategy_brief_pdf={brief['report_pdf']}")
     print(f"strategy_brief_meta={brief['report_meta']}")
     print(
@@ -3277,6 +3314,7 @@ def _cmd_playbook_render(args: argparse.Namespace) -> int:
         month=month,
         strategy_report_path=strategy_report_path,
         write_markdown=bool(getattr(args, "write_markdown", False)),
+        keep_tex=bool(getattr(args, "keep_tex", False)),
     )
     print(f"snapshot_id={snapshot_id}")
     print(f"strategy_id={strategy_id}")
@@ -3288,7 +3326,10 @@ def _cmd_playbook_render(args: argparse.Namespace) -> int:
         print(f"strategy_brief_md={brief['report_markdown']}")
     else:
         print("strategy_brief_md=disabled")
-    print(f"strategy_brief_tex={brief['report_tex']}")
+    if brief.get("report_tex"):
+        print(f"strategy_brief_tex={brief['report_tex']}")
+    else:
+        print("strategy_brief_tex=disabled")
     print(f"strategy_brief_pdf={brief['report_pdf']}")
     print(f"strategy_brief_meta={brief['report_meta']}")
     return 0
@@ -3543,6 +3584,7 @@ def _cmd_playbook_discover_execute(args: argparse.Namespace) -> int:
         store=store,
         execution_snapshot_id=execution_snapshot_id,
         report=compare_report,
+        write_markdown=bool(getattr(args, "write_markdown", False)),
     )
 
     brief = generate_brief_for_snapshot(
@@ -3556,6 +3598,7 @@ def _cmd_playbook_discover_execute(args: argparse.Namespace) -> int:
         game_card_min_ev=max(0.0, args.min_ev),
         month=month,
         write_markdown=bool(getattr(args, "write_markdown", False)),
+        keep_tex=bool(getattr(args, "keep_tex", False)),
     )
 
     summary = compare_report.get("summary", {})
@@ -3573,7 +3616,10 @@ def _cmd_playbook_discover_execute(args: argparse.Namespace) -> int:
         )
     )
     print(f"discovery_execution_json={compare_json}")
-    print(f"discovery_execution_md={compare_md}")
+    if compare_md is not None:
+        print(f"discovery_execution_md={compare_md}")
+    else:
+        print("discovery_execution_md=disabled")
     if brief.get("report_markdown"):
         print(f"strategy_brief_md={brief['report_markdown']}")
     else:
@@ -3868,6 +3914,11 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Strategy runtime mode (replay relaxes freshness gates for historical reruns).",
     )
     strategy_run.add_argument("--allow-tier-b", action="store_true")
+    strategy_run.add_argument(
+        "--write-markdown",
+        action="store_true",
+        help="Write strategy markdown artifacts (disabled by default).",
+    )
     strategy_run.add_argument("--offline", action="store_true")
     strategy_run.add_argument("--block-paid", action="store_true")
     strategy_run.add_argument("--refresh-context", action="store_true")
@@ -3935,6 +3986,11 @@ def _build_parser() -> argparse.ArgumentParser:
     strategy_compare.add_argument("--top-n", type=int, default=25)
     strategy_compare.add_argument("--min-ev", type=float, default=0.01)
     strategy_compare.add_argument("--allow-tier-b", action="store_true")
+    strategy_compare.add_argument(
+        "--write-markdown",
+        action="store_true",
+        help="Write suffixed strategy markdown artifacts (disabled by default).",
+    )
     strategy_compare.add_argument("--offline", action="store_true")
     strategy_compare.add_argument("--block-paid", action="store_true")
     strategy_compare.add_argument("--refresh-context", action="store_true")
@@ -3970,6 +4026,16 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     strategy_settle.add_argument("--write-csv", action="store_true")
     strategy_settle.add_argument(
+        "--write-markdown",
+        action="store_true",
+        help="Write settlement markdown artifact (disabled by default).",
+    )
+    strategy_settle.add_argument(
+        "--keep-tex",
+        action="store_true",
+        help="Keep settlement .tex artifact after PDF generation (disabled by default).",
+    )
+    strategy_settle.add_argument(
         "--json",
         dest="json_output",
         action="store_true",
@@ -3991,6 +4057,11 @@ def _build_parser() -> argparse.ArgumentParser:
     strategy_backtest_summarize.add_argument("--results", action="append", default=[])
     strategy_backtest_summarize.add_argument("--min-graded", type=int, default=200)
     strategy_backtest_summarize.add_argument("--bin-size", type=float, default=0.05)
+    strategy_backtest_summarize.add_argument(
+        "--write-markdown",
+        action="store_true",
+        help="Write backtest summary markdown artifact (disabled by default).",
+    )
 
     playbook = subparsers.add_parser("playbook", help="Run playbook briefs")
     playbook_subparsers = playbook.add_subparsers(dest="playbook_command")
@@ -4038,6 +4109,11 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Write `strategy-brief.md` artifact (disabled by default).",
     )
     playbook_run.add_argument(
+        "--keep-tex",
+        action="store_true",
+        help="Keep `strategy-brief.tex` artifact after PDF generation (disabled by default).",
+    )
+    playbook_run.add_argument(
         "--strategy-mode",
         choices=("auto", "live", "replay"),
         default="auto",
@@ -4079,6 +4155,11 @@ def _build_parser() -> argparse.ArgumentParser:
         "--write-markdown",
         action="store_true",
         help="Write `strategy-brief.md` artifact (disabled by default).",
+    )
+    playbook_render.add_argument(
+        "--keep-tex",
+        action="store_true",
+        help="Keep `strategy-brief.tex` artifact after PDF generation (disabled by default).",
     )
     playbook_render.add_argument(
         "--strategy-mode",
@@ -4151,6 +4232,11 @@ def _build_parser() -> argparse.ArgumentParser:
         "--write-markdown",
         action="store_true",
         help="Write `strategy-brief.md` artifact (disabled by default).",
+    )
+    playbook_discover_execute.add_argument(
+        "--keep-tex",
+        action="store_true",
+        help="Keep `strategy-brief.tex` artifact after PDF generation (disabled by default).",
     )
     playbook_discover_execute.add_argument(
         "--strategy-mode",

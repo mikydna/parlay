@@ -39,7 +39,7 @@ from prop_ev.brief_builder import (
     upsert_best_available_section,
 )
 from prop_ev.budget import current_month_utc, llm_budget_status, odds_budget_status
-from prop_ev.latex_renderer import render_pdf_from_markdown, write_latex
+from prop_ev.latex_renderer import cleanup_latex_artifacts, render_pdf_from_markdown
 from prop_ev.llm_client import (
     LLMBudgetExceededError,
     LLMClient,
@@ -280,8 +280,9 @@ def generate_brief_for_snapshot(
     month: str | None = None,
     strategy_report_path: Path | None = None,
     write_markdown: bool = False,
+    keep_tex: bool = False,
 ) -> dict[str, Any]:
-    """Generate markdown + LaTeX + PDF brief for one snapshot."""
+    """Generate optional markdown plus PDF brief artifacts for one snapshot."""
     reports_dir = snapshot_reports_dir(store, snapshot_id)
     reports_dir.mkdir(parents=True, exist_ok=True)
 
@@ -632,8 +633,6 @@ def generate_brief_for_snapshot(
         markdown_path.write_text(markdown, encoding="utf-8")
 
     tex_path = reports_dir / "strategy-brief.tex"
-    write_latex(markdown, tex_path=tex_path, title="NBA Strategy Brief", landscape=True)
-
     pdf_path = reports_dir / "strategy-brief.pdf"
     pdf_result = render_pdf_from_markdown(
         markdown,
@@ -642,6 +641,7 @@ def generate_brief_for_snapshot(
         title="NBA Strategy Brief",
         landscape=True,
     )
+    cleanup_latex_artifacts(tex_path=tex_path, keep_tex=keep_tex)
 
     generated_at_utc = _now_utc()
     meta = {
@@ -651,12 +651,13 @@ def generate_brief_for_snapshot(
         "snapshot_id": snapshot_id,
         "strategy_report_path": str(strategy_json_path),
         "write_markdown": bool(write_markdown),
+        "keep_tex": bool(keep_tex),
         "model": model,
         "brief_input_path": str(brief_input_path),
         "brief_pass1_path": str(pass1_path),
         "brief_analyst_path": str(analyst_path),
         "brief_markdown_path": str(markdown_path) if markdown_path is not None else "",
-        "brief_tex_path": str(tex_path),
+        "brief_tex_path": str(tex_path) if keep_tex else "",
         "brief_pdf_path": str(pdf_path),
         "llm": {
             "pass1": pass1_meta,
@@ -681,7 +682,7 @@ def generate_brief_for_snapshot(
     return {
         "snapshot_id": snapshot_id,
         "report_markdown": str(markdown_path) if markdown_path is not None else "",
-        "report_tex": str(tex_path),
+        "report_tex": str(tex_path) if keep_tex else "",
         "report_pdf": str(pdf_path),
         "report_meta": str(meta_path),
         "brief_input": str(brief_input_path),
