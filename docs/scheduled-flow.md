@@ -2,6 +2,10 @@
 
 This flow uses a single playbook command that self-gates between live and offline modes.
 
+For operator policy and contract references, see:
+- `docs/runbook.md`
+- `docs/contracts.md`
+
 ## Hourly Schedule Command
 
 ```bash
