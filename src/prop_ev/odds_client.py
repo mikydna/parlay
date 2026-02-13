@@ -100,6 +100,12 @@ def _wait_for_retry(retry_state) -> float:
     return min(2 ** (retry_state.attempt_number - 1), 30.0)
 
 
+def _unwrap_historical_data(payload: Any) -> Any:
+    if isinstance(payload, dict) and "data" in payload:
+        return payload.get("data")
+    return payload
+
+
 class OddsAPIClient:
     """Thin HTTP client around The Odds API v4."""
 
@@ -174,9 +180,27 @@ class OddsAPIClient:
         commence_from: str | None = None,
         commence_to: str | None = None,
         date_format: str = "iso",
+        historical_date: str | None = None,
     ) -> OddsResponse:
         """List events for a sport (free endpoint)."""
-        params: dict[str, Any] = {"dateFormat": date_format}
+        if historical_date:
+            params: dict[str, Any] = {"dateFormat": date_format, "date": historical_date}
+            raw = self._request(path=f"/historical/sports/{sport_key}/events", params=params)
+            data = _unwrap_historical_data(raw.data)
+            if not isinstance(data, list):
+                raise OddsAPIError(
+                    "historical events payload missing list data for "
+                    f"sport={sport_key} date={historical_date}"
+                )
+            return OddsResponse(
+                data=data,
+                status_code=raw.status_code,
+                headers=raw.headers,
+                duration_ms=raw.duration_ms,
+                retry_count=raw.retry_count,
+            )
+
+        params = {"dateFormat": date_format}
         if commence_from:
             params["commenceTimeFrom"] = commence_from
         if commence_to:
@@ -232,6 +256,7 @@ class OddsAPIClient:
         include_sids: bool = False,
         odds_format: str = "american",
         date_format: str = "iso",
+        historical_date: str | None = None,
     ) -> OddsResponse:
         """Fetch odds for one event, including player props markets."""
         invalid = sorted(set(markets) - CORE_PROP_MARKETS)
@@ -251,5 +276,24 @@ class OddsAPIClient:
             params["includeLinks"] = "true"
         if include_sids:
             params["includeSids"] = "true"
+        if historical_date:
+            params["date"] = historical_date
+            raw = self._request(
+                path=f"/historical/sports/{sport_key}/events/{event_id}/odds",
+                params=params,
+            )
+            data = _unwrap_historical_data(raw.data)
+            if not isinstance(data, dict):
+                raise OddsAPIError(
+                    "historical event odds payload missing object data for "
+                    f"event={event_id} date={historical_date}"
+                )
+            return OddsResponse(
+                data=data,
+                status_code=raw.status_code,
+                headers=raw.headers,
+                duration_ms=raw.duration_ms,
+                retry_count=raw.retry_count,
+            )
 
         return self._request(path=f"/sports/{sport_key}/events/{event_id}/odds", params=params)

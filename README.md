@@ -92,6 +92,30 @@ uv run prop-ev snapshot pack --snapshot-id <SNAPSHOT_ID>
 uv run prop-ev snapshot unpack --bundle data/odds_api/bundles/snapshots/<SNAPSHOT_ID>.tar.zst
 ```
 
+Historical day backfill (paid key, per-event historical endpoints):
+
+```bash
+uv run prop-ev data backfill \
+  --historical \
+  --historical-anchor-hour-local 12 \
+  --historical-pre-tip-minutes 60 \
+  --from 2026-01-20 --to 2026-02-01 \
+  --markets player_points \
+  --bookmakers draftkings,fanduel,espnbet,betmgm,betrivers,williamhill_us,bovada,fanatics \
+  --max-credits 500
+```
+
+Machine-readable status summary for a day range:
+
+```bash
+uv run prop-ev data status \
+  --historical \
+  --from 2026-02-01 --to 2026-02-12 \
+  --markets player_points \
+  --bookmakers draftkings,fanduel,espnbet,betmgm,betrivers,williamhill_us,bovada,fanatics \
+  --json-summary
+```
+
 Dev mode with free calls allowed but paid odds endpoints blocked:
 
 ```bash

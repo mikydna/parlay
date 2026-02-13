@@ -31,6 +31,9 @@ class DatasetSpec:
     include_sids: bool
     odds_format: str = "american"
     date_format: str = "iso"
+    historical: bool = False
+    historical_anchor_hour_local: int = 12
+    historical_pre_tip_minutes: int = 60
 
 
 def canonical_dict(spec: DatasetSpec) -> dict[str, object]:
@@ -43,6 +46,9 @@ def canonical_dict(spec: DatasetSpec) -> dict[str, object]:
         "include_sids": bool(spec.include_sids),
         "odds_format": spec.odds_format.strip() or "american",
         "date_format": spec.date_format.strip() or "iso",
+        "historical": bool(spec.historical),
+        "historical_anchor_hour_local": int(spec.historical_anchor_hour_local),
+        "historical_pre_tip_minutes": int(spec.historical_pre_tip_minutes),
     }
 
 

@@ -60,7 +60,7 @@ from prop_ev.odds_data.errors import CreditBudgetExceeded, OfflineCacheMiss, Spe
 from prop_ev.odds_data.policy import SpendPolicy
 from prop_ev.odds_data.repo import OddsRepository
 from prop_ev.odds_data.request import OddsRequest
-from prop_ev.odds_data.spec import DatasetSpec
+from prop_ev.odds_data.spec import DatasetSpec, dataset_id
 from prop_ev.playbook import budget_snapshot, compute_live_window, generate_brief_for_snapshot
 from prop_ev.settings import Settings
 from prop_ev.settlement import settle_snapshot
@@ -270,6 +270,13 @@ def _dataset_spec_from_args(args: argparse.Namespace) -> DatasetSpec:
         allow_config=not bool(getattr(args, "ignore_bookmaker_config", False)),
     )
     regions = str(getattr(args, "regions", "")).strip()
+    historical = bool(getattr(args, "historical", False))
+    historical_anchor_hour_local = int(getattr(args, "historical_anchor_hour_local", 12))
+    if historical_anchor_hour_local < 0 or historical_anchor_hour_local > 23:
+        raise CLIError("--historical-anchor-hour-local must be within [0, 23]")
+    historical_pre_tip_minutes = int(getattr(args, "historical_pre_tip_minutes", 60))
+    if historical_pre_tip_minutes < 0:
+        raise CLIError("--historical-pre-tip-minutes must be >= 0")
     return DatasetSpec(
         sport_key=str(getattr(args, "sport_key", "basketball_nba")).strip() or "basketball_nba",
         markets=markets,
@@ -279,6 +286,9 @@ def _dataset_spec_from_args(args: argparse.Namespace) -> DatasetSpec:
         include_sids=bool(getattr(args, "include_sids", False)),
         odds_format="american",
         date_format="iso",
+        historical=historical,
+        historical_anchor_hour_local=historical_anchor_hour_local,
+        historical_pre_tip_minutes=historical_pre_tip_minutes,
     )
 
 
@@ -761,6 +771,7 @@ def _cmd_data_status(args: argparse.Namespace) -> int:
     except (KeyError, ValueError) as exc:
         raise CLIError(str(exc)) from exc
 
+    rows: list[dict[str, Any]] = []
     for day in days:
         status = (
             None if bool(getattr(args, "refresh", False)) else load_day_status(data_root, spec, day)
@@ -774,16 +785,75 @@ def _cmd_data_status(args: argparse.Namespace) -> int:
                 day=day,
                 tz_name=str(getattr(args, "tz_name", "America/New_York")),
             )
+        row = {
+            "day": day,
+            "complete": bool(status.get("complete", False)),
+            "missing_count": int(status.get("missing_count", 0)),
+            "total_events": int(status.get("total_events", 0)),
+            "snapshot_id": str(status.get("snapshot_id_for_day", "")),
+            "note": str(status.get("note", "")),
+            "error": str(status.get("error", "")),
+        }
+        rows.append(row)
+        if bool(getattr(args, "json_summary", False)):
+            continue
         print(
             ("day={} complete={} missing={} events={} snapshot_id={} note={}").format(
-                day,
-                str(bool(status.get("complete", False))).lower(),
-                int(status.get("missing_count", 0)),
-                int(status.get("total_events", 0)),
-                str(status.get("snapshot_id_for_day", "")),
-                str(status.get("note", "")),
+                row["day"],
+                str(row["complete"]).lower(),
+                row["missing_count"],
+                row["total_events"],
+                row["snapshot_id"],
+                row["note"],
             )
         )
+    if bool(getattr(args, "json_summary", False)):
+        complete_days = [row["day"] for row in rows if bool(row["complete"])]
+        incomplete_days = [row["day"] for row in rows if not bool(row["complete"])]
+
+        def _incomplete_reason(row: dict[str, Any]) -> str:
+            error_text = str(row.get("error", "")).strip().lower()
+            if error_text:
+                if "404" in error_text:
+                    return "upstream_404"
+                if "exceed remaining budget" in error_text:
+                    return "budget_exceeded"
+                if "blocked" in error_text:
+                    return "spend_blocked"
+                return "error"
+            note_text = str(row.get("note", "")).strip().lower()
+            if note_text == "missing events list response":
+                return "missing_events_list"
+            if note_text:
+                return "note"
+            if int(row.get("missing_count", 0)) > 0:
+                return "missing_event_odds"
+            return "incomplete_unknown"
+
+        incomplete_reason_counts: Counter[str] = Counter(
+            _incomplete_reason(row) for row in rows if not bool(row["complete"])
+        )
+        payload = {
+            "dataset_id": dataset_id(spec),
+            "sport_key": spec.sport_key,
+            "markets": sorted(set(spec.markets)),
+            "regions": spec.regions,
+            "bookmakers": spec.bookmakers,
+            "historical": bool(spec.historical),
+            "from_day": days[0] if days else "",
+            "to_day": days[-1] if days else "",
+            "tz_name": str(getattr(args, "tz_name", "America/New_York")),
+            "total_days": len(rows),
+            "complete_count": len(complete_days),
+            "incomplete_count": len(incomplete_days),
+            "missing_events_total": sum(int(row["missing_count"]) for row in rows),
+            "complete_days": complete_days,
+            "incomplete_days": incomplete_days,
+            "incomplete_reason_counts": dict(sorted(incomplete_reason_counts.items())),
+            "days": rows,
+            "generated_at_utc": iso_z(_utc_now()),
+        }
+        print(json.dumps(payload, sort_keys=True))
     return 0
 
 
@@ -818,7 +888,7 @@ def _cmd_data_backfill(args: argparse.Namespace) -> int:
         print(
             (
                 "day={} snapshot_id={} complete={} missing={} events={} "
-                "estimated_paid_credits={} remaining_credits={} error={}"
+                "estimated_paid_credits={} actual_paid_credits={} remaining_credits={} error={}"
             ).format(
                 str(row.get("day", "")),
                 str(row.get("snapshot_id", "")),
@@ -826,6 +896,7 @@ def _cmd_data_backfill(args: argparse.Namespace) -> int:
                 int(row.get("missing", 0)),
                 int(row.get("events", 0)),
                 int(row.get("estimated_paid_credits", 0)),
+                int(row.get("actual_paid_credits", 0)),
                 int(row.get("remaining_credits", 0)),
                 error,
             )
@@ -2914,7 +2985,15 @@ def _build_parser() -> argparse.ArgumentParser:
     data_status.add_argument("--from", dest="from_day", default="")
     data_status.add_argument("--to", dest="to_day", default="")
     data_status.add_argument("--tz", dest="tz_name", default="America/New_York")
+    data_status.add_argument("--historical", action="store_true")
+    data_status.add_argument("--historical-anchor-hour-local", type=int, default=12)
+    data_status.add_argument("--historical-pre-tip-minutes", type=int, default=60)
     data_status.add_argument("--refresh", action="store_true")
+    data_status.add_argument(
+        "--json-summary",
+        action="store_true",
+        help="Emit machine-readable day summary JSON",
+    )
 
     data_backfill = data_subparsers.add_parser("backfill", help="Backfill day snapshots")
     data_backfill.set_defaults(func=_cmd_data_backfill)
@@ -2928,6 +3007,9 @@ def _build_parser() -> argparse.ArgumentParser:
     data_backfill.add_argument("--from", dest="from_day", default="")
     data_backfill.add_argument("--to", dest="to_day", default="")
     data_backfill.add_argument("--tz", dest="tz_name", default="America/New_York")
+    data_backfill.add_argument("--historical", action="store_true")
+    data_backfill.add_argument("--historical-anchor-hour-local", type=int, default=12)
+    data_backfill.add_argument("--historical-pre-tip-minutes", type=int, default=60)
     data_backfill.add_argument(
         "--max-credits",
         type=int,

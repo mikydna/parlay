@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from prop_ev.odds_data.cache_store import GlobalCacheStore
@@ -89,3 +90,69 @@ def test_compute_day_status_marks_missing_event_odds(tmp_path: Path) -> None:
     assert status["missing_count"] == 1
     assert status["missing_event_ids"] == ["event-2"]
     assert status["complete"] is False
+
+
+def test_compute_day_status_historical_uses_event_dates(tmp_path: Path) -> None:
+    data_root = tmp_path / "data" / "odds_api"
+    store = SnapshotStore(data_root)
+    cache = GlobalCacheStore(data_root)
+    spec = DatasetSpec(
+        sport_key="basketball_nba",
+        markets=["player_points"],
+        regions=None,
+        bookmakers="draftkings",
+        include_links=False,
+        include_sids=False,
+        historical=True,
+        historical_anchor_hour_local=12,
+        historical_pre_tip_minutes=60,
+    )
+    day = "2026-02-11"
+    snapshot_id = "day-" + dataset_id(spec)[:8] + "-" + day
+    store.ensure_snapshot(snapshot_id)
+
+    events_timestamp = "2026-02-11T17:00:00Z"
+    events_path = f"/historical/sports/{spec.sport_key}/events"
+    events_params = {"dateFormat": "iso", "date": events_timestamp}
+    events_key = request_hash("GET", events_path, events_params)
+    cache.write_request(events_key, {"method": "GET", "path": events_path, "params": events_params})
+    cache.write_response(
+        events_key,
+        [
+            {
+                "id": "event-1",
+                "commence_time": "2026-02-11T20:30:00Z",
+            }
+        ],
+    )
+    cache.write_meta(events_key, {"headers": {}})
+
+    commence = datetime.fromisoformat("2026-02-11T20:30:00+00:00").astimezone(UTC)
+    odds_date = (commence - timedelta(minutes=60)).isoformat().replace("+00:00", "Z")
+    odds_params = {
+        "markets": "player_points",
+        "oddsFormat": "american",
+        "dateFormat": "iso",
+        "bookmakers": "draftkings",
+        "date": odds_date,
+    }
+    odds_path = f"/historical/sports/{spec.sport_key}/events/event-1/odds"
+    odds_key = request_hash("GET", odds_path, odds_params)
+    cache.write_request(odds_key, {"method": "GET", "path": odds_path, "params": odds_params})
+    cache.write_response(odds_key, {"id": "event-1", "bookmakers": []})
+    cache.write_meta(odds_key, {"headers": {}})
+
+    status = compute_day_status_from_cache(
+        data_root=data_root,
+        store=store,
+        cache=cache,
+        spec=spec,
+        day=day,
+        tz_name="America/New_York",
+    )
+
+    assert status["historical"] is True
+    assert status["events_timestamp"] == events_timestamp
+    assert status["event_odds_dates"]["event-1"] == odds_date
+    assert status["missing_count"] == 0
+    assert status["complete"] is True
