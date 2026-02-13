@@ -76,8 +76,8 @@ uv run prop-ev data status --dataset-id <DATASET_ID> --from 2026-01-22 --to 2026
   - `data/odds_api/snapshots/<snapshot_id>/reports/strategy-brief.pdf` (if `tectonic` installed)
   - `data/odds_api/snapshots/<snapshot_id>/reports/strategy-brief.meta.json`
 - Latest mirrors:
-  - `data/odds_api/reports/latest/strategy-brief.md`
-  - `data/odds_api/reports/latest/strategy-brief.tex`
+  - `data/odds_api/reports/latest/strategy-report.json`
+  - `data/odds_api/reports/latest/strategy-brief.meta.json`
   - `data/odds_api/reports/latest/strategy-brief.pdf` (if generated)
   - `data/odds_api/reports/latest/latest.json`
 

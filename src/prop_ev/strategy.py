@@ -2524,7 +2524,7 @@ def write_strategy_reports(
 
     if write_canonical:
         _write(canonical_json, canonical_md, canonical_card)
-    if normalized:
+    if normalized and not write_canonical:
         _write(_suffix(canonical_json), _suffix(canonical_md), _suffix(canonical_card))
 
     return primary_json, primary_md

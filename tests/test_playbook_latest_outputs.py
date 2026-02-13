@@ -110,8 +110,10 @@ def test_generate_brief_writes_snapshot_and_latest(
     assert (reports_dir / "strategy-brief.meta.json").exists()
 
     latest_dir = report_outputs_root(store) / "latest"
-    assert (latest_dir / "strategy-brief.md").exists()
-    assert (latest_dir / "strategy-brief.tex").exists()
+    assert (latest_dir / "strategy-report.json").exists()
+    assert (latest_dir / "strategy-brief.meta.json").exists()
+    assert not (latest_dir / "strategy-brief.md").exists()
+    assert not (latest_dir / "strategy-brief.tex").exists()
     markdown = (reports_dir / "strategy-brief.md").read_text(encoding="utf-8")
     assert "## Analyst Take" in markdown
     assert markdown.index("## Analyst Take") < markdown.index("## Action Plan (GO / LEAN / NO-GO)")

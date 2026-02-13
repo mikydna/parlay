@@ -51,6 +51,12 @@ from prop_ev.settings import Settings
 from prop_ev.storage import SnapshotStore
 from prop_ev.time_utils import parse_iso_z, utc_now_str
 
+_LATEST_REPORT_FILES: tuple[str, ...] = (
+    "strategy-report.json",
+    "strategy-brief.meta.json",
+    "strategy-brief.pdf",
+)
+
 
 def _now_utc() -> str:
     return utc_now_str()
@@ -280,7 +286,7 @@ def _publish_latest(
 ) -> dict[str, str]:
     latest_dir.mkdir(parents=True, exist_ok=True)
     published: dict[str, str] = {}
-    for filename in ["strategy-brief.md", "strategy-brief.tex", "strategy-brief.pdf"]:
+    for filename in _LATEST_REPORT_FILES:
         src = snapshot_reports_dir / filename
         if not src.exists():
             continue
@@ -680,7 +686,6 @@ def generate_brief_for_snapshot(
     published: dict[str, str] = {}
     if not safe_tag:
         published = _publish_latest(reports_dir, latest_dir, snapshot_id)
-
     meta = {
         "schema_version": 1,
         "generated_at_utc": _now_utc(),
@@ -702,9 +707,11 @@ def generate_brief_for_snapshot(
         },
         "odds_budget": odds_budget_status(store.root, month_key, settings.odds_monthly_cap_credits),
         "pdf": pdf_result,
-        "latest": published,
+        "latest": {},
     }
-    meta_path = _write_json(reports_dir / f"strategy-brief.meta{suffix}.json", meta)
+    meta_path = reports_dir / f"strategy-brief.meta{suffix}.json"
+    meta["latest"] = published
+    _write_json(meta_path, meta)
 
     published_paths = _publish_snapshot_outputs(
         snapshot_output_dir=_snapshot_output_dir(store=store, snapshot_id=snapshot_id),

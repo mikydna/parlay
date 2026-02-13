@@ -391,14 +391,6 @@ def write_backtest_artifacts(
         _write_json(readiness_path, readiness)
 
     _write(primary_seed, primary_template, primary_readiness, primary_strategy_report)
-    if write_canonical and normalized:
-        suffixed_strategy_report = _suffix(reports_dir / "strategy-report.json")
-        _write(
-            _suffix(canonical_seed_jsonl),
-            _suffix(canonical_template_csv),
-            _suffix(canonical_readiness_json),
-            suffixed_strategy_report,
-        )
 
     readiness = build_backtest_readiness(
         snapshot_dir=snapshot_dir,
