@@ -127,6 +127,8 @@ def test_build_strategy_report_tiers_and_ranked() -> None:
     watchlist = report["watchlist"]
 
     assert report["strategy_status"] == "modeled_with_gates"
+    assert report["state_key"]["strategy_status"]["modeled_with_gates"]
+    assert report["state_key"]["strategy_mode"]["full_board"]
     assert report["summary"]["tier_a_lines"] == 1
     assert report["summary"]["tier_b_lines"] == 1
     assert report["summary"]["under_sweep_status"] in {"ok", "insufficient"}

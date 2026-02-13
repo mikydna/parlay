@@ -50,8 +50,9 @@ from prop_ev.odds_client import (
 from prop_ev.playbook import budget_snapshot, compute_live_window, generate_brief_for_snapshot
 from prop_ev.settings import Settings
 from prop_ev.settlement import settle_snapshot
+from prop_ev.state_keys import playbook_mode_key, strategy_health_state_key
 from prop_ev.storage import SnapshotStore, make_snapshot_id, request_hash
-from prop_ev.strategies import get_strategy, list_strategies
+from prop_ev.strategies import get_strategy, list_strategies, resolve_strategy_id
 from prop_ev.strategies.base import (
     StrategyInputs,
     StrategyRunConfig,
@@ -141,7 +142,7 @@ def _env_float(name: str, default: float) -> float:
 def _resolve_strategy_id(raw: str, *, default_id: str) -> str:
     requested = raw.strip() if isinstance(raw, str) else ""
     candidate = requested or default_id.strip() or "v0"
-    plugin = get_strategy(candidate)
+    plugin = get_strategy(resolve_strategy_id(candidate))
     return normalize_strategy_id(plugin.info.id)
 
 
@@ -1179,6 +1180,7 @@ def _cmd_strategy_health(args: argparse.Namespace) -> int:
             "injuries_context": str(injuries_path),
             "roster_context": str(roster_path),
         },
+        "state_key": strategy_health_state_key(),
     }
     if bool(getattr(args, "json_output", True)):
         print(json.dumps(payload, sort_keys=True, indent=2))
@@ -1449,11 +1451,12 @@ def _parse_strategy_ids(raw: str) -> list[str]:
     seen: set[str] = set()
     parsed: list[str] = []
     for value in values:
-        normalized = normalize_strategy_id(value)
-        if normalized in seen:
+        plugin = get_strategy(resolve_strategy_id(value))
+        canonical_id = normalize_strategy_id(plugin.info.id)
+        if canonical_id in seen:
             continue
-        seen.add(normalized)
-        parsed.append(normalized)
+        seen.add(canonical_id)
+        parsed.append(canonical_id)
     return parsed
 
 
@@ -2254,6 +2257,9 @@ def _cmd_playbook_run(args: argparse.Namespace) -> int:
             end_budget["odds"].get("cap_reached", False),
         )
     )
+    mode_desc = playbook_mode_key().get(mode, "")
+    if mode_desc:
+        print(f"mode_desc={mode_desc}")
     print(f"strategy_id={strategy_id}")
     preflight_gates = (
         preflight_context.get("health_gates", [])

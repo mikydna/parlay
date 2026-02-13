@@ -12,6 +12,7 @@ Required top-level keys:
 - `generated_at_utc`
 - `strategy_status`
 - `strategy_mode`
+- `state_key`
 - `summary`
 - `health_report`
 - `candidates`
@@ -79,6 +80,20 @@ Strategy health command degraded/broken gates:
 - `unknown_roster_detected`
 - `roster_fallback_used`
 - `official_injury_secondary_override`
+
+## State ID Maps
+
+To keep machine IDs stable and operator text readable, artifacts include map objects:
+- `strategy-report.json`: top-level `state_key` with maps for `strategy_status`, `strategy_mode`, `health_gates`, and `strategy_id`.
+- `strategy health` JSON output: top-level `state_key` with maps for `status` and `gates`.
+
+Playbook run mode IDs are stable in `mode=<id>` output and map to text in `src/prop_ev/state_keys.py`.
+
+## Strategy ID Aliases
+
+Accepted aliases (resolved to canonical IDs):
+- `baseline` / `baseline_core` -> `v0`
+- `baseline_tier_b` / `baseline_core_tier_b` -> `v0_tier_b`
 
 ## CLI Output Stability
 

@@ -162,6 +162,8 @@ def test_strategy_health_healthy_with_missing_injury_informational(
     assert code == 0
     assert payload["status"] == "healthy"
     assert payload["exit_code"] == 0
+    assert payload["state_key"]["status"]["healthy"]
+    assert payload["state_key"]["gates"]["stale_inputs"]
     assert payload["counts"]["missing_injury"] == 0
     assert payload["checks"]["injuries"]["pass"] is True
     assert payload["checks"]["roster"]["pass"] is True

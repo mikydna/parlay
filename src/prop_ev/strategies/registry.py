@@ -10,6 +10,13 @@ from prop_ev.strategies.gate_hold_cap import GateHoldCapStrategy
 from prop_ev.strategies.v0 import V0Strategy
 from prop_ev.strategies.v0_tier_b import V0TierBStrategy
 
+STRATEGY_ALIASES = {
+    "baseline": "v0",
+    "baseline_core": "v0",
+    "baseline_tier_b": "v0_tier_b",
+    "baseline_core_tier_b": "v0_tier_b",
+}
+
 
 def _registry() -> dict[str, StrategyPlugin]:
     plugins: Iterable[StrategyPlugin] = [
@@ -29,6 +36,15 @@ def _registry() -> dict[str, StrategyPlugin]:
     return out
 
 
+def strategy_aliases() -> dict[str, str]:
+    return dict(STRATEGY_ALIASES)
+
+
+def resolve_strategy_id(strategy_id: str) -> str:
+    normalized = normalize_strategy_id(strategy_id)
+    return STRATEGY_ALIASES.get(normalized, normalized)
+
+
 def list_strategies() -> list[StrategyPlugin]:
     strategies = list(_registry().values())
     strategies.sort(key=lambda plugin: normalize_strategy_id(plugin.info.id))
@@ -36,10 +52,17 @@ def list_strategies() -> list[StrategyPlugin]:
 
 
 def get_strategy(strategy_id: str) -> StrategyPlugin:
-    normalized = normalize_strategy_id(strategy_id)
+    normalized = resolve_strategy_id(strategy_id)
     registry = _registry()
     plugin = registry.get(normalized)
     if plugin is None:
         options = ",".join(sorted(registry.keys()))
+        aliases = ",".join(
+            sorted(f"{alias}->{target}" for alias, target in STRATEGY_ALIASES.items())
+        )
+        if aliases:
+            raise ValueError(
+                f"unknown strategy id: {strategy_id} (options: {options}; aliases: {aliases})"
+            )
         raise ValueError(f"unknown strategy id: {strategy_id} (options: {options})")
     return plugin

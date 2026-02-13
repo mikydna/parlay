@@ -22,6 +22,7 @@ from prop_ev.odds_math import (
     implied_prob_from_american,
     normalize_prob_pair,
 )
+from prop_ev.state_keys import strategy_report_state_key
 from prop_ev.time_utils import parse_iso_z, utc_now_str
 
 ET_ZONE = ZoneInfo("America/New_York")
@@ -1932,6 +1933,7 @@ def build_strategy_report(
         "timezone": "ET",
         "strategy_status": "modeled_with_gates",
         "strategy_mode": strategy_mode,
+        "state_key": strategy_report_state_key(),
         "snapshot_id": snapshot_id,
         "health_report": health_report,
         "slate_snapshot": slate_snapshot,

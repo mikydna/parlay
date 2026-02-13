@@ -18,6 +18,7 @@ Behavior:
 - runs live snapshot only when inside configured window and paid calls are allowed,
 - otherwise falls back to latest cached snapshot,
 - always runs strategy + brief generation after snapshot selection.
+- emits `mode=<id>` plus `mode_desc=<human text>` for run-path selection.
 
 ## Offline / No-Paid Modes
 
@@ -64,6 +65,10 @@ Current strategy enforces EV floors as:
 - Tier B floor: `max(--min-ev, 0.05)`
 
 This is current behavior, not a pending proposal.
+
+Strategy IDs:
+- canonical: `v0`, `v0_tier_b`, `baseline_median_novig`, `gate_book_pairs_min2`, `gate_hold_cap`, `gate_dispersion_iqr`
+- accepted aliases: `baseline`/`baseline_core` -> `v0`; `baseline_tier_b`/`baseline_core_tier_b` -> `v0_tier_b`
 
 ## Key Artifacts
 

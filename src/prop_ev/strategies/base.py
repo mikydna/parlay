@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 from typing import Any, Protocol
 
+from prop_ev.state_keys import attach_strategy_id_key, strategy_meta
+
 
 def normalize_strategy_id(value: str) -> str:
     raw = value.strip().lower().replace("-", "_")
@@ -62,6 +64,16 @@ def decorate_report(
     """Attach plugin identity and config to a report without changing its meaning."""
     strategy_id = normalize_strategy_id(strategy.id)
     report["strategy_id"] = strategy_id
+    report["strategy"] = strategy_meta(
+        strategy_id=strategy_id,
+        strategy_name=strategy.name,
+        strategy_description=strategy.description,
+    )
+    report["state_key"] = attach_strategy_id_key(
+        report.get("state_key"),
+        strategy_id=strategy_id,
+        strategy_description=strategy.description,
+    )
 
     audit = report.get("audit", {})
     if not isinstance(audit, dict):
