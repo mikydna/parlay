@@ -128,6 +128,8 @@ def test_data_backfill_writes_day_snapshot_and_reuses_cache(
     status = load_day_status(data_root, spec, day)
     assert isinstance(status, dict)
     assert status["complete"] is True
+    assert status["error_code"] == ""
+    assert status["reason_codes"] == ["complete"]
 
     code = main(
         [
@@ -152,6 +154,77 @@ def test_data_backfill_writes_day_snapshot_and_reuses_cache(
     status_after = load_day_status(data_root, spec, day)
     assert isinstance(status_after, dict)
     assert status_after["complete"] is True
+    assert status_after["error_code"] == ""
+    assert status_after["reason_codes"] == ["complete"]
+
+
+def test_data_backfill_no_spend_persists_typed_error_code(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    data_root = tmp_path / "data" / "odds_api"
+    monkeypatch.setenv("PROP_EV_DATA_DIR", str(data_root))
+    monkeypatch.setenv("ODDS_API_KEY", "odds-test")
+
+    class FakeOddsClient:
+        def __init__(self, settings) -> None:
+            self.settings = settings
+
+        def close(self) -> None:
+            return None
+
+        def list_events(self, **kwargs) -> OddsResponse:
+            return OddsResponse(
+                data=[{"id": "event-1"}],
+                status_code=200,
+                headers={
+                    "x-requests-last": "0",
+                    "x-requests-used": "0",
+                    "x-requests-remaining": "999",
+                },
+                duration_ms=2,
+                retry_count=0,
+            )
+
+        def get_event_odds(self, **kwargs) -> OddsResponse:
+            raise AssertionError("event odds should not be fetched when no-spend blocks misses")
+
+    monkeypatch.setattr("prop_ev.odds_data.backfill.OddsAPIClient", FakeOddsClient)
+
+    day = "2026-02-12"
+    code = main(
+        [
+            "data",
+            "backfill",
+            "--sport-key",
+            "basketball_nba",
+            "--markets",
+            "player_points",
+            "--bookmakers",
+            "draftkings",
+            "--from",
+            day,
+            "--to",
+            day,
+            "--no-spend",
+        ]
+    )
+    assert code == 2
+
+    spec = DatasetSpec(
+        sport_key="basketball_nba",
+        markets=["player_points"],
+        regions="us",
+        bookmakers="draftkings",
+        include_links=False,
+        include_sids=False,
+    )
+    status = load_day_status(data_root, spec, day)
+    assert isinstance(status, dict)
+    assert status["complete"] is False
+    assert status["error_code"] == "spend_blocked"
+    assert status["status_code"] == "incomplete_spend_blocked"
+    assert status["reason_codes"] == ["spend_blocked"]
 
 
 def test_data_backfill_historical_uses_pre_tip_dates(

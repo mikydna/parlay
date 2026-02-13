@@ -53,8 +53,10 @@ from prop_ev.odds_client import (
 from prop_ev.odds_data.backfill import backfill_days
 from prop_ev.odds_data.cache_store import GlobalCacheStore
 from prop_ev.odds_data.day_index import (
+    canonicalize_day_status,
     compute_day_status_from_cache,
     load_day_status,
+    primary_incomplete_reason_code,
 )
 from prop_ev.odds_data.errors import CreditBudgetExceeded, OfflineCacheMiss, SpendBlockedError
 from prop_ev.odds_data.policy import SpendPolicy
@@ -62,9 +64,15 @@ from prop_ev.odds_data.repo import OddsRepository
 from prop_ev.odds_data.request import OddsRequest
 from prop_ev.odds_data.spec import DatasetSpec, dataset_id
 from prop_ev.playbook import budget_snapshot, compute_live_window, generate_brief_for_snapshot
+from prop_ev.quote_table import EVENT_PROPS_TABLE
 from prop_ev.settings import Settings
 from prop_ev.settlement import settle_snapshot
-from prop_ev.snapshot_artifacts import lake_snapshot_derived, pack_snapshot, unpack_snapshot
+from prop_ev.snapshot_artifacts import (
+    lake_snapshot_derived,
+    pack_snapshot,
+    unpack_snapshot,
+    verify_snapshot_derived_contracts,
+)
 from prop_ev.state_keys import (
     playbook_mode_key,
     strategy_health_state_key,
@@ -650,6 +658,7 @@ def _cmd_snapshot_diff(args: argparse.Namespace) -> int:
 
 def _cmd_snapshot_verify(args: argparse.Namespace) -> int:
     store = SnapshotStore(os.environ.get("PROP_EV_DATA_DIR", "data/odds_api"))
+    snapshot_dir = store.snapshot_dir(args.snapshot_id)
     manifest = store.load_manifest(args.snapshot_id)
     requests = manifest.get("requests", {})
     if not isinstance(requests, dict):
@@ -658,9 +667,9 @@ def _cmd_snapshot_verify(args: argparse.Namespace) -> int:
 
     missing = 0
     for request_key in requests:
-        request_path = store.snapshot_dir(args.snapshot_id) / "requests" / f"{request_key}.json"
-        response_path = store.snapshot_dir(args.snapshot_id) / "responses" / f"{request_key}.json"
-        meta_path = store.snapshot_dir(args.snapshot_id) / "meta" / f"{request_key}.json"
+        request_path = snapshot_dir / "requests" / f"{request_key}.json"
+        response_path = snapshot_dir / "responses" / f"{request_key}.json"
+        meta_path = snapshot_dir / "meta" / f"{request_key}.json"
         if not request_path.exists() or not response_path.exists() or not meta_path.exists():
             missing += 1
             print(
@@ -669,8 +678,37 @@ def _cmd_snapshot_verify(args: argparse.Namespace) -> int:
                 f"response={response_path.exists()} "
                 f"meta={meta_path.exists()}"
             )
-    print(f"snapshot_id={args.snapshot_id} checked={len(requests)} missing={missing}")
-    return 2 if missing else 0
+
+    derived_issues: list[dict[str, str]] = []
+    if bool(getattr(args, "check_derived", False)):
+        required_tables = tuple(
+            sorted(
+                {
+                    str(item).strip()
+                    for item in getattr(args, "require_table", [])
+                    if str(item).strip()
+                }
+            )
+        )
+        derived_issues = verify_snapshot_derived_contracts(
+            snapshot_dir=snapshot_dir,
+            require_parquet=bool(getattr(args, "require_parquet", False)),
+            required_tables=required_tables,
+        )
+        for issue in derived_issues:
+            print(
+                "derived_issue code={} table={} detail={}".format(
+                    str(issue.get("code", "")),
+                    str(issue.get("table", "")),
+                    str(issue.get("detail", "")),
+                )
+            )
+
+    print(
+        f"snapshot_id={args.snapshot_id} checked={len(requests)} missing={missing} "
+        f"derived_issues={len(derived_issues)}"
+    )
+    return 2 if (missing or derived_issues) else 0
 
 
 def _cmd_snapshot_lake(args: argparse.Namespace) -> int:
@@ -854,19 +892,39 @@ def _load_day_status_for_dataset(
 
 
 def _day_row_from_status(day: str, status: dict[str, Any]) -> dict[str, Any]:
+    normalized = canonicalize_day_status(status, day=day)
     return {
         "day": day,
-        "complete": bool(status.get("complete", False)),
-        "missing_count": int(status.get("missing_count", 0)),
-        "total_events": int(status.get("total_events", 0)),
-        "snapshot_id": str(status.get("snapshot_id_for_day", "")),
-        "note": str(status.get("note", "")),
-        "error": str(status.get("error", "")),
-        "updated_at_utc": str(status.get("updated_at_utc", "")),
+        "complete": bool(normalized.get("complete", False)),
+        "missing_count": int(normalized.get("missing_count", 0)),
+        "total_events": int(normalized.get("total_events", 0)),
+        "snapshot_id": str(normalized.get("snapshot_id_for_day", "")),
+        "note": str(normalized.get("note", "")),
+        "error": str(normalized.get("error", "")),
+        "error_code": str(normalized.get("error_code", "")),
+        "status_code": str(normalized.get("status_code", "")),
+        "reason_codes": [
+            str(item)
+            for item in normalized.get("reason_codes", [])
+            if isinstance(item, str) and str(item).strip()
+        ],
+        "odds_coverage_ratio": float(normalized.get("odds_coverage_ratio", 0.0)),
+        "updated_at_utc": str(normalized.get("updated_at_utc", "")),
     }
 
 
 def _incomplete_reason_code(row: dict[str, Any]) -> str:
+    error_code = str(row.get("error_code", "")).strip()
+    if error_code:
+        return error_code
+    reason_codes_raw = row.get("reason_codes", [])
+    if isinstance(reason_codes_raw, list):
+        reason_codes = [str(item).strip() for item in reason_codes_raw if str(item).strip()]
+        if reason_codes:
+            return primary_incomplete_reason_code(reason_codes)
+    status_code = str(row.get("status_code", "")).strip()
+    if status_code.startswith("incomplete_"):
+        return status_code.removeprefix("incomplete_")
     error_text = str(row.get("error", "")).strip().lower()
     if error_text:
         if "404" in error_text:
@@ -879,6 +937,8 @@ def _incomplete_reason_code(row: dict[str, Any]) -> str:
     note_text = str(row.get("note", "")).strip().lower()
     if note_text == "missing events list response":
         return "missing_events_list"
+    if note_text == "missing day status":
+        return "missing_day_status"
     if note_text:
         return "note"
     if int(row.get("missing_count", 0)) > 0:
@@ -901,6 +961,12 @@ def _build_status_summary_payload(
     incomplete_reason_counts: Counter[str] = Counter(
         _incomplete_reason_code(row) for row in rows if not bool(row["complete"])
     )
+    incomplete_error_code_counts: Counter[str] = Counter(
+        (str(row.get("error_code", "")).strip() or _incomplete_reason_code(row))
+        for row in rows
+        if not bool(row["complete"])
+    )
+    coverage_values = [float(row.get("odds_coverage_ratio", 0.0)) for row in rows]
     payload: dict[str, Any] = {
         "dataset_id": dataset_id_value,
         "sport_key": spec.sport_key,
@@ -915,9 +981,14 @@ def _build_status_summary_payload(
         "complete_count": len(complete_days),
         "incomplete_count": len(incomplete_days),
         "missing_events_total": sum(int(row["missing_count"]) for row in rows),
+        "avg_odds_coverage_ratio": (
+            sum(coverage_values) / len(coverage_values) if coverage_values else 0.0
+        ),
+        "minimum_odds_coverage_ratio": min(coverage_values) if coverage_values else 0.0,
         "complete_days": complete_days,
         "incomplete_days": incomplete_days,
         "incomplete_reason_counts": dict(sorted(incomplete_reason_counts.items())),
+        "incomplete_error_code_counts": dict(sorted(incomplete_error_code_counts.items())),
         "days": rows,
         "generated_at_utc": iso_z(_utc_now()),
     }
@@ -928,12 +999,22 @@ def _build_status_summary_payload(
 
 def _print_day_rows(rows: list[dict[str, Any]]) -> None:
     for row in rows:
+        reason_code = (
+            _incomplete_reason_code(row) if not bool(row.get("complete", False)) else "complete"
+        )
+        error_code = str(row.get("error_code", "")).strip() or reason_code
         print(
-            ("day={} complete={} missing={} events={} snapshot_id={} note={}").format(
+            (
+                "day={} complete={} reason={} error_code={} missing={} events={} coverage={} "
+                "snapshot_id={} note={}"
+            ).format(
                 row["day"],
                 str(row["complete"]).lower(),
+                reason_code,
+                error_code,
                 row["missing_count"],
                 row["total_events"],
+                f"{float(row.get('odds_coverage_ratio', 0.0)):.3f}",
                 row["snapshot_id"],
                 row["note"],
             )
@@ -997,6 +1078,10 @@ def _cmd_data_datasets_ls(args: argparse.Namespace) -> int:
                         "snapshot_id": "",
                         "note": "missing day status",
                         "error": "",
+                        "error_code": "missing_day_status",
+                        "status_code": "incomplete_missing_day_status",
+                        "reason_codes": ["missing_day_status"],
+                        "odds_coverage_ratio": 0.0,
                         "updated_at_utc": "",
                     }
                 )
@@ -1011,6 +1096,12 @@ def _cmd_data_datasets_ls(args: argparse.Namespace) -> int:
         reason_counts: Counter[str] = Counter(
             _incomplete_reason_code(row) for row in rows if not bool(row.get("complete", False))
         )
+        error_code_counts: Counter[str] = Counter(
+            (str(row.get("error_code", "")).strip() or _incomplete_reason_code(row))
+            for row in rows
+            if not bool(row.get("complete", False))
+        )
+        coverage_values = [float(row.get("odds_coverage_ratio", 0.0)) for row in rows]
         summary = {
             "dataset_id": dataset_id_value,
             "sport_key": spec.sport_key,
@@ -1022,7 +1113,12 @@ def _cmd_data_datasets_ls(args: argparse.Namespace) -> int:
             "complete_count": complete_count,
             "incomplete_count": len(day_names) - complete_count,
             "missing_events_total": sum(int(row.get("missing_count", 0)) for row in rows),
+            "avg_odds_coverage_ratio": (
+                sum(coverage_values) / len(coverage_values) if coverage_values else 0.0
+            ),
+            "minimum_odds_coverage_ratio": min(coverage_values) if coverage_values else 0.0,
             "incomplete_reason_counts": dict(sorted(reason_counts.items())),
+            "incomplete_error_code_counts": dict(sorted(error_code_counts.items())),
             "from_day": day_names[0] if day_names else "",
             "to_day": day_names[-1] if day_names else "",
             "updated_at_utc": max(updated_at_values) if updated_at_values else "",
@@ -1107,6 +1203,10 @@ def _cmd_data_datasets_show(args: argparse.Namespace) -> int:
                     "snapshot_id": "",
                     "note": "missing day status",
                     "error": "",
+                    "error_code": "missing_day_status",
+                    "status_code": "incomplete_missing_day_status",
+                    "reason_codes": ["missing_day_status"],
+                    "odds_coverage_ratio": 0.0,
                     "updated_at_utc": "",
                 }
             )
@@ -1253,12 +1353,14 @@ def _cmd_data_backfill(args: argparse.Namespace) -> int:
     had_error = False
     for row in summaries:
         error = str(row.get("error", "")).strip()
+        error_code = str(row.get("error_code", "")).strip()
         if error:
             had_error = True
         print(
             (
                 "day={} snapshot_id={} complete={} missing={} events={} "
-                "estimated_paid_credits={} actual_paid_credits={} remaining_credits={} error={}"
+                "estimated_paid_credits={} actual_paid_credits={} remaining_credits={} "
+                "error_code={} error={}"
             ).format(
                 str(row.get("day", "")),
                 str(row.get("snapshot_id", "")),
@@ -1268,10 +1370,164 @@ def _cmd_data_backfill(args: argparse.Namespace) -> int:
                 int(row.get("estimated_paid_credits", 0)),
                 int(row.get("actual_paid_credits", 0)),
                 int(row.get("remaining_credits", 0)),
+                error_code,
                 error,
             )
         )
     return 2 if had_error else 0
+
+
+def _cmd_data_verify(args: argparse.Namespace) -> int:
+    data_root = Path(os.environ.get("PROP_EV_DATA_DIR", "data/odds_api"))
+    dataset_id_value = str(getattr(args, "dataset_id", "")).strip()
+    if not dataset_id_value:
+        raise CLIError("--dataset-id is required")
+
+    spec, _ = _load_dataset_spec_or_error(data_root, dataset_id_value)
+    available_days = _dataset_day_names(data_root, dataset_id_value)
+    from_day = str(getattr(args, "from_day", "")).strip()
+    to_day = str(getattr(args, "to_day", "")).strip()
+    if (from_day and not to_day) or (to_day and not from_day):
+        raise CLIError("--from and --to must be provided together")
+
+    if from_day and to_day:
+        selected_days = _resolve_days(
+            days=1,
+            from_day=from_day,
+            to_day=to_day,
+            tz_name=str(getattr(args, "tz_name", "America/New_York")),
+        )
+    else:
+        selected_days = available_days
+
+    day_reports: list[dict[str, Any]] = []
+    issue_count = 0
+    checked_complete_days = 0
+    for day in selected_days:
+        row_issues: list[dict[str, str]] = []
+        status = _load_day_status_for_dataset(
+            data_root,
+            dataset_id_value=dataset_id_value,
+            day=day,
+        )
+        if not isinstance(status, dict):
+            row = {
+                "day": day,
+                "complete": False,
+                "missing_count": 0,
+                "total_events": 0,
+                "snapshot_id": "",
+                "note": "missing day status",
+                "error": "",
+                "error_code": "missing_day_status",
+                "status_code": "incomplete_missing_day_status",
+                "reason_codes": ["missing_day_status"],
+                "odds_coverage_ratio": 0.0,
+                "updated_at_utc": "",
+            }
+            row_issues.append(
+                {
+                    "code": "missing_day_status",
+                    "detail": (
+                        _dataset_days_dir(data_root, dataset_id_value) / f"{day}.json"
+                    ).as_posix(),
+                }
+            )
+        else:
+            row = _day_row_from_status(day, status)
+
+        if bool(getattr(args, "require_complete", False)) and not bool(row.get("complete", False)):
+            row_issues.append(
+                {
+                    "code": "incomplete_day",
+                    "detail": _incomplete_reason_code(row),
+                }
+            )
+
+        if bool(row.get("complete", False)):
+            checked_complete_days += 1
+            snapshot_id = str(row.get("snapshot_id", "")).strip()
+            if not snapshot_id:
+                row_issues.append({"code": "missing_snapshot_id", "detail": day})
+            else:
+                snapshot_dir = data_root / "snapshots" / snapshot_id
+                if not snapshot_dir.exists():
+                    row_issues.append(
+                        {
+                            "code": "missing_snapshot_dir",
+                            "detail": snapshot_dir.as_posix(),
+                        }
+                    )
+                else:
+                    derived_issues = verify_snapshot_derived_contracts(
+                        snapshot_dir=snapshot_dir,
+                        require_parquet=bool(getattr(args, "require_parquet", False)),
+                        required_tables=(EVENT_PROPS_TABLE,),
+                    )
+                    row_issues.extend(derived_issues)
+
+        issue_count += len(row_issues)
+        day_reports.append(
+            {
+                **row,
+                "issues": row_issues,
+                "issue_count": len(row_issues),
+            }
+        )
+
+    payload: dict[str, Any] = {
+        "dataset_id": dataset_id_value,
+        "sport_key": spec.sport_key,
+        "markets": sorted(set(spec.markets)),
+        "regions": spec.regions,
+        "bookmakers": spec.bookmakers,
+        "historical": bool(spec.historical),
+        "available_day_count": len(available_days),
+        "available_from_day": available_days[0] if available_days else "",
+        "available_to_day": available_days[-1] if available_days else "",
+        "checked_days": len(selected_days),
+        "checked_complete_days": checked_complete_days,
+        "issue_count": issue_count,
+        "require_complete": bool(getattr(args, "require_complete", False)),
+        "require_parquet": bool(getattr(args, "require_parquet", False)),
+        "days": day_reports,
+        "generated_at_utc": iso_z(_utc_now()),
+    }
+
+    if bool(getattr(args, "json_output", False)):
+        print(json.dumps(payload, sort_keys=True))
+    else:
+        print(
+            "dataset_id={} checked_days={} checked_complete_days={} issue_count={} "
+            "require_complete={} require_parquet={}".format(
+                dataset_id_value,
+                len(selected_days),
+                checked_complete_days,
+                issue_count,
+                str(bool(getattr(args, "require_complete", False))).lower(),
+                str(bool(getattr(args, "require_parquet", False))).lower(),
+            )
+        )
+        for row in day_reports:
+            issue_codes = ",".join(
+                str(item.get("code", ""))
+                for item in row.get("issues", [])
+                if isinstance(item, dict) and str(item.get("code", "")).strip()
+            )
+            print(
+                "day={} complete={} reason={} coverage={} issues={} issue_codes={}".format(
+                    str(row.get("day", "")),
+                    str(bool(row.get("complete", False))).lower(),
+                    _incomplete_reason_code(row)
+                    if not bool(row.get("complete", False))
+                    else "complete",
+                    f"{float(row.get('odds_coverage_ratio', 0.0)):.3f}",
+                    int(row.get("issue_count", 0)),
+                    issue_codes,
+                )
+            )
+
+    return 2 if issue_count else 0
 
 
 def _latest_snapshot_id(store: SnapshotStore) -> str:
@@ -3335,6 +3591,22 @@ def _build_parser() -> argparse.ArgumentParser:
     snapshot_verify = snapshot_subparsers.add_parser("verify", help="Verify snapshot artifacts")
     snapshot_verify.set_defaults(func=_cmd_snapshot_verify)
     snapshot_verify.add_argument("--snapshot-id", required=True)
+    snapshot_verify.add_argument(
+        "--check-derived",
+        action="store_true",
+        help="Also verify derived quote-table contracts and parity",
+    )
+    snapshot_verify.add_argument(
+        "--require-parquet",
+        action="store_true",
+        help="Fail if known derived tables are missing parquet mirrors",
+    )
+    snapshot_verify.add_argument(
+        "--require-table",
+        action="append",
+        default=[],
+        help="Require one derived JSONL table (repeatable, e.g. event_props)",
+    )
 
     snapshot_lake = snapshot_subparsers.add_parser(
         "lake", help="Convert derived JSONL artifacts to Parquet lake format"
@@ -3408,6 +3680,32 @@ def _build_parser() -> argparse.ArgumentParser:
     data_datasets_show.add_argument("--to", dest="to_day", default="")
     data_datasets_show.add_argument("--tz", dest="tz_name", default="America/New_York")
     data_datasets_show.add_argument(
+        "--json",
+        dest="json_output",
+        action="store_true",
+        help="Emit machine-readable JSON payload",
+    )
+
+    data_verify = data_subparsers.add_parser(
+        "verify",
+        help="Verify dataset day-index and derived quote-table contracts",
+    )
+    data_verify.set_defaults(func=_cmd_data_verify)
+    data_verify.add_argument("--dataset-id", required=True)
+    data_verify.add_argument("--from", dest="from_day", default="")
+    data_verify.add_argument("--to", dest="to_day", default="")
+    data_verify.add_argument("--tz", dest="tz_name", default="America/New_York")
+    data_verify.add_argument(
+        "--require-complete",
+        action="store_true",
+        help="Fail when selected days are incomplete",
+    )
+    data_verify.add_argument(
+        "--require-parquet",
+        action="store_true",
+        help="Fail when complete-day snapshots are missing required parquet mirrors",
+    )
+    data_verify.add_argument(
         "--json",
         dest="json_output",
         action="store_true",

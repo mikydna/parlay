@@ -4,7 +4,17 @@ from __future__ import annotations
 
 from typing import Any
 
-DERIVED_SCHEMA_VERSION = 1
+from prop_ev.quote_table import (
+    QUOTE_TABLE_SCHEMA_VERSION,
+    canonical_event_props_row,
+    canonical_featured_odds_row,
+    canonicalize_event_props_rows,
+    canonicalize_featured_odds_rows,
+    validate_event_props_rows,
+    validate_featured_odds_rows,
+)
+
+DERIVED_SCHEMA_VERSION = QUOTE_TABLE_SCHEMA_VERSION
 
 
 def _expect_dict(value: Any, context: str) -> dict[str, Any]:
@@ -41,30 +51,22 @@ def normalize_featured_odds(
                 for outcome in outcomes:
                     outcome_dict = _expect_dict(outcome, "featured_outcome")
                     rows.append(
-                        {
-                            "provider": provider,
-                            "snapshot_id": snapshot_id,
-                            "schema_version": DERIVED_SCHEMA_VERSION,
-                            "game_id": event_id,
-                            "market": market_key,
-                            "book": book_key,
-                            "price": outcome_dict.get("price"),
-                            "point": outcome_dict.get("point"),
-                            "side": str(outcome_dict.get("name", "")),
-                            "last_update": last_update,
-                        }
+                        canonical_featured_odds_row(
+                            provider=provider,
+                            snapshot_id=snapshot_id,
+                            schema_version=DERIVED_SCHEMA_VERSION,
+                            game_id=event_id,
+                            market=market_key,
+                            book=book_key,
+                            price=outcome_dict.get("price"),
+                            point=outcome_dict.get("point"),
+                            side=outcome_dict.get("name", ""),
+                            last_update=last_update,
+                        )
                     )
-    rows.sort(
-        key=lambda row: (
-            str(row["game_id"]),
-            str(row["market"]),
-            str(row["book"]),
-            str(row["side"]),
-            str(row["point"]),
-            str(row["price"]),
-        )
-    )
-    return rows
+    canonical_rows = canonicalize_featured_odds_rows(rows)
+    validate_featured_odds_rows(canonical_rows)
+    return canonical_rows
 
 
 def normalize_event_odds(payload: Any, *, snapshot_id: str, provider: str) -> list[dict[str, Any]]:
@@ -85,30 +87,21 @@ def normalize_event_odds(payload: Any, *, snapshot_id: str, provider: str) -> li
             for outcome in outcomes:
                 outcome_dict = _expect_dict(outcome, "event_outcome")
                 rows.append(
-                    {
-                        "provider": provider,
-                        "snapshot_id": snapshot_id,
-                        "schema_version": DERIVED_SCHEMA_VERSION,
-                        "event_id": event_id,
-                        "market": market_key,
-                        "player": str(outcome_dict.get("description", "")),
-                        "side": str(outcome_dict.get("name", "")),
-                        "price": outcome_dict.get("price"),
-                        "point": outcome_dict.get("point"),
-                        "book": book_key,
-                        "last_update": last_update,
-                        "link": str(outcome_dict.get("link", "")),
-                    }
+                    canonical_event_props_row(
+                        provider=provider,
+                        snapshot_id=snapshot_id,
+                        schema_version=DERIVED_SCHEMA_VERSION,
+                        event_id=event_id,
+                        market=market_key,
+                        player=outcome_dict.get("description", ""),
+                        side=outcome_dict.get("name", ""),
+                        price=outcome_dict.get("price"),
+                        point=outcome_dict.get("point"),
+                        book=book_key,
+                        last_update=last_update,
+                        link=outcome_dict.get("link", ""),
+                    )
                 )
-    rows.sort(
-        key=lambda row: (
-            str(row["event_id"]),
-            str(row["market"]),
-            str(row["player"]),
-            str(row["side"]),
-            str(row["book"]),
-            str(row["point"]),
-            str(row["price"]),
-        )
-    )
-    return rows
+    canonical_rows = canonicalize_event_props_rows(rows)
+    validate_event_props_rows(canonical_rows)
+    return canonical_rows

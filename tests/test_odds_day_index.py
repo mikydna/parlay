@@ -4,7 +4,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from prop_ev.odds_data.cache_store import GlobalCacheStore
-from prop_ev.odds_data.day_index import compute_day_status_from_cache
+from prop_ev.odds_data.day_index import compute_day_status_from_cache, with_day_error
 from prop_ev.odds_data.spec import DatasetSpec, dataset_id
 from prop_ev.odds_data.window import day_window
 from prop_ev.storage import SnapshotStore, request_hash
@@ -90,6 +90,9 @@ def test_compute_day_status_marks_missing_event_odds(tmp_path: Path) -> None:
     assert status["missing_count"] == 1
     assert status["missing_event_ids"] == ["event-2"]
     assert status["complete"] is False
+    assert status["status_code"] == "incomplete_missing_event_odds"
+    assert status["reason_codes"] == ["missing_event_odds"]
+    assert status["odds_coverage_ratio"] == 0.5
 
 
 def test_compute_day_status_historical_uses_event_dates(tmp_path: Path) -> None:
@@ -156,3 +159,27 @@ def test_compute_day_status_historical_uses_event_dates(tmp_path: Path) -> None:
     assert status["event_odds_dates"]["event-1"] == odds_date
     assert status["missing_count"] == 0
     assert status["complete"] is True
+    assert status["status_code"] == "complete"
+    assert status["reason_codes"] == ["complete"]
+    assert status["odds_coverage_ratio"] == 1.0
+
+
+def test_with_day_error_sets_reason_code() -> None:
+    base_status = {
+        "day": "2026-02-11",
+        "complete": True,
+        "missing_count": 0,
+        "total_events": 5,
+        "present_event_odds": 5,
+        "note": "",
+        "error": "",
+    }
+    updated = with_day_error(
+        base_status,
+        error="estimated credits 100 exceed remaining budget 70 for day 2026-02-11",
+    )
+
+    assert updated["complete"] is False
+    assert updated["error_code"] == "budget_exceeded"
+    assert updated["status_code"] == "incomplete_budget_exceeded"
+    assert updated["reason_codes"] == ["budget_exceeded"]

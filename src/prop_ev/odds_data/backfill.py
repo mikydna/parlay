@@ -17,10 +17,16 @@ from prop_ev.odds_client import (
 )
 from prop_ev.odds_data.cache_store import GlobalCacheStore
 from prop_ev.odds_data.day_index import (
+    REASON_BUDGET_EXCEEDED,
+    REASON_OFFLINE_CACHE_MISS,
+    REASON_SPEND_BLOCKED,
+    REASON_UPSTREAM_404,
+    REASON_UPSTREAM_ERROR,
     compute_day_status_from_cache,
     save_dataset_spec,
     save_day_status,
     snapshot_id_for_day,
+    with_day_error,
 )
 from prop_ev.odds_data.errors import CreditBudgetExceeded, OfflineCacheMiss, SpendBlockedError
 from prop_ev.odds_data.policy import SpendPolicy, effective_max_credits
@@ -55,6 +61,19 @@ def _parse_iso_utc(raw_value: str) -> datetime | None:
     if parsed.tzinfo is None:
         parsed = parsed.replace(tzinfo=UTC)
     return parsed.astimezone(UTC)
+
+
+def _reason_code_for_exception(exc: Exception) -> str:
+    if isinstance(exc, OfflineCacheMiss):
+        return REASON_OFFLINE_CACHE_MISS
+    if isinstance(exc, SpendBlockedError):
+        return REASON_SPEND_BLOCKED
+    if isinstance(exc, CreditBudgetExceeded):
+        return REASON_BUDGET_EXCEEDED
+    message = str(exc).lower()
+    if "404" in message:
+        return REASON_UPSTREAM_404
+    return REASON_UPSTREAM_ERROR
 
 
 def _parse_event_rows(events_payload: Any) -> list[dict[str, Any]]:
@@ -187,6 +206,7 @@ def backfill_days(
             }
 
             day_error = ""
+            day_error_code = ""
             estimated_paid_credits = 0
             actual_paid_credits = 0
             with store.lock_snapshot(snapshot_id):
@@ -232,6 +252,7 @@ def backfill_days(
                     )
                 except (OfflineCacheMiss, SpendBlockedError, OddsAPIError, ValueError) as exc:
                     day_error = _sanitize_error_message(str(exc))
+                    day_error_code = _reason_code_for_exception(exc)
                     status = compute_day_status_from_cache(
                         data_root=data_root,
                         store=store,
@@ -240,9 +261,16 @@ def backfill_days(
                         day=day,
                         tz_name=tz_name,
                     )
-                    status["error"] = day_error
-                    status["complete"] = False
-                    save_day_status(data_root, spec, day, status)
+                    save_day_status(
+                        data_root,
+                        spec,
+                        day,
+                        with_day_error(
+                            status,
+                            error=day_error,
+                            reason_code=day_error_code,
+                        ),
+                    )
                     summaries.append(
                         {
                             "day": day,
@@ -253,6 +281,7 @@ def backfill_days(
                             "estimated_paid_credits": estimated_paid_credits,
                             "actual_paid_credits": actual_paid_credits,
                             "remaining_credits": remaining_credits,
+                            "error_code": day_error_code,
                             "error": day_error,
                         }
                     )
@@ -322,6 +351,7 @@ def backfill_days(
                         )
                 except (SpendBlockedError, CreditBudgetExceeded) as exc:
                     day_error = _sanitize_error_message(str(exc))
+                    day_error_code = _reason_code_for_exception(exc)
                     status = compute_day_status_from_cache(
                         data_root=data_root,
                         store=store,
@@ -330,9 +360,16 @@ def backfill_days(
                         day=day,
                         tz_name=tz_name,
                     )
-                    status["error"] = day_error
-                    status["complete"] = False
-                    save_day_status(data_root, spec, day, status)
+                    save_day_status(
+                        data_root,
+                        spec,
+                        day,
+                        with_day_error(
+                            status,
+                            error=day_error,
+                            reason_code=day_error_code,
+                        ),
+                    )
                     summaries.append(
                         {
                             "day": day,
@@ -343,6 +380,7 @@ def backfill_days(
                             "estimated_paid_credits": estimated_paid_credits,
                             "actual_paid_credits": actual_paid_credits,
                             "remaining_credits": remaining_credits,
+                            "error_code": day_error_code,
                             "error": day_error,
                         }
                     )
@@ -405,6 +443,7 @@ def backfill_days(
                             ValueError,
                         ) as exc:
                             day_error = _sanitize_error_message(str(exc))
+                            day_error_code = _reason_code_for_exception(exc)
 
                     rows: list[dict[str, Any]] = []
                     for event_id in event_ids:
@@ -449,8 +488,11 @@ def backfill_days(
                     tz_name=tz_name,
                 )
                 if day_error:
-                    status["error"] = day_error
-                    status["complete"] = False
+                    status = with_day_error(
+                        status,
+                        error=day_error,
+                        reason_code=day_error_code,
+                    )
                 save_day_status(data_root, spec, day, status)
 
                 summaries.append(
@@ -463,6 +505,7 @@ def backfill_days(
                         "estimated_paid_credits": estimated_paid_credits,
                         "actual_paid_credits": actual_paid_credits,
                         "remaining_credits": remaining_credits,
+                        "error_code": str(status.get("error_code", day_error_code)),
                         "error": day_error,
                     }
                 )

@@ -32,6 +32,10 @@ Build a production-ready NBA props pipeline that is:
   - day-index backfill/status,
   - global request cache,
   - spend policies.
+- Stage 0/1 contract hardening landed:
+  - typed day-index error/status semantics (`error_code`, `reason_codes`, `status_code`),
+  - canonical QuoteTable module + validation,
+  - contract verification commands (`snapshot verify --check-derived`, `data verify`).
 - Strategy plugin framework exists (`s001`–`s007`) with compare + backtest summarization.
 - `nba-data` historical lake is available with clean parquet + verify.
 - `parlay-data` contains live datasets used by this repo:
@@ -47,8 +51,8 @@ The pipeline is intentionally stage-based so each stage has explicit input/outpu
 
 | Stage | Scope | Status | What is already landed | Remaining gap to target | Recommended parallel worktree |
 | --- | --- | --- | --- | --- | --- |
-| 0 | Acquire/cache/day-index | Mostly done | cache store, snapshot persistence, spend-policy controls, historical day-index backfill/status | tighten dataset-gap handling semantics and long-range status reporting UX | `wt-data-plane` |
-| 1 | Normalize QuoteTable | Partial | deterministic JSONL normalization for featured + event props | formal canonical QuoteTable module + stricter schema contracts + parquet mirror parity checks | `wt-quote-normalize` |
+| 0 | Acquire/cache/day-index | Done (contract-locked) | cache store, snapshot persistence, spend-policy controls, historical day-index backfill/status, typed completeness/error semantics, `data verify` contract checks | expand operator dashboards for long-range dataset health summaries | `wt-data-plane` |
+| 1 | Normalize QuoteTable | Done (contract-locked) | canonical QuoteTable module, deterministic normalization, schema validation, `snapshot verify --check-derived`, JSONL/parquet contract parity checks | extend same strict contract style to additional derived tables as they are introduced | `wt-quote-normalize` |
 | 2 | De-vig + quality signals | Partial | implied/no-vig baseline logic exists in strategy path and plugins | extract into dedicated pricing module with explicit per-book quality outputs and contract tests | `wt-pricing-neutralize-vig` |
 | 3 | Reference probability model | Partial | median no-vig style strategies (`s003+`) exist | add alt-line monotone interpolation + uncertainty estimation artifacts | `wt-ref-model-altline` |
 | 4 | Execution pricing + EV | Partial | execution-vs-discovery flow exists and is reported | centralize exact-point matching + conservative EV scoring as first-class stage output | `wt-execution-pricing` |
@@ -609,11 +613,11 @@ For each track, Codex should generate:
 
 ## 10) Immediate Next Execution Sequence
 
-1. Execute Track A (A1+A2), then close IM1 on `main`.
-2. Execute Track B (B1+B2) in parallel, then close IM2 on `main`.
-3. Execute Track A (A3+A4) + Track C baseline, then close IM3 on `main`.
-4. Execute Track D baseline, then close IM4 on `main`.
-5. Propose only evidence-backed default flips and close IM5 incrementally.
+1. Merge Stage 0/1 hardening PR and explicitly close IM1 on `main`.
+2. Execute Track B (B1+B2) in parallel and harvest IM2.
+3. Execute Track A pricing upgrades (A3+A4) + Track C baseline, then harvest IM3.
+4. Execute Track D baseline and harvest IM4.
+5. Propose only evidence-backed default flips and harvest IM5 incrementally.
 
 ## 11) Out of Scope (current horizon)
 

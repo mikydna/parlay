@@ -17,9 +17,19 @@ from prop_ev.archive_utils import (
     sha256_file,
     write_tar,
 )
+from prop_ev.quote_table import (
+    EVENT_PROPS_SORT_COLUMNS,
+    EVENT_PROPS_TABLE,
+    FEATURED_ODDS_SORT_COLUMNS,
+    FEATURED_ODDS_TABLE,
+    canonicalize_event_props_rows,
+    canonicalize_featured_odds_rows,
+    validate_event_props_rows,
+    validate_featured_odds_rows,
+)
 
 _TABLE_SCHEMAS: dict[str, list[tuple[str, Any]]] = {
-    "event_props": [
+    EVENT_PROPS_TABLE: [
         ("provider", pl.Utf8),
         ("snapshot_id", pl.Utf8),
         ("schema_version", pl.Int64),
@@ -33,7 +43,7 @@ _TABLE_SCHEMAS: dict[str, list[tuple[str, Any]]] = {
         ("last_update", pl.Utf8),
         ("link", pl.Utf8),
     ],
-    "featured_odds": [
+    FEATURED_ODDS_TABLE: [
         ("provider", pl.Utf8),
         ("snapshot_id", pl.Utf8),
         ("schema_version", pl.Int64),
@@ -48,8 +58,8 @@ _TABLE_SCHEMAS: dict[str, list[tuple[str, Any]]] = {
 }
 
 _SORT_KEYS: dict[str, list[str]] = {
-    "event_props": ["event_id", "market", "player", "side", "book", "point", "price"],
-    "featured_odds": ["game_id", "market", "book", "side", "point", "price"],
+    EVENT_PROPS_TABLE: list(EVENT_PROPS_SORT_COLUMNS),
+    FEATURED_ODDS_TABLE: list(FEATURED_ODDS_SORT_COLUMNS),
 }
 
 
@@ -91,6 +101,131 @@ def _generic_frame(rows: list[dict[str, Any]]) -> pl.DataFrame:
     return frame.select(sorted(frame.columns))
 
 
+def _canonical_rows_for_table(table_name: str, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    if table_name == EVENT_PROPS_TABLE:
+        canonical = canonicalize_event_props_rows(rows)
+        validate_event_props_rows(canonical)
+        return canonical
+    if table_name == FEATURED_ODDS_TABLE:
+        canonical = canonicalize_featured_odds_rows(rows)
+        validate_featured_odds_rows(canonical)
+        return canonical
+    return rows
+
+
+def _canonical_frame_for_table(table_name: str, rows: list[dict[str, Any]]) -> pl.DataFrame:
+    frame = _enforce_schema(table_name, pl.DataFrame(rows))
+    sort_keys = _SORT_KEYS.get(table_name, [])
+    if sort_keys and frame.height > 0:
+        frame = frame.sort(sort_keys)
+    return frame
+
+
+def verify_snapshot_derived_contracts(
+    *,
+    snapshot_dir: Path,
+    require_parquet: bool = False,
+    required_tables: tuple[str, ...] = (),
+) -> list[dict[str, str]]:
+    """Verify canonical derived-table contracts and jsonl/parquet parity."""
+    derived_dir = snapshot_dir / "derived"
+    if not derived_dir.exists():
+        return [
+            {
+                "code": "missing_derived_dir",
+                "detail": derived_dir.as_posix(),
+            }
+        ]
+
+    issues: list[dict[str, str]] = []
+    known_tables = sorted(_TABLE_SCHEMAS.keys())
+    present_jsonl_tables = {
+        path.stem for path in derived_dir.glob("*.jsonl") if path.stem in _TABLE_SCHEMAS
+    }
+
+    for table_name in required_tables:
+        if table_name not in present_jsonl_tables:
+            issues.append(
+                {
+                    "code": "missing_required_jsonl",
+                    "table": table_name,
+                    "detail": (derived_dir / f"{table_name}.jsonl").as_posix(),
+                }
+            )
+
+    for table_name in known_tables:
+        jsonl_path = derived_dir / f"{table_name}.jsonl"
+        parquet_path = derived_dir / f"{table_name}.parquet"
+        if not jsonl_path.exists():
+            if require_parquet and parquet_path.exists():
+                issues.append(
+                    {
+                        "code": "parquet_without_jsonl",
+                        "table": table_name,
+                        "detail": parquet_path.as_posix(),
+                    }
+                )
+            continue
+
+        try:
+            rows = _load_jsonl(jsonl_path)
+        except json.JSONDecodeError as exc:
+            issues.append(
+                {
+                    "code": "invalid_jsonl",
+                    "table": table_name,
+                    "detail": f"{jsonl_path}: {exc}",
+                }
+            )
+            continue
+
+        try:
+            canonical_rows = _canonical_rows_for_table(table_name, rows)
+        except ValueError as exc:
+            issues.append(
+                {
+                    "code": "contract_validation_failed",
+                    "table": table_name,
+                    "detail": str(exc),
+                }
+            )
+            continue
+
+        if rows != canonical_rows:
+            issues.append(
+                {
+                    "code": "jsonl_noncanonical",
+                    "table": table_name,
+                    "detail": jsonl_path.as_posix(),
+                }
+            )
+
+        if not parquet_path.exists():
+            if require_parquet:
+                issues.append(
+                    {
+                        "code": "missing_required_parquet",
+                        "table": table_name,
+                        "detail": parquet_path.as_posix(),
+                    }
+                )
+            continue
+
+        parquet_frame = pl.read_parquet(parquet_path)
+        expected_frame = _canonical_frame_for_table(table_name, canonical_rows)
+        actual_frame = _canonical_frame_for_table(table_name, parquet_frame.to_dicts())
+        if expected_frame.to_dicts() != actual_frame.to_dicts():
+            issues.append(
+                {
+                    "code": "parquet_parity_mismatch",
+                    "table": table_name,
+                    "detail": parquet_path.as_posix(),
+                }
+            )
+
+    return issues
+
+
 def lake_snapshot_derived(snapshot_dir: Path) -> list[Path]:
     """Convert all snapshot derived JSONL files into deterministic Parquet outputs."""
     derived_dir = snapshot_dir / "derived"
@@ -102,6 +237,12 @@ def lake_snapshot_derived(snapshot_dir: Path) -> list[Path]:
         rows = _load_jsonl(jsonl_path)
         table_name = jsonl_path.stem
         if table_name in _TABLE_SCHEMAS:
+            if table_name == EVENT_PROPS_TABLE:
+                rows = canonicalize_event_props_rows(rows)
+                validate_event_props_rows(rows)
+            elif table_name == FEATURED_ODDS_TABLE:
+                rows = canonicalize_featured_odds_rows(rows)
+                validate_featured_odds_rows(rows)
             frame = _enforce_schema(table_name, pl.DataFrame(rows))
             sort_keys = _SORT_KEYS.get(table_name, [])
             if sort_keys and frame.height > 0:

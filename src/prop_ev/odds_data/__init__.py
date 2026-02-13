@@ -3,13 +3,16 @@
 from prop_ev.odds_data.backfill import backfill_days
 from prop_ev.odds_data.cache_store import GlobalCacheStore
 from prop_ev.odds_data.day_index import (
+    canonicalize_day_status,
     compute_day_status_from_cache,
     dataset_days_dir,
     dataset_spec_path,
     load_day_status,
+    primary_incomplete_reason_code,
     save_dataset_spec,
     save_day_status,
     snapshot_id_for_day,
+    with_day_error,
 )
 from prop_ev.odds_data.errors import (
     CreditBudgetExceeded,
@@ -35,6 +38,7 @@ __all__ = [
     "SpendBlockedError",
     "SpendPolicy",
     "backfill_days",
+    "canonicalize_day_status",
     "canonical_dict",
     "compute_day_status_from_cache",
     "dataset_days_dir",
@@ -43,7 +47,9 @@ __all__ = [
     "day_window",
     "effective_max_credits",
     "load_day_status",
+    "primary_incomplete_reason_code",
     "save_dataset_spec",
     "save_day_status",
     "snapshot_id_for_day",
+    "with_day_error",
 ]
