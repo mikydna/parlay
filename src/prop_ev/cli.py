@@ -8,9 +8,10 @@ import os
 import sys
 from collections import Counter
 from collections.abc import Callable
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from prop_ev.backtest import ROW_SELECTIONS, write_backtest_artifacts
 from prop_ev.budget import current_month_utc
@@ -47,6 +48,17 @@ from prop_ev.odds_client import (
     parse_csv,
     regions_equivalent,
 )
+from prop_ev.odds_data.backfill import backfill_days
+from prop_ev.odds_data.cache_store import GlobalCacheStore
+from prop_ev.odds_data.day_index import (
+    compute_day_status_from_cache,
+    load_day_status,
+)
+from prop_ev.odds_data.errors import CreditBudgetExceeded, OfflineCacheMiss, SpendBlockedError
+from prop_ev.odds_data.policy import SpendPolicy
+from prop_ev.odds_data.repo import OddsRepository
+from prop_ev.odds_data.request import OddsRequest
+from prop_ev.odds_data.spec import DatasetSpec
 from prop_ev.playbook import budget_snapshot, compute_live_window, generate_brief_for_snapshot
 from prop_ev.settings import Settings
 from prop_ev.settlement import settle_snapshot
@@ -183,98 +195,35 @@ def _execute_request(
     refresh: bool,
     resume: bool,
 ) -> tuple[Any, dict[str, str], str, str]:
-    key = request_hash("GET", path, params)
-    request_data = {"method": "GET", "path": path, "params": params}
-    store.write_request(snapshot_id, key, request_data)
-
-    previous_status = store.request_status(snapshot_id, key)
-    if (
-        resume
-        and not refresh
-        and previous_status in {"ok", "cached"}
-        and store.has_response(snapshot_id, key)
-    ):
-        data = store.load_response(snapshot_id, key)
-        meta = store.load_meta(snapshot_id, key) or {}
-        headers = meta.get("headers", {})
-        if not isinstance(headers, dict):
-            headers = {}
-        normalized_headers = {str(k): str(v) for k, v in headers.items()}
-        store.mark_request(
-            snapshot_id,
-            key,
-            label=label,
-            path=path,
-            params=params,
-            status="skipped",
-            quota=_quota_from_headers(normalized_headers),
-        )
-        return data, normalized_headers, "skipped", key
-
-    if not refresh and store.has_response(snapshot_id, key):
-        data = store.load_response(snapshot_id, key)
-        meta = store.load_meta(snapshot_id, key) or {}
-        headers = meta.get("headers", {})
-        if not isinstance(headers, dict):
-            headers = {}
-        normalized_headers = {str(k): str(v) for k, v in headers.items()}
-        store.mark_request(
-            snapshot_id,
-            key,
-            label=label,
-            path=path,
-            params=params,
-            status="cached",
-            quota=_quota_from_headers(normalized_headers),
-        )
-        return data, normalized_headers, "cached", key
-
-    if offline or (block_paid and is_paid):
-        reason = "offline cache miss" if offline else "paid endpoint blocked cache miss"
-        store.mark_request(
-            snapshot_id,
-            key,
-            label=label,
-            path=path,
-            params=params,
-            status="failed",
-            error=reason,
-        )
-        if offline:
-            raise OfflineCacheMissError(f"cache miss while offline for {label}")
-        raise OfflineCacheMissError(f"cache miss while paid endpoints are blocked for {label}")
-
-    response = fetcher()
-    meta = {
-        "endpoint": path,
-        "status_code": response.status_code,
-        "duration_ms": response.duration_ms,
-        "retry_count": response.retry_count,
-        "headers": response.headers,
-        "fetched_at_utc": _iso(_utc_now()),
-    }
-    store.write_response(snapshot_id, key, response.data)
-    store.write_meta(snapshot_id, key, meta)
-    store.append_usage(
-        endpoint=path,
-        request_key=key,
-        snapshot_id=snapshot_id,
-        status_code=response.status_code,
-        duration_ms=response.duration_ms,
-        retry_count=response.retry_count,
-        headers=response.headers,
-        cached=False,
-    )
-    store.mark_request(
-        snapshot_id,
-        key,
-        label=label,
+    repo = OddsRepository(store=store, cache=GlobalCacheStore(store.root))
+    req = OddsRequest(
+        method="GET",
         path=path,
         params=params,
-        status="ok",
-        quota=_quota_from_headers(response.headers),
+        label=label,
+        is_paid=is_paid,
     )
-    return response.data, response.headers, "ok", key
+    policy = SpendPolicy(
+        offline=offline,
+        max_credits=1_000_000,
+        no_spend=False,
+        refresh=refresh,
+        resume=resume,
+        block_paid=block_paid,
+        force=True,
+    )
+    try:
+        result = repo.get_or_fetch(
+            snapshot_id=snapshot_id,
+            req=req,
+            fetcher=fetcher,
+            policy=policy,
+        )
+    except OfflineCacheMiss as exc:
+        raise OfflineCacheMissError(str(exc)) from exc
+    except SpendBlockedError as exc:
+        raise OfflineCacheMissError(str(exc)) from exc
+    return result.data, result.headers, result.status, result.key
 
 
 def _parse_markets(value: str) -> list[str]:
@@ -282,6 +231,68 @@ def _parse_markets(value: str) -> list[str]:
     if not markets:
         raise CLIError("at least one market is required")
     return markets
+
+
+def _resolve_days(
+    *,
+    days: int,
+    from_day: str,
+    to_day: str,
+    tz_name: str,
+) -> list[str]:
+    if from_day or to_day:
+        if not from_day or not to_day:
+            raise CLIError("--from and --to must be provided together")
+        try:
+            start = date.fromisoformat(from_day)
+            end = date.fromisoformat(to_day)
+        except ValueError as exc:
+            raise CLIError("invalid --from/--to day format; expected YYYY-MM-DD") from exc
+        if end < start:
+            raise CLIError("--to must be on or after --from")
+        span = (end - start).days
+        return [(start + timedelta(days=offset)).isoformat() for offset in range(span + 1)]
+
+    count = max(1, int(days))
+    tz = ZoneInfo(tz_name)
+    today_local = datetime.now(tz).date()
+    start = today_local - timedelta(days=count - 1)
+    return [(start + timedelta(days=offset)).isoformat() for offset in range(count)]
+
+
+def _dataset_spec_from_args(args: argparse.Namespace) -> DatasetSpec:
+    markets = _parse_markets(str(getattr(args, "markets", "")))
+    bookmakers, _ = _resolve_bookmakers(
+        str(getattr(args, "bookmakers", "")),
+        allow_config=not bool(getattr(args, "ignore_bookmaker_config", False)),
+    )
+    regions = str(getattr(args, "regions", "")).strip()
+    return DatasetSpec(
+        sport_key=str(getattr(args, "sport_key", "basketball_nba")).strip() or "basketball_nba",
+        markets=markets,
+        regions=regions or None,
+        bookmakers=bookmakers or None,
+        include_links=bool(getattr(args, "include_links", False)),
+        include_sids=bool(getattr(args, "include_sids", False)),
+        odds_format="american",
+        date_format="iso",
+    )
+
+
+def _spend_policy_from_args(args: argparse.Namespace) -> SpendPolicy:
+    max_credits = int(getattr(args, "max_credits", 20))
+    no_spend = bool(getattr(args, "no_spend", False))
+    if no_spend:
+        max_credits = 0
+    return SpendPolicy(
+        offline=bool(getattr(args, "offline", False)),
+        max_credits=max_credits,
+        no_spend=no_spend,
+        refresh=bool(getattr(args, "refresh", False)),
+        resume=bool(getattr(args, "resume", False)),
+        block_paid=bool(getattr(args, "block_paid", False)),
+        force=bool(getattr(args, "force", False)),
+    )
 
 
 def _write_derived(
@@ -297,6 +308,7 @@ def _write_derived(
 
 def _cmd_snapshot_slate(args: argparse.Namespace) -> int:
     store = SnapshotStore(os.environ.get("PROP_EV_DATA_DIR", "data/odds_api"))
+    cache = GlobalCacheStore(store.root)
     snapshot_id = args.snapshot_id or make_snapshot_id()
     default_from, default_to = _default_window()
     commence_from = args.commence_from or default_from
@@ -307,7 +319,23 @@ def _cmd_snapshot_slate(args: argparse.Namespace) -> int:
         allow_config=not bool(getattr(args, "ignore_bookmaker_config", False)),
     )
     regions_factor = regions_equivalent(args.regions, bookmakers)
-    estimate = estimate_featured_credits(markets, regions_factor)
+    path = f"/sports/{args.sport_key}/odds"
+    params: dict[str, Any] = {
+        "markets": ",".join(sorted(set(markets))),
+        "oddsFormat": "american",
+        "dateFormat": "iso",
+        "commenceTimeFrom": commence_from,
+        "commenceTimeTo": commence_to,
+    }
+    if bookmakers:
+        params["bookmakers"] = bookmakers
+    elif args.regions:
+        params["regions"] = args.regions
+    request_key = request_hash("GET", path, params)
+    cached_hit = not args.refresh and (
+        store.has_response(snapshot_id, request_key) or cache.has_response(request_key)
+    )
+    estimate = 0 if cached_hit else estimate_featured_credits(markets, regions_factor)
     _print_estimate(estimate, args.max_credits)
     _enforce_credit_cap(estimate, args.max_credits, args.force)
     if args.dry_run:
@@ -327,18 +355,6 @@ def _cmd_snapshot_slate(args: argparse.Namespace) -> int:
     }
     with store.lock_snapshot(snapshot_id):
         store.ensure_snapshot(snapshot_id, run_config=run_config)
-        path = f"/sports/{args.sport_key}/odds"
-        params: dict[str, Any] = {
-            "markets": ",".join(sorted(set(markets))),
-            "oddsFormat": "american",
-            "dateFormat": "iso",
-            "commenceTimeFrom": commence_from,
-            "commenceTimeTo": commence_to,
-        }
-        if bookmakers:
-            params["bookmakers"] = bookmakers
-        elif args.regions:
-            params["regions"] = args.regions
 
         with OddsAPIClient(settings) as client:
             data, headers, status, key = _execute_request(
@@ -381,6 +397,7 @@ def _cmd_snapshot_slate(args: argparse.Namespace) -> int:
 
 def _cmd_snapshot_props(args: argparse.Namespace) -> int:
     store = SnapshotStore(os.environ.get("PROP_EV_DATA_DIR", "data/odds_api"))
+    cache = GlobalCacheStore(store.root)
     snapshot_id = args.snapshot_id or make_snapshot_id()
     default_from, default_to = _default_window()
     commence_from = args.commence_from or default_from
@@ -446,8 +463,30 @@ def _cmd_snapshot_props(args: argparse.Namespace) -> int:
             event_ids = [event_id for event_id in event_ids if event_id]
             if args.max_events:
                 event_ids = event_ids[: args.max_events]
+            event_request_params: dict[str, Any] = {
+                "markets": ",".join(sorted(set(markets))),
+                "oddsFormat": "american",
+                "dateFormat": "iso",
+            }
+            if bookmakers:
+                event_request_params["bookmakers"] = bookmakers
+            elif args.regions:
+                event_request_params["regions"] = args.regions
+            if args.include_links:
+                event_request_params["includeLinks"] = "true"
+            if args.include_sids:
+                event_request_params["includeSids"] = "true"
+            missing_event_ids: list[str] = []
+            for event_id in event_ids:
+                event_path = f"/sports/{args.sport_key}/events/{event_id}/odds"
+                event_key = request_hash("GET", event_path, event_request_params)
+                cached_hit = not args.refresh and (
+                    store.has_response(snapshot_id, event_key) or cache.has_response(event_key)
+                )
+                if not cached_hit:
+                    missing_event_ids.append(event_id)
             regions_factor = regions_equivalent(args.regions, bookmakers)
-            estimate = estimate_event_credits(markets, regions_factor, len(event_ids))
+            estimate = estimate_event_credits(markets, regions_factor, len(missing_event_ids))
             _print_estimate(estimate, args.max_credits)
             _enforce_credit_cap(estimate, args.max_credits, args.force)
             print(
@@ -461,19 +500,7 @@ def _cmd_snapshot_props(args: argparse.Namespace) -> int:
 
             for event_id in event_ids:
                 path = f"/sports/{args.sport_key}/events/{event_id}/odds"
-                params: dict[str, Any] = {
-                    "markets": ",".join(sorted(set(markets))),
-                    "oddsFormat": "american",
-                    "dateFormat": "iso",
-                }
-                if bookmakers:
-                    params["bookmakers"] = bookmakers
-                elif args.regions:
-                    params["regions"] = args.regions
-                if args.include_links:
-                    params["includeLinks"] = "true"
-                if args.include_sids:
-                    params["includeSids"] = "true"
+                params = dict(event_request_params)
                 try:
                     data, headers, status, key = _execute_request(
                         store=store,
@@ -676,6 +703,93 @@ def _cmd_credits_budget(args: argparse.Namespace) -> int:
     print(f"event_estimate={event}")
     print(f"recommended_max_credits={max(featured, event)}")
     return 0
+
+
+def _cmd_data_status(args: argparse.Namespace) -> int:
+    data_root = Path(os.environ.get("PROP_EV_DATA_DIR", "data/odds_api"))
+    store = SnapshotStore(data_root)
+    cache = GlobalCacheStore(data_root)
+    spec = _dataset_spec_from_args(args)
+    try:
+        days = _resolve_days(
+            days=int(getattr(args, "days", 10)),
+            from_day=str(getattr(args, "from_day", "")),
+            to_day=str(getattr(args, "to_day", "")),
+            tz_name=str(getattr(args, "tz_name", "America/New_York")),
+        )
+    except (KeyError, ValueError) as exc:
+        raise CLIError(str(exc)) from exc
+
+    for day in days:
+        status = (
+            None if bool(getattr(args, "refresh", False)) else load_day_status(data_root, spec, day)
+        )
+        if not isinstance(status, dict):
+            status = compute_day_status_from_cache(
+                data_root=data_root,
+                store=store,
+                cache=cache,
+                spec=spec,
+                day=day,
+                tz_name=str(getattr(args, "tz_name", "America/New_York")),
+            )
+        print(
+            ("day={} complete={} missing={} events={} snapshot_id={} note={}").format(
+                day,
+                str(bool(status.get("complete", False))).lower(),
+                int(status.get("missing_count", 0)),
+                int(status.get("total_events", 0)),
+                str(status.get("snapshot_id_for_day", "")),
+                str(status.get("note", "")),
+            )
+        )
+    return 0
+
+
+def _cmd_data_backfill(args: argparse.Namespace) -> int:
+    data_root = Path(os.environ.get("PROP_EV_DATA_DIR", "data/odds_api"))
+    spec = _dataset_spec_from_args(args)
+    try:
+        days = _resolve_days(
+            days=int(getattr(args, "days", 10)),
+            from_day=str(getattr(args, "from_day", "")),
+            to_day=str(getattr(args, "to_day", "")),
+            tz_name=str(getattr(args, "tz_name", "America/New_York")),
+        )
+    except (KeyError, ValueError) as exc:
+        raise CLIError(str(exc)) from exc
+
+    policy = _spend_policy_from_args(args)
+    summaries = backfill_days(
+        data_root=data_root,
+        spec=spec,
+        days=days,
+        tz_name=str(getattr(args, "tz_name", "America/New_York")),
+        policy=policy,
+        dry_run=bool(getattr(args, "dry_run", False)),
+    )
+
+    had_error = False
+    for row in summaries:
+        error = str(row.get("error", "")).strip()
+        if error:
+            had_error = True
+        print(
+            (
+                "day={} snapshot_id={} complete={} missing={} events={} "
+                "estimated_paid_credits={} remaining_credits={} error={}"
+            ).format(
+                str(row.get("day", "")),
+                str(row.get("snapshot_id", "")),
+                str(bool(row.get("complete", False))).lower(),
+                int(row.get("missing", 0)),
+                int(row.get("events", 0)),
+                int(row.get("estimated_paid_credits", 0)),
+                int(row.get("remaining_credits", 0)),
+                error,
+            )
+        )
+    return 2 if had_error else 0
 
 
 def _latest_snapshot_id(store: SnapshotStore) -> str:
@@ -2617,6 +2731,48 @@ def _build_parser() -> argparse.ArgumentParser:
     snapshot_verify.set_defaults(func=_cmd_snapshot_verify)
     snapshot_verify.add_argument("--snapshot-id", required=True)
 
+    data_cmd = subparsers.add_parser("data", help="Dataset status and backfill tools")
+    data_subparsers = data_cmd.add_subparsers(dest="data_command")
+
+    data_status = data_subparsers.add_parser("status", help="Show day completeness status")
+    data_status.set_defaults(func=_cmd_data_status)
+    data_status.add_argument("--sport-key", default="basketball_nba")
+    data_status.add_argument("--markets", default="player_points")
+    data_status.add_argument("--regions", default="us")
+    data_status.add_argument("--bookmakers", default="")
+    data_status.add_argument("--include-links", action="store_true")
+    data_status.add_argument("--include-sids", action="store_true")
+    data_status.add_argument("--days", type=int, default=10)
+    data_status.add_argument("--from", dest="from_day", default="")
+    data_status.add_argument("--to", dest="to_day", default="")
+    data_status.add_argument("--tz", dest="tz_name", default="America/New_York")
+    data_status.add_argument("--refresh", action="store_true")
+
+    data_backfill = data_subparsers.add_parser("backfill", help="Backfill day snapshots")
+    data_backfill.set_defaults(func=_cmd_data_backfill)
+    data_backfill.add_argument("--sport-key", default="basketball_nba")
+    data_backfill.add_argument("--markets", default="player_points")
+    data_backfill.add_argument("--regions", default="us")
+    data_backfill.add_argument("--bookmakers", default="")
+    data_backfill.add_argument("--include-links", action="store_true")
+    data_backfill.add_argument("--include-sids", action="store_true")
+    data_backfill.add_argument("--days", type=int, default=10)
+    data_backfill.add_argument("--from", dest="from_day", default="")
+    data_backfill.add_argument("--to", dest="to_day", default="")
+    data_backfill.add_argument("--tz", dest="tz_name", default="America/New_York")
+    data_backfill.add_argument(
+        "--max-credits",
+        type=int,
+        default=_env_int("PROP_EV_ODDS_API_DEFAULT_MAX_CREDITS", 20),
+    )
+    data_backfill.add_argument("--no-spend", action="store_true")
+    data_backfill.add_argument("--offline", action="store_true")
+    data_backfill.add_argument("--refresh", action="store_true")
+    data_backfill.add_argument("--resume", action="store_true", default=True)
+    data_backfill.add_argument("--block-paid", action="store_true")
+    data_backfill.add_argument("--force", action="store_true")
+    data_backfill.add_argument("--dry-run", action="store_true")
+
     credits = subparsers.add_parser("credits", help="Credit tooling")
     credits_subparsers = credits.add_subparsers(dest="credits_command")
 
@@ -2871,7 +3027,15 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     try:
         return int(func(args))
-    except (CLIError, OddsAPIError, FileNotFoundError, ValueError) as exc:
+    except (
+        CLIError,
+        OddsAPIError,
+        CreditBudgetExceeded,
+        OfflineCacheMiss,
+        SpendBlockedError,
+        FileNotFoundError,
+        ValueError,
+    ) as exc:
         print(str(exc), file=sys.stderr)
         return 2
 
