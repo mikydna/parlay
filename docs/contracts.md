@@ -67,7 +67,7 @@ Required keys:
 ## Settlement Contract
 
 Path:
-- `<REPORTS_DIR>/snapshots/<report_snapshot>/backtest-settlement.json`
+- `<REPORTS_DIR>/snapshots/<report_snapshot>/settlement.json`
 
 Required top-level keys:
 - `snapshot_id`

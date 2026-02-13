@@ -96,9 +96,9 @@ def test_strategy_settle_returns_pending_exit_code(
     assert code == 1
     assert "settlement_json=" in out
     assert "pending=1" in out
-    assert (reports_dir / "backtest-settlement.json").exists()
-    assert not (reports_dir / "backtest-settlement.md").exists()
-    assert not (reports_dir / "backtest-settlement.tex").exists()
+    assert (reports_dir / "settlement.json").exists()
+    assert not (reports_dir / "settlement.md").exists()
+    assert not (reports_dir / "settlement.tex").exists()
 
 
 def test_strategy_settle_returns_complete_exit_code(
@@ -173,3 +173,74 @@ def test_strategy_settle_offline_forces_cache_only(
     _ = capsys.readouterr()
     assert code == 0
     assert captured == {"offline": True, "refresh": False, "mode": "cache_only"}
+
+
+def test_strategy_settle_falls_back_to_strategy_report_seed(
+    local_data_dir: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys,
+) -> None:
+    store = SnapshotStore(local_data_dir)
+    snapshot_id = "snap-1"
+    store.ensure_snapshot(snapshot_id)
+    reports_dir = snapshot_reports_dir(store, snapshot_id)
+    reports_dir.mkdir(parents=True, exist_ok=True)
+    report_payload = {
+        "snapshot_id": snapshot_id,
+        "strategy_id": "s001",
+        "generated_at_utc": "2026-02-13T00:00:00Z",
+        "modeled_date_et": "2026-02-12",
+        "strategy_mode": "replay",
+        "strategy_status": "modeled_with_gates",
+        "summary": {"events": 1, "candidate_lines": 1, "eligible_lines": 1},
+        "candidates": [
+            {
+                "eligible": True,
+                "event_id": "event-1",
+                "game": "Away Team @ Home Team",
+                "tip_et": "7:00 PM ET",
+                "home_team": "Home Team",
+                "away_team": "Away Team",
+                "player": "Player One",
+                "market": "player_points",
+                "recommended_side": "over",
+                "point": 20.5,
+                "tier": "A",
+                "selected_book": "draftkings",
+                "selected_price": -110,
+                "play_to_american": -115,
+                "play_to_decimal": 1.91,
+                "model_p_hit": 0.62,
+                "fair_p_hit": 0.57,
+                "best_ev": 0.08,
+                "edge_pct": 8.0,
+                "ev_per_100": 8.0,
+                "full_kelly": 0.1,
+                "quarter_kelly": 0.025,
+                "injury_status": "available",
+                "roster_status": "active",
+                "selected_last_update": "2026-02-13T00:00:00Z",
+                "selected_link": "",
+                "reason": "eligible",
+            }
+        ],
+    }
+    (reports_dir / "strategy-report.json").write_text(
+        json.dumps(report_payload, sort_keys=True, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(
+        "prop_ev.settlement.NBARepository.load_results_for_settlement",
+        lambda self, *, seed_rows, offline, refresh, mode: (
+            _results_payload(status="final", points=25),
+            self.snapshot_dir / "context" / "results.json",
+        ),
+    )
+
+    code = main(["strategy", "settle", "--snapshot-id", snapshot_id, "--no-json"])
+    out = capsys.readouterr().out
+    assert code == 0
+    assert "status=complete" in out
+    assert (reports_dir / "settlement.json").exists()
+    assert not (reports_dir / "backtest-seed.jsonl").exists()

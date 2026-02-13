@@ -4,16 +4,22 @@ Use the snapshot artifacts from strategy run, then grade outcomes tomorrow.
 
 ## 1) Generate backtest artifacts
 
-`strategy run` now auto-writes:
+Backtest artifacts are generated explicitly (to keep reports compact):
+
+```bash
+uv run prop-ev strategy backtest-prep --snapshot-id <snapshot_id> --selection eligible
+```
+
+Outputs:
 
 - `<REPORTS_DIR>/snapshots/<report_snapshot>/backtest-seed.jsonl`
 - `<REPORTS_DIR>/snapshots/<report_snapshot>/backtest-results-template.csv`
 - `<REPORTS_DIR>/snapshots/<report_snapshot>/backtest-readiness.json`
 
-You can re-generate explicitly:
+Optional during strategy run (same outputs, noisier):
 
 ```bash
-uv run prop-ev strategy backtest-prep --snapshot-id <snapshot_id> --selection eligible
+uv run prop-ev strategy run --snapshot-id <snapshot_id> --write-backtest-artifacts
 ```
 
 Selection modes:
@@ -56,13 +62,15 @@ uv run prop-ev strategy settle --snapshot-id <snapshot_id> --refresh-results --r
 
 Outputs:
 
-- `<REPORTS_DIR>/snapshots/<report_snapshot>/backtest-settlement.json`
-- `<REPORTS_DIR>/snapshots/<report_snapshot>/backtest-settlement.md`
-- `<REPORTS_DIR>/snapshots/<report_snapshot>/backtest-settlement.tex`
-- `<REPORTS_DIR>/snapshots/<report_snapshot>/backtest-settlement.pdf`
-- `<REPORTS_DIR>/snapshots/<report_snapshot>/backtest-settlement.meta.json`
+- `<REPORTS_DIR>/snapshots/<report_snapshot>/settlement.json`
+- `<REPORTS_DIR>/snapshots/<report_snapshot>/settlement.pdf`
+- `<REPORTS_DIR>/snapshots/<report_snapshot>/settlement.meta.json`
+- optional markdown via `--write-markdown`:
+  `<REPORTS_DIR>/snapshots/<report_snapshot>/settlement.md`
+- optional tex via `--keep-tex`:
+  `<REPORTS_DIR>/snapshots/<report_snapshot>/settlement.tex`
 - optional CSV via `--write-csv`:
-  `<REPORTS_DIR>/snapshots/<report_snapshot>/backtest-settlement.csv`
+  `<REPORTS_DIR>/snapshots/<report_snapshot>/settlement.csv`
 
 Behavior:
 

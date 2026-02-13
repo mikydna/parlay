@@ -15,7 +15,7 @@ from shutil import copy2
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from prop_ev.backtest import ROW_SELECTIONS, write_backtest_artifacts
+from prop_ev.backtest import ROW_SELECTIONS, build_backtest_seed_rows, write_backtest_artifacts
 from prop_ev.budget import current_month_utc
 from prop_ev.cli_internal import (
     default_window,
@@ -2212,15 +2212,24 @@ def _cmd_strategy_run(args: argparse.Namespace) -> int:
         write_canonical=write_canonical,
         write_markdown=write_markdown,
     )
-    backtest = write_backtest_artifacts(
-        snapshot_dir=snapshot_dir,
-        reports_dir=reports_dir,
-        report=report,
-        selection="eligible",
-        top_n=0,
-        strategy_id=strategy_id,
-        write_canonical=write_canonical,
-    )
+    write_backtest_artifacts_flag = bool(getattr(args, "write_backtest_artifacts", False))
+    backtest: dict[str, Any] = {
+        "seed_jsonl": "",
+        "results_template_csv": "",
+        "readiness_json": "",
+        "ready_for_backtest_seed": False,
+        "ready_for_settlement": False,
+    }
+    if write_backtest_artifacts_flag:
+        backtest = write_backtest_artifacts(
+            snapshot_dir=snapshot_dir,
+            reports_dir=reports_dir,
+            report=report,
+            selection="eligible",
+            top_n=0,
+            strategy_id=strategy_id,
+            write_canonical=write_canonical,
+        )
     summary = report.get("summary", {})
     health = (
         report.get("health_report", {}) if isinstance(report.get("health_report"), dict) else {}
@@ -2263,9 +2272,14 @@ def _cmd_strategy_run(args: argparse.Namespace) -> int:
         print(f"report_card={card}")
     else:
         print("report_card=disabled")
-    print(f"backtest_seed_jsonl={backtest['seed_jsonl']}")
-    print(f"backtest_results_template_csv={backtest['results_template_csv']}")
-    print(f"backtest_readiness_json={backtest['readiness_json']}")
+    if write_backtest_artifacts_flag:
+        print(f"backtest_seed_jsonl={backtest['seed_jsonl']}")
+        print(f"backtest_results_template_csv={backtest['results_template_csv']}")
+        print(f"backtest_readiness_json={backtest['readiness_json']}")
+    else:
+        print("backtest_seed_jsonl=disabled")
+        print("backtest_results_template_csv=disabled")
+        print("backtest_readiness_json=disabled")
     reference_dir = store.root / "reference"
     identity_map_path = reference_dir / "player_identity_map.json"
     identity_map = load_identity_map(identity_map_path)
@@ -2720,6 +2734,20 @@ def _cmd_strategy_settle(args: argparse.Namespace) -> int:
         if str(getattr(args, "seed_path", "")).strip()
         else reports_dir / "backtest-seed.jsonl"
     )
+    seed_rows_override: list[dict[str, Any]] | None = None
+    using_default_seed_path = not str(getattr(args, "seed_path", "")).strip()
+    if using_default_seed_path and not seed_path.exists():
+        strategy_report_path = reports_dir / "strategy-report.json"
+        if strategy_report_path.exists():
+            payload = json.loads(strategy_report_path.read_text(encoding="utf-8"))
+            if isinstance(payload, dict):
+                seed_rows_override = build_backtest_seed_rows(
+                    report=payload,
+                    selection="eligible",
+                    top_n=0,
+                )
+        if not seed_rows_override:
+            raise CLIError(f"missing backtest seed file: {seed_path}")
 
     report = settle_snapshot(
         snapshot_dir=snapshot_dir,
@@ -2732,6 +2760,7 @@ def _cmd_strategy_settle(args: argparse.Namespace) -> int:
         results_source=str(getattr(args, "results_source", "auto")),
         write_markdown=bool(getattr(args, "write_markdown", False)),
         keep_tex=bool(getattr(args, "keep_tex", False)),
+        seed_rows_override=seed_rows_override,
     )
 
     if bool(getattr(args, "json_output", True)):
@@ -3914,6 +3943,11 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Strategy runtime mode (replay relaxes freshness gates for historical reruns).",
     )
     strategy_run.add_argument("--allow-tier-b", action="store_true")
+    strategy_run.add_argument(
+        "--write-backtest-artifacts",
+        action="store_true",
+        help="Write seed/template/readiness backtest artifacts (disabled by default).",
+    )
     strategy_run.add_argument(
         "--write-markdown",
         action="store_true",

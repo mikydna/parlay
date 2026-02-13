@@ -271,8 +271,8 @@ def test_strategy_run_from_snapshot(local_data_dir: Path) -> None:
     reports_dir = snapshot_reports_dir(store, snapshot_id)
     assert (reports_dir / "strategy-report.json").exists()
     assert not (reports_dir / "strategy-report.md").exists()
-    assert (reports_dir / "backtest-seed.jsonl").exists()
-    assert (reports_dir / "backtest-readiness.json").exists()
+    assert not (reports_dir / "backtest-seed.jsonl").exists()
+    assert not (reports_dir / "backtest-readiness.json").exists()
     assert not (reports_dir / "strategy-report.s001.json").exists()
     assert not (reports_dir / "strategy-report.s001.md").exists()
     assert not (reports_dir / "backtest-seed.s001.jsonl").exists()
@@ -294,6 +294,39 @@ def test_strategy_run_from_snapshot(local_data_dir: Path) -> None:
         )
         == 0
     )
+    assert (reports_dir / "backtest-seed.jsonl").exists()
+    assert (reports_dir / "backtest-results-template.csv").exists()
+    assert (reports_dir / "backtest-readiness.json").exists()
+
+
+def test_strategy_run_writes_backtest_artifacts_when_enabled(
+    local_data_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("PROP_EV_STRATEGY_REQUIRE_OFFICIAL_INJURIES", "false")
+    monkeypatch.setenv("PROP_EV_STRATEGY_REQUIRE_FRESH_CONTEXT", "false")
+    store = SnapshotStore(local_data_dir)
+    snapshot_id = "2026-02-11T10-10-30Z"
+    _seed_strategy_snapshot(store, snapshot_id)
+
+    assert (
+        main(
+            [
+                "strategy",
+                "run",
+                "--snapshot-id",
+                snapshot_id,
+                "--top-n",
+                "5",
+                "--offline",
+                "--write-backtest-artifacts",
+            ]
+        )
+        == 0
+    )
+    reports_dir = snapshot_reports_dir(store, snapshot_id)
+    assert (reports_dir / "backtest-seed.jsonl").exists()
+    assert (reports_dir / "backtest-results-template.csv").exists()
+    assert (reports_dir / "backtest-readiness.json").exists()
 
 
 def test_strategy_compare_writes_suffixed_outputs(

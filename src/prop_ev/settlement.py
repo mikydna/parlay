@@ -584,9 +584,10 @@ def settle_snapshot(
     results_source: str = "auto",
     write_markdown: bool = False,
     keep_tex: bool = False,
+    seed_rows_override: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Settle snapshot seed tickets and write report artifacts."""
-    seed_rows = _load_jsonl(seed_path)
+    seed_rows = seed_rows_override if seed_rows_override is not None else _load_jsonl(seed_path)
     if not seed_rows:
         raise ValueError(f"no seed rows found in {seed_path}")
 
@@ -625,12 +626,24 @@ def settle_snapshot(
     exit_code = 0 if overall == "complete" else 1
 
     reports_dir.mkdir(parents=True, exist_ok=True)
-    json_path = reports_dir / "backtest-settlement.json"
-    md_path = reports_dir / "backtest-settlement.md"
-    tex_path = reports_dir / "backtest-settlement.tex"
-    pdf_path = reports_dir / "backtest-settlement.pdf"
-    csv_path = reports_dir / "backtest-settlement.csv"
-    meta_path = reports_dir / "backtest-settlement.meta.json"
+    json_path = reports_dir / "settlement.json"
+    md_path = reports_dir / "settlement.md"
+    tex_path = reports_dir / "settlement.tex"
+    pdf_path = reports_dir / "settlement.pdf"
+    csv_path = reports_dir / "settlement.csv"
+    meta_path = reports_dir / "settlement.meta.json"
+
+    legacy_paths = (
+        reports_dir / "backtest-settlement.json",
+        reports_dir / "backtest-settlement.md",
+        reports_dir / "backtest-settlement.tex",
+        reports_dir / "backtest-settlement.pdf",
+        reports_dir / "backtest-settlement.csv",
+        reports_dir / "backtest-settlement.meta.json",
+    )
+    for path in legacy_paths:
+        if path.exists():
+            path.unlink()
 
     source_details: dict[str, Any] = {
         "source": resolved_source,
@@ -639,6 +652,8 @@ def settle_snapshot(
         "status": status,
         "offline": offline,
         "refresh_results": effective_refresh,
+        "seed_source": "override" if seed_rows_override is not None else "seed_file",
+        "seed_path": str(seed_path),
         "write_markdown": bool(write_markdown),
         "keep_tex": bool(keep_tex),
         "results_cache_path": str(results_cache_path),
