@@ -1,4 +1,5 @@
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -56,6 +57,23 @@ def _sample_strategy_report() -> dict:
         "watchlist": [],
         "audit": {"report_schema_version": 2},
     }
+
+
+def _normalized_brief_markdown(markdown: str) -> str:
+    lines = markdown.splitlines()
+    filtered: list[str] = []
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("- generated_at_et:"):
+            continue
+        if stripped.startswith("- generated_at_utc:"):
+            continue
+        if stripped.startswith("Generated: "):
+            continue
+        filtered.append(line)
+    normalized = "\n".join(filtered)
+    normalized = re.sub(r"\n{3,}", "\n\n", normalized)
+    return normalized.strip()
 
 
 def test_generate_brief_writes_snapshot_and_latest(
@@ -177,3 +195,43 @@ def test_generate_brief_pass1_retries_then_succeeds(
     assert "## Analyst Take" in markdown
     assert meta["llm"]["pass1"]["status"] == "ok"
     assert meta["llm"]["pass1"]["attempts"] == 2
+
+
+def test_generate_brief_offline_rerender_is_stable_after_normalization(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("ODDS_API_KEY", "odds-test")
+    monkeypatch.setenv("PROP_EV_DATA_DIR", str(tmp_path / "data" / "odds_api"))
+
+    store = SnapshotStore(tmp_path / "data" / "odds_api")
+    snapshot_id = "2026-02-11T19-00-00Z"
+    snapshot_dir = store.ensure_snapshot(snapshot_id)
+    reports_dir = snapshot_dir / "reports"
+    reports_dir.mkdir(parents=True, exist_ok=True)
+    (reports_dir / "strategy-report.json").write_text(
+        json.dumps(_sample_strategy_report(), sort_keys=True, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+    settings = Settings(_env_file=None)
+    first = generate_brief_for_snapshot(
+        store=store,
+        settings=settings,
+        snapshot_id=snapshot_id,
+        top_n=5,
+        llm_refresh=False,
+        llm_offline=True,
+    )
+    first_markdown = Path(first["report_markdown"]).read_text(encoding="utf-8")
+
+    second = generate_brief_for_snapshot(
+        store=store,
+        settings=settings,
+        snapshot_id=snapshot_id,
+        top_n=5,
+        llm_refresh=False,
+        llm_offline=True,
+    )
+    second_markdown = Path(second["report_markdown"]).read_text(encoding="utf-8")
+
+    assert _normalized_brief_markdown(first_markdown) == _normalized_brief_markdown(second_markdown)
