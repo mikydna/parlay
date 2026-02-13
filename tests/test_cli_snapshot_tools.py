@@ -375,6 +375,72 @@ def test_snapshot_lake_pack_unpack_roundtrip(local_data_dir: Path) -> None:
     )
 
 
+def test_snapshot_verify_check_derived_enforces_required_table_and_parquet(
+    local_data_dir: Path, capsys
+) -> None:
+    store = SnapshotStore(local_data_dir)
+    snapshot_id = "2026-02-11T12-22-22Z"
+    snapshot_dir = store.ensure_snapshot(snapshot_id)
+    store.write_jsonl(
+        snapshot_dir / "derived" / "event_props.jsonl",
+        [
+            {
+                "provider": "odds_api",
+                "snapshot_id": snapshot_id,
+                "schema_version": 1,
+                "event_id": "event-1",
+                "market": "player_points",
+                "player": "Player A",
+                "side": "Over",
+                "price": -110,
+                "point": 20.5,
+                "book": "book_a",
+                "last_update": "2026-02-11T12:10:00Z",
+                "link": "",
+            }
+        ],
+    )
+
+    code = main(
+        [
+            "--data-dir",
+            str(local_data_dir),
+            "snapshot",
+            "verify",
+            "--snapshot-id",
+            snapshot_id,
+            "--check-derived",
+            "--require-table",
+            "event_props",
+            "--require-parquet",
+        ]
+    )
+    assert code == 2
+    assert "missing_required_parquet" in capsys.readouterr().out
+
+    assert (
+        main(["--data-dir", str(local_data_dir), "snapshot", "lake", "--snapshot-id", snapshot_id])
+        == 0
+    )
+    assert (
+        main(
+            [
+                "--data-dir",
+                str(local_data_dir),
+                "snapshot",
+                "verify",
+                "--snapshot-id",
+                snapshot_id,
+                "--check-derived",
+                "--require-table",
+                "event_props",
+                "--require-parquet",
+            ]
+        )
+        == 0
+    )
+
+
 def test_playbook_publish_copies_only_compact_outputs(local_data_dir: Path) -> None:
     store = SnapshotStore(local_data_dir)
     snapshot_id = "2026-02-11T13-13-13Z"

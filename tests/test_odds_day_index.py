@@ -180,5 +180,6 @@ def test_with_day_error_sets_reason_code() -> None:
     )
 
     assert updated["complete"] is False
+    assert updated["error_code"] == "budget_exceeded"
     assert updated["status_code"] == "incomplete_budget_exceeded"
     assert updated["reason_codes"] == ["budget_exceeded"]

@@ -90,6 +90,7 @@ Required operational keys:
 - `day`
 - `complete`
 - `status_code`
+- `error_code`
 - `reason_codes`
 - `missing_count`
 - `total_events`
@@ -99,6 +100,7 @@ Required operational keys:
 Completeness semantics:
 - `complete=true` only when events payload is present/valid and all expected event-odds payloads exist.
 - `complete=false` must include a stable `reason_codes` entry and matching `status_code`.
+- `error_code` is the typed primary incomplete code (empty string when complete).
 
 Primary incomplete reasons currently emitted:
 - `missing_events_list`
@@ -148,6 +150,10 @@ Canonical event-props identity tuple:
 
 Canonical featured identity tuple:
 - `(game_id, market, point, side, book)`
+
+Verification commands (contract checks):
+- `prop-ev snapshot verify --snapshot-id <id> --check-derived --require-table event_props [--require-parquet]`
+- `prop-ev data verify --dataset-id <id> [--from <YYYY-MM-DD> --to <YYYY-MM-DD>] [--require-complete] [--require-parquet]`
 
 ## State ID Maps
 

@@ -127,6 +127,12 @@ def test_data_status_json_summary_reports_completion_and_reasons(
         "missing_events_list": 1,
         "upstream_404": 1,
     }
+    assert payload["incomplete_error_code_counts"] == {
+        "budget_exceeded": 1,
+        "missing_event_odds": 1,
+        "missing_events_list": 1,
+        "upstream_404": 1,
+    }
     assert payload["missing_events_total"] == 13
     assert payload["minimum_odds_coverage_ratio"] == 0.0
     assert payload["avg_odds_coverage_ratio"] == pytest.approx(0.5206349, rel=1e-6)
@@ -136,6 +142,7 @@ def test_data_status_json_summary_reports_completion_and_reasons(
     by_day = {str(item["day"]): item for item in days if isinstance(item, dict)}
     assert by_day["2026-02-03"]["status_code"] == "incomplete_budget_exceeded"
     assert by_day["2026-02-03"]["reason_codes"] == ["budget_exceeded"]
+    assert by_day["2026-02-03"]["error_code"] == "budget_exceeded"
     assert by_day["2026-02-01"]["odds_coverage_ratio"] == 1.0
 
 

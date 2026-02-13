@@ -217,6 +217,15 @@ def _parse_reason_codes(value: Any) -> list[str]:
     return codes
 
 
+def _parse_error_code(value: Any) -> str:
+    code = str(value).strip()
+    if not code:
+        return ""
+    if code == REASON_COMPLETE:
+        return ""
+    return code
+
+
 def _reason_codes_from_error(error: str) -> list[str]:
     text = error.strip().lower()
     if not text:
@@ -316,12 +325,18 @@ def canonicalize_day_status(status: dict[str, Any], *, day: str | None = None) -
         or (status.get("events_key") is not None and not note_indicates_missing_payload)
     )
     existing_reason_codes = _parse_reason_codes(status.get("reason_codes", []))
+    existing_error_code = _parse_error_code(status.get("error_code", ""))
+    if existing_error_code and existing_error_code not in existing_reason_codes:
+        existing_reason_codes = [existing_error_code, *existing_reason_codes]
     reason_codes = _reason_codes_from_status(
         complete=complete,
         existing_codes=existing_reason_codes,
         error=error,
         note=note,
         missing_count=missing_count,
+    )
+    error_code = (
+        "" if complete else (existing_error_code or primary_incomplete_reason_code(reason_codes))
     )
     status_code = str(status.get("status_code", "")).strip() or _status_code_for_row(
         complete=complete,
@@ -345,6 +360,7 @@ def canonicalize_day_status(status: dict[str, Any], *, day: str | None = None) -
         "present_event_odds": present_event_odds,
         "note": note,
         "error": error,
+        "error_code": error_code,
         "reason_codes": reason_codes,
         "status_code": status_code,
         "status_schema_version": int(
@@ -354,8 +370,16 @@ def canonicalize_day_status(status: dict[str, Any], *, day: str | None = None) -
     }
 
 
-def with_day_error(status: dict[str, Any], *, error: str) -> dict[str, Any]:
+def with_day_error(
+    status: dict[str, Any], *, error: str, reason_code: str | None = None
+) -> dict[str, Any]:
     updated = {**status, "error": str(error).strip(), "complete": False}
+    if reason_code:
+        normalized_reason = str(reason_code).strip()
+        if normalized_reason:
+            updated["error_code"] = normalized_reason
+            updated["reason_codes"] = [normalized_reason]
+            updated["status_code"] = f"incomplete_{normalized_reason}"
     return canonicalize_day_status(updated)
 
 
@@ -477,6 +501,7 @@ def compute_day_status_from_cache(
         "total_events": total_events,
         "missing_count": missing_count,
         "reason_codes": reason_codes,
+        "error_code": "" if complete else primary_incomplete_reason_code(reason_codes),
         "status_code": status_code,
         "events_payload_state": events_payload_state,
         "events_payload_source": events_payload_source,

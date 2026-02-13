@@ -100,6 +100,7 @@ def test_data_datasets_ls_json_reports_dataset_summaries(
     assert first_row["complete_count"] == 1
     assert first_row["incomplete_count"] == 1
     assert first_row["incomplete_reason_counts"] == {"upstream_404": 1}
+    assert first_row["incomplete_error_code_counts"] == {"upstream_404": 1}
     assert first_row["avg_odds_coverage_ratio"] == pytest.approx(0.9375, rel=1e-6)
     assert first_row["minimum_odds_coverage_ratio"] == pytest.approx(0.875, rel=1e-6)
 
@@ -107,6 +108,7 @@ def test_data_datasets_ls_json_reports_dataset_summaries(
     assert second_row["day_count"] == 1
     assert second_row["complete_count"] == 1
     assert second_row["incomplete_count"] == 0
+    assert second_row["incomplete_error_code_counts"] == {}
     assert second_row["avg_odds_coverage_ratio"] == 1.0
     assert second_row["minimum_odds_coverage_ratio"] == 1.0
 
