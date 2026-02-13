@@ -159,3 +159,29 @@ def test_clean_build_and_verify(tmp_path: Path) -> None:
     assert code == 1
     assert report["counts"]["games"] == 1
     assert report["warnings"]
+
+
+def test_verify_filters_by_season(tmp_path: Path) -> None:
+    layout = build_layout(tmp_path / "nba_data")
+    _seed_one_game(layout, "2024-25", "Regular Season", "g1")
+    _seed_one_game(layout, "2025-26", "Regular Season", "g2")
+
+    counts = build_clean(
+        layout=layout,
+        seasons=["2024-25", "2025-26"],
+        season_type="Regular Season",
+        overwrite=True,
+        schema_version=1,
+    )
+    assert counts["games"] == 2
+
+    code, report = run_verify(
+        layout=layout,
+        seasons=["2025-26"],
+        season_type="Regular Season",
+        schema_version=1,
+        fail_on_warn=False,
+    )
+    assert code == 1
+    assert report["counts"]["games"] == 1
+    assert report["counts"]["boxscore_players"] == 2
