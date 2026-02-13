@@ -1,23 +1,22 @@
-"""External context fetchers for injuries and roster verification."""
+"""NBA injury/roster context fetchers used by the unified repository."""
 
 from __future__ import annotations
 
 import hashlib
 import html
-import json
 import re
 import subprocess
 import tempfile
-import unicodedata
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from urllib.parse import urljoin
 from zoneinfo import ZoneInfo
 
-import httpx
-
-from prop_ev.time_utils import parse_iso_z, utc_now_str
+from prop_ev.nba_data.endpoints import BOXSCORE_URL_TEMPLATE, TODAYS_SCOREBOARD_URL
+from prop_ev.nba_data.gateway import get_bytes, get_json, get_text
+from prop_ev.nba_data.normalize import canonical_team_name, normalize_person_name
+from prop_ev.time_utils import utc_now_str
 
 OFFICIAL_INJURY_URLS = [
     "https://official.nba.com/nba-injury-report-2025-26-season/",
@@ -30,83 +29,7 @@ ESPN_TEAMS_URL = "https://site.api.espn.com/apis/site/v2/sports/basketball/nba/t
 ESPN_TEAM_ROSTER_URL_TEMPLATE = (
     "https://site.api.espn.com/apis/site/v2/sports/basketball/nba/teams/{team_id}/roster"
 )
-TODAYS_SCOREBOARD_URL = (
-    "https://cdn.nba.com/static/json/liveData/scoreboard/todaysScoreboard_00.json"
-)
-BOXSCORE_URL_TEMPLATE = "https://cdn.nba.com/static/json/liveData/boxscore/boxscore_{game_id}.json"
 
-TEAM_NAME_ALIASES = {
-    "atl": "atlanta hawks",
-    "atlanta": "atlanta hawks",
-    "boston": "boston celtics",
-    "bos": "boston celtics",
-    "brooklyn": "brooklyn nets",
-    "bkn": "brooklyn nets",
-    "brk": "brooklyn nets",
-    "charlotte": "charlotte hornets",
-    "cha": "charlotte hornets",
-    "cho": "charlotte hornets",
-    "chicago": "chicago bulls",
-    "chi": "chicago bulls",
-    "cle": "cleveland cavaliers",
-    "cleveland": "cleveland cavaliers",
-    "dallas": "dallas mavericks",
-    "dal": "dallas mavericks",
-    "den": "denver nuggets",
-    "denver": "denver nuggets",
-    "det": "detroit pistons",
-    "detroit": "detroit pistons",
-    "golden state": "golden state warriors",
-    "gs": "golden state warriors",
-    "gsw": "golden state warriors",
-    "hou": "houston rockets",
-    "houston": "houston rockets",
-    "ind": "indiana pacers",
-    "indiana": "indiana pacers",
-    "la clippers": "los angeles clippers",
-    "lac": "los angeles clippers",
-    "los angeles clippers": "los angeles clippers",
-    "la lakers": "los angeles lakers",
-    "lal": "los angeles lakers",
-    "los angeles lakers": "los angeles lakers",
-    "mem": "memphis grizzlies",
-    "memphis": "memphis grizzlies",
-    "mia": "miami heat",
-    "miami": "miami heat",
-    "mil": "milwaukee bucks",
-    "milwaukee": "milwaukee bucks",
-    "min": "minnesota timberwolves",
-    "minnesota": "minnesota timberwolves",
-    "new orleans": "new orleans pelicans",
-    "nop": "new orleans pelicans",
-    "nor": "new orleans pelicans",
-    "new york": "new york knicks",
-    "ny": "new york knicks",
-    "nyk": "new york knicks",
-    "okc": "oklahoma city thunder",
-    "oklahoma city": "oklahoma city thunder",
-    "orlando": "orlando magic",
-    "orl": "orlando magic",
-    "phi": "philadelphia 76ers",
-    "philadelphia": "philadelphia 76ers",
-    "philadelphia sixers": "philadelphia 76ers",
-    "phx": "phoenix suns",
-    "pho": "phoenix suns",
-    "phoenix": "phoenix suns",
-    "por": "portland trail blazers",
-    "portland": "portland trail blazers",
-    "sac": "sacramento kings",
-    "sacramento": "sacramento kings",
-    "san antonio": "san antonio spurs",
-    "sa": "san antonio spurs",
-    "sas": "san antonio spurs",
-    "tor": "toronto raptors",
-    "toronto": "toronto raptors",
-    "utah": "utah jazz",
-    "uta": "utah jazz",
-    "washington": "washington wizards",
-    "was": "washington wizards",
-}
 OFFICIAL_STATUS_TOKENS = {
     "out",
     "doubtful",
@@ -169,31 +92,6 @@ OFFICIAL_ET_ZONE = ZoneInfo("America/New_York")
 def now_utc() -> str:
     """Return an ISO UTC timestamp."""
     return utc_now_str()
-
-
-def canonical_team_name(name: str) -> str:
-    """Canonicalize team names for matching."""
-    normalized = " ".join(name.lower().split())
-    return TEAM_NAME_ALIASES.get(normalized, normalized)
-
-
-def normalize_person_name(name: str) -> str:
-    """Normalize person names for fuzzy joins."""
-    lowered = name.lower().strip()
-    normalized = unicodedata.normalize("NFKD", lowered)
-    ascii_only = "".join(ch for ch in normalized if ord(ch) < 128)
-    cleaned = re.sub(r"[^a-z0-9]+", "", ascii_only)
-    return cleaned
-
-
-def _http_get(url: str, *, timeout_s: float = 12.0) -> httpx.Response:
-    headers = {
-        "User-Agent": "Mozilla/5.0 (compatible; prop-ev/0.1.0)",
-        "Accept": "text/html,application/json;q=0.9,*/*;q=0.8",
-    }
-    response = httpx.get(url, headers=headers, timeout=timeout_s, follow_redirects=True)
-    response.raise_for_status()
-    return response
 
 
 def _parse_injury_status(note: str) -> str:
@@ -479,8 +377,8 @@ def fetch_official_injury_links(*, pdf_cache_dir: Path | None = None) -> dict[st
             "ttl_minutes": 240,
         }
         try:
-            response = _http_get(url)
-            pdf_links = _extract_official_injury_pdfs(response.text, url)
+            html_text = get_text(url)
+            pdf_links = _extract_official_injury_pdfs(html_text, url)
             if not pdf_links:
                 payload["status"] = "error"
                 payload["error"] = "no injury-report PDFs found"
@@ -518,11 +416,10 @@ def fetch_official_injury_links(*, pdf_cache_dir: Path | None = None) -> dict[st
             ranked_links = sorted(pdf_links, key=_official_pdf_sort_key, reverse=True)
             for pdf_url in ranked_links:
                 try:
-                    pdf_response = _http_get(pdf_url, timeout_s=20.0)
+                    content = get_bytes(pdf_url, timeout_s=20.0)
                 except Exception as exc:  # pragma: no cover - network branch
                     errors.append(f"{pdf_url}:{exc}")
                     continue
-                content = pdf_response.content
                 if not content:
                     errors.append(f"{pdf_url}:empty_pdf_content")
                     continue
@@ -602,7 +499,7 @@ def fetch_bref_injuries() -> dict[str, Any]:
         "ttl_minutes": 180,
     }
     try:
-        response = _http_get(BREF_INJURY_URL)
+        html_text = get_text(BREF_INJURY_URL)
     except Exception as exc:
         payload["status"] = "error"
         payload["error"] = str(exc)
@@ -620,7 +517,7 @@ def fetch_bref_injuries() -> dict[str, Any]:
         flags=re.IGNORECASE | re.DOTALL,
     )
     rows: list[dict[str, Any]] = []
-    for match in pattern.finditer(response.text):
+    for match in pattern.finditer(html_text):
         player = html.unescape(match.group("player")).strip()
         team = html.unescape(match.group("team")).strip()
         date_update = match.group("date").strip()
@@ -654,8 +551,7 @@ def fetch_espn_injuries() -> dict[str, Any]:
         "ttl_minutes": 180,
     }
     try:
-        response = _http_get(ESPN_INJURIES_URL)
-        data = response.json()
+        data = get_json(ESPN_INJURIES_URL)
     except Exception as exc:
         payload["status"] = "error"
         payload["error"] = str(exc)
@@ -729,7 +625,7 @@ def fetch_secondary_injuries() -> dict[str, Any]:
 
 
 def _fetch_espn_team_map() -> dict[str, str]:
-    data = _http_get(ESPN_TEAMS_URL).json()
+    data = get_json(ESPN_TEAMS_URL)
     mapping: dict[str, str] = {}
     sports = data.get("sports", []) if isinstance(data, dict) else []
     for sport in sports:
@@ -802,7 +698,7 @@ def _fetch_espn_rosters(teams_in_scope: set[str]) -> dict[str, Any]:
             continue
         roster_url = ESPN_TEAM_ROSTER_URL_TEMPLATE.format(team_id=team_id)
         try:
-            data = _http_get(roster_url).json()
+            data = get_json(roster_url)
         except Exception as exc:
             payload["errors"].append(f"{team_name}:{exc}")
             continue
@@ -846,7 +742,7 @@ def fetch_roster_context(*, teams_in_scope: list[str] | None = None) -> dict[str
         "ttl_minutes": 1440,
     }
     try:
-        scoreboard = _http_get(TODAYS_SCOREBOARD_URL).json()
+        scoreboard = get_json(TODAYS_SCOREBOARD_URL)
     except Exception as exc:
         payload["status"] = "error"
         payload["error"] = str(exc)
@@ -891,7 +787,7 @@ def fetch_roster_context(*, teams_in_scope: list[str] | None = None) -> dict[str
         )
         box_url = BOXSCORE_URL_TEMPLATE.format(game_id=game_id)
         try:
-            boxscore = _http_get(box_url).json()
+            boxscore = get_json(box_url)
         except Exception as exc:
             boxscore_errors.append(f"{game_id}:{exc}")
             continue
@@ -965,83 +861,3 @@ def fetch_roster_context(*, teams_in_scope: list[str] | None = None) -> dict[str
             "fetched_at_utc": fallback_payload.get("fetched_at_utc", ""),
         }
     return payload
-
-
-def _parse_iso_utc(value: str) -> datetime | None:
-    return parse_iso_z(value)
-
-
-def _apply_stale_flag(payload: dict[str, Any], stale_after_hours: float | None) -> dict[str, Any]:
-    if stale_after_hours is None:
-        return payload
-    copy = dict(payload)
-    fetched_at = _parse_iso_utc(str(copy.get("fetched_at_utc", "")))
-    if fetched_at is None:
-        copy["stale"] = True
-        copy["stale_reason"] = "missing_fetched_at_utc"
-        return copy
-    age = datetime.now(UTC) - fetched_at
-    stale = age > timedelta(hours=max(0.0, stale_after_hours))
-    copy["stale"] = stale
-    copy["stale_age_hours"] = round(age.total_seconds() / 3600.0, 2)
-    return copy
-
-
-def _load_json(path: Path) -> dict[str, Any]:
-    value = json.loads(path.read_text(encoding="utf-8"))
-    if isinstance(value, dict):
-        return value
-    return {
-        "status": "error",
-        "error": f"invalid json object in {path}",
-        "fetched_at_utc": now_utc(),
-    }
-
-
-def _write_json(path: Path, payload: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, sort_keys=True, indent=2) + "\n", encoding="utf-8")
-
-
-def load_or_fetch_context(
-    *,
-    cache_path: Path,
-    offline: bool,
-    refresh: bool,
-    fetcher,
-    fallback_paths: list[Path] | None = None,
-    write_through_paths: list[Path] | None = None,
-    stale_after_hours: float | None = None,
-) -> dict[str, Any]:
-    """Load cached context or fetch and cache a fresh copy.
-
-    fallback_paths are optional read-only backups (for example, global latest files).
-    write_through_paths receive a copy of the fetched payload.
-    """
-    fallback_paths = fallback_paths or []
-    write_through_paths = write_through_paths or []
-
-    if cache_path.exists() and not refresh:
-        return _apply_stale_flag(_load_json(cache_path), stale_after_hours)
-
-    for path in fallback_paths:
-        if not path.exists() or refresh:
-            continue
-        value = _load_json(path)
-        _write_json(cache_path, value)
-        return _apply_stale_flag(value, stale_after_hours)
-
-    if offline:
-        return {
-            "status": "missing",
-            "offline": True,
-            "error": f"missing context cache: {cache_path}",
-            "fetched_at_utc": now_utc(),
-            "stale": True,
-        }
-
-    value = fetcher()
-    _write_json(cache_path, value)
-    for path in write_through_paths:
-        _write_json(path, value)
-    return _apply_stale_flag(value, stale_after_hours)

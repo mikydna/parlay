@@ -8,7 +8,7 @@ from datetime import UTC, datetime
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from prop_ev.context_sources import canonical_team_name
+from prop_ev.nba_data.normalize import canonical_team_name
 
 REQUIRED_PASS1_KEYS = {
     "slate_summary",

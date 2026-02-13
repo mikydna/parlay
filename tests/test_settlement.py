@@ -122,7 +122,11 @@ def test_grade_seed_rows_final_push_pending() -> None:
         ),
     ]
 
-    rows = grade_seed_rows(seed_rows=seed_rows, results_payload=_results_payload())
+    rows = grade_seed_rows(
+        seed_rows=seed_rows,
+        results_payload=_results_payload(),
+        source="nba_live_scoreboard_boxscore",
+    )
     by_key = {str(row["ticket_key"]): row for row in rows}
 
     assert by_key["t1"]["result"] == "win"
@@ -217,8 +221,11 @@ def test_settle_snapshot_writes_artifacts(tmp_path: Path, monkeypatch: pytest.Mo
     )
 
     monkeypatch.setattr(
-        "prop_ev.settlement.fetch_nba_live_results",
-        lambda *, teams_in_scope: _results_payload(),
+        "prop_ev.settlement.NBARepository.load_results_for_settlement",
+        lambda self, *, seed_rows, offline, refresh, mode: (
+            _results_payload(),
+            self.snapshot_dir / "context" / "results.json",
+        ),
     )
 
     report = settle_snapshot(
@@ -228,6 +235,7 @@ def test_settle_snapshot_writes_artifacts(tmp_path: Path, monkeypatch: pytest.Mo
         offline=False,
         refresh_results=True,
         write_csv=True,
+        results_source="live",
     )
 
     assert report["status"] == "partial"
@@ -238,4 +246,101 @@ def test_settle_snapshot_writes_artifacts(tmp_path: Path, monkeypatch: pytest.Mo
     assert Path(str(artifacts["tex"])).exists()
     assert Path(str(artifacts["meta"])).exists()
     assert Path(str(artifacts["csv"])).exists()
+    assert report["source_details"]["results_source_mode"] == "live"
     assert report["pdf_status"] in {"ok", "missing_tool", "failed"}
+
+
+def test_settle_snapshot_default_schema_includes_auto_results_source_mode(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    snapshot_dir = tmp_path / "data" / "odds_api" / "snapshots" / "snap-1"
+    reports_dir = snapshot_dir / "reports"
+    reports_dir.mkdir(parents=True, exist_ok=True)
+    seed_path = reports_dir / "backtest-seed.jsonl"
+    seed_path.write_text(
+        json.dumps(
+            _seed_row(
+                ticket_key="t1",
+                player="Player One",
+                market="player_points",
+                side="over",
+                point=20.5,
+            ),
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(
+        "prop_ev.settlement.NBARepository.load_results_for_settlement",
+        lambda self, *, seed_rows, offline, refresh, mode: (
+            _results_payload(),
+            self.snapshot_dir / "context" / "results.json",
+        ),
+    )
+
+    report = settle_snapshot(
+        snapshot_dir=snapshot_dir,
+        snapshot_id="snap-1",
+        seed_path=seed_path,
+        offline=False,
+        refresh_results=False,
+        write_csv=False,
+    )
+
+    source_details = report.get("source_details", {})
+    assert isinstance(source_details, dict)
+    assert source_details.get("results_source_mode") == "auto"
+
+
+def test_settle_snapshot_offline_forces_cache_only(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    snapshot_dir = tmp_path / "data" / "odds_api" / "snapshots" / "snap-1"
+    reports_dir = snapshot_dir / "reports"
+    reports_dir.mkdir(parents=True, exist_ok=True)
+    seed_path = reports_dir / "backtest-seed.jsonl"
+    seed_path.write_text(
+        json.dumps(
+            _seed_row(
+                ticket_key="t1",
+                player="Player One",
+                market="player_points",
+                side="over",
+                point=20.5,
+            ),
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    captured: dict[str, object] = {}
+
+    def _fake_load_results(
+        self, *, seed_rows, offline: bool, refresh: bool, mode: str
+    ) -> tuple[dict, Path]:
+        captured["offline"] = offline
+        captured["refresh"] = refresh
+        captured["mode"] = mode
+        return _results_payload(), self.snapshot_dir / "context" / "results.json"
+
+    monkeypatch.setattr(
+        "prop_ev.settlement.NBARepository.load_results_for_settlement",
+        _fake_load_results,
+    )
+
+    report = settle_snapshot(
+        snapshot_dir=snapshot_dir,
+        snapshot_id="snap-1",
+        seed_path=seed_path,
+        offline=True,
+        refresh_results=True,
+        write_csv=False,
+        results_source="live",
+    )
+
+    assert captured == {"offline": True, "refresh": False, "mode": "cache_only"}
+    source_details = report.get("source_details", {})
+    assert isinstance(source_details, dict)
+    assert source_details.get("results_source_mode") == "cache_only"

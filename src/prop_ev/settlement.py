@@ -7,20 +7,14 @@ import json
 from pathlib import Path
 from typing import Any
 
-import httpx
-
 from prop_ev.brief_builder import TEAM_ABBREVIATIONS
-from prop_ev.context_sources import (
-    BOXSCORE_URL_TEMPLATE,
-    TODAYS_SCOREBOARD_URL,
-    canonical_team_name,
-    load_or_fetch_context,
-    normalize_person_name,
-    now_utc,
-)
 from prop_ev.latex_renderer import render_pdf_from_markdown
+from prop_ev.nba_data.context_cache import now_utc
+from prop_ev.nba_data.normalize import canonical_team_name, normalize_person_name
+from prop_ev.nba_data.repo import NBARepository
+from prop_ev.nba_data.source_policy import ResultsSourceMode, normalize_results_source_mode
 
-RESULTS_SOURCE = "nba_live_scoreboard_boxscore"
+RESULTS_SOURCE = "nba_results"
 MARKET_SHORT_LABELS = {
     "player_points": "P",
     "player_rebounds": "R",
@@ -47,16 +41,6 @@ RESULT_REASON_LABELS = {
     "unsupported_market": "market_unsupported",
     "unsupported_side": "side_unsupported",
 }
-
-
-def _http_get(url: str, *, timeout_s: float = 12.0) -> httpx.Response:
-    headers = {
-        "User-Agent": "Mozilla/5.0 (compatible; prop-ev/0.1.0)",
-        "Accept": "application/json;q=0.9,*/*;q=0.8",
-    }
-    response = httpx.get(url, headers=headers, timeout=timeout_s, follow_redirects=True)
-    response.raise_for_status()
-    return response
 
 
 def _safe_float(value: Any) -> float | None:
@@ -88,142 +72,6 @@ def _load_jsonl(path: Path) -> list[dict[str, Any]]:
             raise ValueError(f"invalid jsonl row in {path}:{idx}")
         rows.append(payload)
     return rows
-
-
-def _game_status(code: Any, text: str) -> str:
-    if isinstance(code, str):
-        parsed = _safe_float(code)
-        code = int(parsed) if parsed is not None else None
-    elif isinstance(code, float):
-        code = int(code)
-    elif not isinstance(code, int):
-        code = None
-
-    cleaned = text.strip().lower()
-    if code == 3 or cleaned.startswith("final"):
-        return "final"
-    if code == 2:
-        return "in_progress"
-    if code == 1:
-        return "scheduled"
-    return "unknown"
-
-
-def _extract_players(game_payload: dict[str, Any]) -> dict[str, dict[str, Any]]:
-    players: dict[str, dict[str, Any]] = {}
-    for side in ("homeTeam", "awayTeam"):
-        team_payload = game_payload.get(side, {})
-        if not isinstance(team_payload, dict):
-            continue
-        team_players = team_payload.get("players", [])
-        if not isinstance(team_players, list):
-            continue
-        for item in team_players:
-            if not isinstance(item, dict):
-                continue
-            name = str(item.get("name", "")).strip()
-            if not name:
-                continue
-            key = normalize_person_name(name)
-            if not key:
-                continue
-            stats = item.get("statistics", {})
-            players[key] = {
-                "name": name,
-                "statistics": stats if isinstance(stats, dict) else {},
-                "status": str(item.get("status", "")),
-            }
-    return players
-
-
-def fetch_nba_live_results(*, teams_in_scope: set[str]) -> dict[str, Any]:
-    """Fetch live scoreboard + boxscore payloads and normalize for settlement."""
-    payload: dict[str, Any] = {
-        "source": RESULTS_SOURCE,
-        "url": TODAYS_SCOREBOARD_URL,
-        "fetched_at_utc": now_utc(),
-        "status": "ok",
-        "games": [],
-        "errors": [],
-    }
-    scoreboard = _http_get(TODAYS_SCOREBOARD_URL).json()
-    games = scoreboard.get("scoreboard", {}).get("games", [])
-    if not isinstance(games, list):
-        games = []
-
-    normalized_games: list[dict[str, Any]] = []
-    for game in games:
-        if not isinstance(game, dict):
-            continue
-        game_id = str(game.get("gameId", ""))
-        home = game.get("homeTeam", {})
-        away = game.get("awayTeam", {})
-        if not isinstance(home, dict) or not isinstance(away, dict):
-            continue
-        home_team = canonical_team_name(f"{home.get('teamCity', '')} {home.get('teamName', '')}")
-        away_team = canonical_team_name(f"{away.get('teamCity', '')} {away.get('teamName', '')}")
-        if teams_in_scope and home_team not in teams_in_scope and away_team not in teams_in_scope:
-            continue
-
-        game_status_text = str(game.get("gameStatusText", ""))
-        status = _game_status(game.get("gameStatus"), game_status_text)
-        game_row: dict[str, Any] = {
-            "game_id": game_id,
-            "home_team": home_team,
-            "away_team": away_team,
-            "game_status": status,
-            "game_status_text": game_status_text,
-            "players": {},
-            "period": "",
-            "game_clock": "",
-        }
-
-        if not game_id:
-            payload["errors"].append("missing_game_id")
-            normalized_games.append(game_row)
-            continue
-
-        boxscore_url = BOXSCORE_URL_TEMPLATE.format(game_id=game_id)
-        try:
-            boxscore = _http_get(boxscore_url).json()
-        except Exception as exc:
-            payload["errors"].append(f"{game_id}:{exc}")
-            normalized_games.append(game_row)
-            continue
-
-        game_payload = boxscore.get("game", {})
-        if not isinstance(game_payload, dict):
-            normalized_games.append(game_row)
-            continue
-        game_row["players"] = _extract_players(game_payload)
-        game_row["period"] = str(game_payload.get("period", ""))
-        game_row["game_clock"] = str(game_payload.get("gameClock", ""))
-        boxscore_status = str(game_payload.get("gameStatusText", ""))
-        if boxscore_status:
-            game_row["game_status_text"] = boxscore_status
-            game_row["game_status"] = _game_status(game_payload.get("gameStatus"), boxscore_status)
-        normalized_games.append(game_row)
-
-    if payload["errors"] and not normalized_games:
-        payload["status"] = "error"
-    elif payload["errors"]:
-        payload["status"] = "partial"
-    payload["games"] = normalized_games
-    payload["count_games"] = len(normalized_games)
-    payload["count_errors"] = len(payload["errors"])
-    return payload
-
-
-def _seed_teams(seed_rows: list[dict[str, Any]]) -> set[str]:
-    teams: set[str] = set()
-    for row in seed_rows:
-        home = canonical_team_name(str(row.get("home_team", "")))
-        away = canonical_team_name(str(row.get("away_team", "")))
-        if home:
-            teams.add(home)
-        if away:
-            teams.add(away)
-    return teams
 
 
 def _row_teams(row: dict[str, Any]) -> tuple[str, str]:
@@ -302,6 +150,7 @@ def _settle_row(
     row: dict[str, Any],
     *,
     game_index: dict[tuple[str, str], dict[str, Any]],
+    source: str,
 ) -> dict[str, Any]:
     ticket_key = str(row.get("ticket_key", ""))
     point_value = _safe_float(row.get("point"))
@@ -337,7 +186,7 @@ def _settle_row(
         "result": "unresolved",
         "result_reason": "game_not_found",
         "resolved_at_utc": now_utc(),
-        "source": RESULTS_SOURCE,
+        "source": source,
         "source_game_id": "",
     }
     if game_row is None:
@@ -404,11 +253,11 @@ def _settle_row(
 
 
 def grade_seed_rows(
-    *, seed_rows: list[dict[str, Any]], results_payload: dict[str, Any]
+    *, seed_rows: list[dict[str, Any]], results_payload: dict[str, Any], source: str
 ) -> list[dict[str, Any]]:
     """Grade seed rows using normalized results payload."""
     game_index = _build_game_index(results_payload)
-    return [_settle_row(row, game_index=game_index) for row in seed_rows]
+    return [_settle_row(row, game_index=game_index, source=source) for row in seed_rows]
 
 
 def _count_rows(rows: list[dict[str, Any]], key: str, value: str) -> int:
@@ -731,19 +580,29 @@ def settle_snapshot(
     offline: bool,
     refresh_results: bool,
     write_csv: bool,
+    results_source: str = "auto",
 ) -> dict[str, Any]:
     """Settle snapshot seed tickets and write report artifacts."""
     seed_rows = _load_jsonl(seed_path)
     if not seed_rows:
         raise ValueError(f"no seed rows found in {seed_path}")
 
-    teams_in_scope = _seed_teams(seed_rows)
-    results_cache_path = snapshot_dir / "context" / "results-live.json"
-    results_payload = load_or_fetch_context(
-        cache_path=results_cache_path,
+    requested_source = str(results_source).strip()
+    normalized_source = normalize_results_source_mode(requested_source or "auto")
+    effective_source: ResultsSourceMode = "cache_only" if offline else normalized_source
+    effective_refresh = bool(refresh_results and not offline)
+
+    odds_data_root = snapshot_dir.parent.parent
+    repo = NBARepository(
+        odds_data_root=odds_data_root,
+        snapshot_id=snapshot_id,
+        snapshot_dir=snapshot_dir,
+    )
+    results_payload, results_cache_path = repo.load_results_for_settlement(
+        seed_rows=seed_rows,
         offline=offline,
-        refresh=refresh_results,
-        fetcher=lambda: fetch_nba_live_results(teams_in_scope=teams_in_scope),
+        refresh=effective_refresh,
+        mode=effective_source,
     )
     status = str(results_payload.get("status", ""))
     if status not in {"ok", "partial"}:
@@ -752,7 +611,12 @@ def settle_snapshot(
             raise ValueError(f"results fetch failed: {error}")
         raise ValueError("results fetch failed")
 
-    rows = grade_seed_rows(seed_rows=seed_rows, results_payload=results_payload)
+    resolved_source = str(results_payload.get("source", RESULTS_SOURCE)).strip() or RESULTS_SOURCE
+    rows = grade_seed_rows(
+        seed_rows=seed_rows,
+        results_payload=results_payload,
+        source=resolved_source,
+    )
     counts = _build_counts(rows)
     overall = "complete" if counts["pending"] == 0 and counts["unresolved"] == 0 else "partial"
     exit_code = 0 if overall == "complete" else 1
@@ -766,21 +630,24 @@ def settle_snapshot(
     csv_path = reports_dir / "backtest-settlement.csv"
     meta_path = reports_dir / "backtest-settlement.meta.json"
 
+    source_details: dict[str, Any] = {
+        "source": resolved_source,
+        "results_source_mode": effective_source,
+        "fetched_at_utc": str(results_payload.get("fetched_at_utc", "")),
+        "status": status,
+        "offline": offline,
+        "refresh_results": effective_refresh,
+        "results_cache_path": str(results_cache_path),
+        "results_errors": results_payload.get("errors", []),
+    }
+
     report: dict[str, Any] = {
         "snapshot_id": snapshot_id,
         "generated_at_utc": now_utc(),
         "status": overall,
         "exit_code": exit_code,
         "counts": counts,
-        "source_details": {
-            "source": str(results_payload.get("source", RESULTS_SOURCE)),
-            "fetched_at_utc": str(results_payload.get("fetched_at_utc", "")),
-            "status": status,
-            "offline": offline,
-            "refresh_results": refresh_results,
-            "results_cache_path": str(results_cache_path),
-            "results_errors": results_payload.get("errors", []),
-        },
+        "source_details": source_details,
         "rows": rows,
     }
     markdown = render_settlement_markdown(report)

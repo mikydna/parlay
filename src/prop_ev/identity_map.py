@@ -7,7 +7,7 @@ import re
 from pathlib import Path
 from typing import Any
 
-from prop_ev.context_sources import canonical_team_name, normalize_person_name
+from prop_ev.nba_data.normalize import canonical_team_name, normalize_person_name
 from prop_ev.time_utils import utc_now_str
 
 SUFFIXES = {"jr", "sr", "ii", "iii", "iv", "v"}

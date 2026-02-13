@@ -14,7 +14,7 @@ play-by-play, possessions, and boxscore lake building.
 
 - New CLI entrypoint: `nba-data` (separate from `prop-ev`).
 - Output root: `data/nba_data`.
-- Existing `prop-ev` CLI and contracts are preserved.
+- `prop-ev` runtime consumers read NBA data through a single repository handle.
 
 ## Data flow
 
@@ -29,3 +29,9 @@ play-by-play, possessions, and boxscore lake building.
 - Lockfile prevents concurrent writes.
 - Atomic writes avoid partial-file corruption on crashes.
 - Existing successful resources are skipped unless explicit retry/overwrite flags are set.
+
+## Runtime Access
+
+`prop-ev` modules (settlement, strategy context, playbook context) should use the unified
+NBA repository interface instead of calling source fetchers directly. This keeps source policy,
+cache behavior, and fallback semantics in one place.

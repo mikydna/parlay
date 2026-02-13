@@ -29,18 +29,13 @@ from prop_ev.context_health import (
     official_source_ready,
     secondary_source_ready,
 )
-from prop_ev.context_sources import (
-    fetch_official_injury_links,
-    fetch_roster_context,
-    fetch_secondary_injuries,
-    load_or_fetch_context,
-)
 from prop_ev.discovery_execution import (
     build_discovery_execution_report,
     write_discovery_execution_reports,
 )
 from prop_ev.execution_projection import ExecutionProjectionConfig, project_execution_report
 from prop_ev.identity_map import load_identity_map, update_identity_map
+from prop_ev.nba_data.repo import NBARepository
 from prop_ev.normalize import normalize_event_odds, normalize_featured_odds
 from prop_ev.odds_client import (
     OddsAPIClient,
@@ -1602,38 +1597,13 @@ def _preflight_context_for_snapshot(
     injuries_stale_hours: float,
     roster_stale_hours: float,
 ) -> dict[str, Any]:
-    snapshot_dir = store.snapshot_dir(snapshot_id)
-    context_dir = snapshot_dir / "context"
-    reference_dir = store.root / "reference"
-    reference_injuries = reference_dir / "injuries" / "latest.json"
-    today_key = _utc_now().strftime("%Y-%m-%d")
-    reference_roster_daily = reference_dir / "rosters" / f"roster-{today_key}.json"
-    reference_roster_latest = reference_dir / "rosters" / "latest.json"
-    injuries_path = context_dir / "injuries.json"
-    roster_path = context_dir / "roster.json"
-    official_pdf_dir = context_dir / "official_injury_pdf"
-
-    injuries = load_or_fetch_context(
-        cache_path=injuries_path,
+    repo = NBARepository.from_store(store=store, snapshot_id=snapshot_id)
+    injuries, roster, injuries_path, roster_path = repo.load_strategy_context(
+        teams_in_scope=sorted(teams_in_scope),
         offline=False,
         refresh=refresh_context,
-        fetcher=lambda: {
-            "fetched_at_utc": _iso(_utc_now()),
-            "official": fetch_official_injury_links(pdf_cache_dir=official_pdf_dir),
-            "secondary": fetch_secondary_injuries(),
-        },
-        fallback_paths=[reference_injuries],
-        write_through_paths=[reference_injuries],
-        stale_after_hours=injuries_stale_hours,
-    )
-    roster = load_or_fetch_context(
-        cache_path=roster_path,
-        offline=False,
-        refresh=refresh_context,
-        fetcher=lambda: fetch_roster_context(teams_in_scope=sorted(teams_in_scope)),
-        fallback_paths=[reference_roster_daily, reference_roster_latest],
-        write_through_paths=[reference_roster_daily, reference_roster_latest],
-        stale_after_hours=roster_stale_hours,
+        injuries_stale_hours=injuries_stale_hours,
+        roster_stale_hours=roster_stale_hours,
     )
 
     official = injuries.get("official", {}) if isinstance(injuries, dict) else {}
@@ -1713,37 +1683,13 @@ def _load_strategy_context(
     injuries_stale_hours: float,
     roster_stale_hours: float,
 ) -> tuple[dict[str, Any], dict[str, Any], Path, Path]:
-    reference_dir = store.root / "reference"
-    reference_injuries = reference_dir / "injuries" / "latest.json"
-    today_key = _utc_now().strftime("%Y-%m-%d")
-    reference_roster_daily = reference_dir / "rosters" / f"roster-{today_key}.json"
-    reference_roster_latest = reference_dir / "rosters" / "latest.json"
-    context_dir = store.snapshot_dir(snapshot_id) / "context"
-    injuries_path = context_dir / "injuries.json"
-    roster_path = context_dir / "roster.json"
-    official_pdf_dir = context_dir / "official_injury_pdf"
-
-    injuries = load_or_fetch_context(
-        cache_path=injuries_path,
+    repo = NBARepository.from_store(store=store, snapshot_id=snapshot_id)
+    injuries, roster, injuries_path, roster_path = repo.load_strategy_context(
+        teams_in_scope=teams_in_scope,
         offline=offline,
         refresh=refresh_context,
-        fetcher=lambda: {
-            "fetched_at_utc": _iso(_utc_now()),
-            "official": fetch_official_injury_links(pdf_cache_dir=official_pdf_dir),
-            "secondary": fetch_secondary_injuries(),
-        },
-        fallback_paths=[reference_injuries],
-        write_through_paths=[reference_injuries],
-        stale_after_hours=injuries_stale_hours,
-    )
-    roster = load_or_fetch_context(
-        cache_path=roster_path,
-        offline=offline,
-        refresh=refresh_context,
-        fetcher=lambda: fetch_roster_context(teams_in_scope=teams_in_scope),
-        fallback_paths=[reference_roster_daily, reference_roster_latest],
-        write_through_paths=[reference_roster_daily, reference_roster_latest],
-        stale_after_hours=roster_stale_hours,
+        injuries_stale_hours=injuries_stale_hours,
+        roster_stale_hours=roster_stale_hours,
     )
     return injuries, roster, injuries_path, roster_path
 
@@ -2150,38 +2096,16 @@ def _load_strategy_inputs(
     injuries_stale_hours = _env_float("PROP_EV_CONTEXT_INJURIES_STALE_HOURS", 6.0)
     roster_stale_hours = _env_float("PROP_EV_CONTEXT_ROSTER_STALE_HOURS", 24.0)
     reference_dir = store.root / "reference"
-    reference_injuries = reference_dir / "injuries" / "latest.json"
-    today_key = _utc_now().strftime("%Y-%m-%d")
-    reference_roster_daily = reference_dir / "rosters" / f"roster-{today_key}.json"
-    reference_roster_latest = reference_dir / "rosters" / "latest.json"
     identity_map_path = reference_dir / "player_identity_map.json"
     teams_in_scope = sorted(_teams_in_scope(event_context))
-
-    context_dir = snapshot_dir / "context"
-    injuries_path = context_dir / "injuries.json"
-    roster_path = context_dir / "roster.json"
-    official_pdf_dir = context_dir / "official_injury_pdf"
-    injuries = load_or_fetch_context(
-        cache_path=injuries_path,
+    injuries, roster, _, _ = _load_strategy_context(
+        store=store,
+        snapshot_id=snapshot_id,
+        teams_in_scope=teams_in_scope,
         offline=offline,
-        refresh=refresh_context,
-        fetcher=lambda: {
-            "fetched_at_utc": _iso(_utc_now()),
-            "official": fetch_official_injury_links(pdf_cache_dir=official_pdf_dir),
-            "secondary": fetch_secondary_injuries(),
-        },
-        fallback_paths=[reference_injuries],
-        write_through_paths=[reference_injuries],
-        stale_after_hours=injuries_stale_hours,
-    )
-    roster = load_or_fetch_context(
-        cache_path=roster_path,
-        offline=offline,
-        refresh=refresh_context,
-        fetcher=lambda: fetch_roster_context(teams_in_scope=teams_in_scope),
-        fallback_paths=[reference_roster_daily, reference_roster_latest],
-        write_through_paths=[reference_roster_daily, reference_roster_latest],
-        stale_after_hours=roster_stale_hours,
+        refresh_context=refresh_context,
+        injuries_stale_hours=injuries_stale_hours,
+        roster_stale_hours=roster_stale_hours,
     )
     update_identity_map(
         path=identity_map_path,
@@ -2777,6 +2701,7 @@ def _cmd_strategy_settle(args: argparse.Namespace) -> int:
         offline=bool(args.offline),
         refresh_results=bool(args.refresh_results),
         write_csv=bool(args.write_csv),
+        results_source=str(getattr(args, "results_source", "auto")),
     )
 
     if bool(getattr(args, "json_output", True)):
@@ -4020,6 +3945,12 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     strategy_settle.add_argument("--offline", action="store_true")
     strategy_settle.add_argument("--refresh-results", action="store_true")
+    strategy_settle.add_argument(
+        "--results-source",
+        choices=["auto", "historical", "live", "cache_only"],
+        default="auto",
+        help="Unified NBA source policy for settlement.",
+    )
     strategy_settle.add_argument("--write-csv", action="store_true")
     strategy_settle.add_argument(
         "--json",
