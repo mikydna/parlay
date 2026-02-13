@@ -2701,7 +2701,7 @@ def _cmd_strategy_settle(args: argparse.Namespace) -> int:
         offline=bool(args.offline),
         refresh_results=bool(args.refresh_results),
         write_csv=bool(args.write_csv),
-        results_source=getattr(args, "results_source", None),
+        results_source=str(getattr(args, "results_source", "auto")),
     )
 
     if bool(getattr(args, "json_output", True)):
@@ -3948,7 +3948,7 @@ def _build_parser() -> argparse.ArgumentParser:
     strategy_settle.add_argument(
         "--results-source",
         choices=["auto", "historical", "live", "cache_only"],
-        default=None,
+        default="auto",
         help="Unified NBA source policy for settlement.",
     )
     strategy_settle.add_argument("--write-csv", action="store_true")

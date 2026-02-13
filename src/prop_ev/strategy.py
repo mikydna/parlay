@@ -13,9 +13,9 @@ from zoneinfo import ZoneInfo
 
 from prop_ev.brief_builder import TEAM_ABBREVIATIONS
 from prop_ev.context_health import official_rows_count
-from prop_ev.context_sources import canonical_team_name, normalize_person_name
 from prop_ev.identity_map import name_aliases
 from prop_ev.models.core_minutes_usage import market_side_adjustment_core, minutes_usage_core
+from prop_ev.nba_data.normalize import canonical_team_name, normalize_person_name
 from prop_ev.odds_math import (
     american_to_decimal,
     decimal_to_american,

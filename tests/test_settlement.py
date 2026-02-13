@@ -250,7 +250,7 @@ def test_settle_snapshot_writes_artifacts(tmp_path: Path, monkeypatch: pytest.Mo
     assert report["pdf_status"] in {"ok", "missing_tool", "failed"}
 
 
-def test_settle_snapshot_default_schema_omits_results_source_mode(
+def test_settle_snapshot_default_schema_includes_auto_results_source_mode(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     snapshot_dir = tmp_path / "data" / "odds_api" / "snapshots" / "snap-1"
@@ -291,7 +291,7 @@ def test_settle_snapshot_default_schema_omits_results_source_mode(
 
     source_details = report.get("source_details", {})
     assert isinstance(source_details, dict)
-    assert "results_source_mode" not in source_details
+    assert source_details.get("results_source_mode") == "auto"
 
 
 def test_settle_snapshot_offline_forces_cache_only(

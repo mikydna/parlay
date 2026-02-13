@@ -8,12 +8,9 @@ from pathlib import Path
 from typing import Any
 
 from prop_ev.brief_builder import TEAM_ABBREVIATIONS
-from prop_ev.context_sources import (
-    canonical_team_name,
-    normalize_person_name,
-    now_utc,
-)
 from prop_ev.latex_renderer import render_pdf_from_markdown
+from prop_ev.nba_data.context_cache import now_utc
+from prop_ev.nba_data.normalize import canonical_team_name, normalize_person_name
 from prop_ev.nba_data.repo import NBARepository
 from prop_ev.nba_data.source_policy import ResultsSourceMode, normalize_results_source_mode
 
@@ -583,15 +580,14 @@ def settle_snapshot(
     offline: bool,
     refresh_results: bool,
     write_csv: bool,
-    results_source: str | None = None,
+    results_source: str = "auto",
 ) -> dict[str, Any]:
     """Settle snapshot seed tickets and write report artifacts."""
     seed_rows = _load_jsonl(seed_path)
     if not seed_rows:
         raise ValueError(f"no seed rows found in {seed_path}")
 
-    requested_source = str(results_source or "").strip()
-    explicit_results_source = bool(requested_source)
+    requested_source = str(results_source).strip()
     normalized_source = normalize_results_source_mode(requested_source or "auto")
     effective_source: ResultsSourceMode = "cache_only" if offline else normalized_source
     effective_refresh = bool(refresh_results and not offline)
@@ -636,6 +632,7 @@ def settle_snapshot(
 
     source_details: dict[str, Any] = {
         "source": resolved_source,
+        "results_source_mode": effective_source,
         "fetched_at_utc": str(results_payload.get("fetched_at_utc", "")),
         "status": status,
         "offline": offline,
@@ -643,8 +640,6 @@ def settle_snapshot(
         "results_cache_path": str(results_cache_path),
         "results_errors": results_payload.get("errors", []),
     }
-    if explicit_results_source:
-        source_details["results_source_mode"] = effective_source
 
     report: dict[str, Any] = {
         "snapshot_id": snapshot_id,
