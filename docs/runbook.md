@@ -42,6 +42,36 @@ Render an existing snapshot only:
 uv run prop-ev playbook render --snapshot-id <SNAPSHOT_ID> --offline
 ```
 
+## Zero-Credit Readiness Validation
+
+Use this sequence before any paid pull:
+
+```bash
+uv run prop-ev credits report --month 2026-02
+uv run prop-ev data datasets ls --json
+uv run prop-ev data datasets show --dataset-id <DATASET_ID> --json
+uv run prop-ev data status --dataset-id <DATASET_ID> --from 2026-01-22 --to 2026-02-12 --json-summary
+```
+
+Check known cache misses without spending:
+
+```bash
+uv run prop-ev data backfill \
+  --historical \
+  --historical-anchor-hour-local 12 \
+  --historical-pre-tip-minutes 60 \
+  --markets player_points \
+  --bookmakers draftkings,fanduel,espnbet,betmgm,betrivers,williamhill_us,bovada,fanatics \
+  --from 2026-01-24 --to 2026-01-25 \
+  --no-spend \
+  --dry-run
+```
+
+Expected behavior:
+- `actual_paid_credits=0` on every day row,
+- unresolved paid misses are reported as `spend_blocked` in no-spend mode,
+- no paid odds calls are executed.
+
 ## Health and Injury Policy
 
 Health command:

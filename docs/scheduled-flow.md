@@ -49,6 +49,14 @@ uv run prop-ev playbook render --snapshot-id 2026-02-11T16-44-54Z --offline
 uv run prop-ev snapshot verify --snapshot-id 2026-02-11T16-44-54Z
 ```
 
+## Validate Day-Index Coverage (No Spend)
+
+```bash
+uv run prop-ev data datasets ls --json
+uv run prop-ev data datasets show --dataset-id <DATASET_ID> --json
+uv run prop-ev data status --dataset-id <DATASET_ID> --from 2026-01-22 --to 2026-02-12 --json-summary
+```
+
 ## What You Get Per Run
 
 - Raw request/response/meta cache under `data/odds_api/snapshots/<snapshot_id>/`

@@ -756,47 +756,178 @@ def _cmd_credits_budget(args: argparse.Namespace) -> int:
     return 0
 
 
-def _cmd_data_status(args: argparse.Namespace) -> int:
-    data_root = Path(os.environ.get("PROP_EV_DATA_DIR", "data/odds_api"))
-    store = SnapshotStore(data_root)
-    cache = GlobalCacheStore(data_root)
-    spec = _dataset_spec_from_args(args)
-    try:
-        days = _resolve_days(
-            days=int(getattr(args, "days", 10)),
-            from_day=str(getattr(args, "from_day", "")),
-            to_day=str(getattr(args, "to_day", "")),
-            tz_name=str(getattr(args, "tz_name", "America/New_York")),
-        )
-    except (KeyError, ValueError) as exc:
-        raise CLIError(str(exc)) from exc
+def _dataset_root(data_root: Path) -> Path:
+    return data_root / "datasets"
 
-    rows: list[dict[str, Any]] = []
-    for day in days:
-        status = (
-            None if bool(getattr(args, "refresh", False)) else load_day_status(data_root, spec, day)
-        )
-        if not isinstance(status, dict):
-            status = compute_day_status_from_cache(
-                data_root=data_root,
-                store=store,
-                cache=cache,
-                spec=spec,
-                day=day,
-                tz_name=str(getattr(args, "tz_name", "America/New_York")),
-            )
-        row = {
-            "day": day,
-            "complete": bool(status.get("complete", False)),
-            "missing_count": int(status.get("missing_count", 0)),
-            "total_events": int(status.get("total_events", 0)),
-            "snapshot_id": str(status.get("snapshot_id_for_day", "")),
-            "note": str(status.get("note", "")),
-            "error": str(status.get("error", "")),
-        }
-        rows.append(row)
-        if bool(getattr(args, "json_summary", False)):
+
+def _dataset_dir(data_root: Path, dataset_id_value: str) -> Path:
+    return _dataset_root(data_root) / dataset_id_value
+
+
+def _dataset_spec_path(data_root: Path, dataset_id_value: str) -> Path:
+    return _dataset_dir(data_root, dataset_id_value) / "spec.json"
+
+
+def _dataset_days_dir(data_root: Path, dataset_id_value: str) -> Path:
+    return _dataset_dir(data_root, dataset_id_value) / "days"
+
+
+def _load_json_object(path: Path) -> dict[str, Any] | None:
+    if not path.exists():
+        return None
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        return None
+    return payload
+
+
+def _discover_dataset_ids(data_root: Path) -> list[str]:
+    root = _dataset_root(data_root)
+    if not root.exists():
+        return []
+    ids: list[str] = []
+    for entry in root.iterdir():
+        if not entry.is_dir():
             continue
+        if (entry / "spec.json").exists() or (entry / "days").exists():
+            ids.append(entry.name)
+    return sorted(set(ids))
+
+
+def _dataset_day_names(data_root: Path, dataset_id_value: str) -> list[str]:
+    days_dir = _dataset_days_dir(data_root, dataset_id_value)
+    if not days_dir.exists():
+        return []
+    names: list[str] = []
+    for path in days_dir.glob("*.json"):
+        candidate = path.stem.strip()
+        try:
+            date.fromisoformat(candidate)
+        except ValueError:
+            continue
+        names.append(candidate)
+    return sorted(set(names))
+
+
+def _dataset_spec_from_payload(payload: dict[str, Any], *, source: str) -> DatasetSpec:
+    sport_key = str(payload.get("sport_key", "")).strip() or "basketball_nba"
+    markets_raw = payload.get("markets", [])
+    markets: list[str]
+    if isinstance(markets_raw, list):
+        markets = [str(item).strip() for item in markets_raw if str(item).strip()]
+    else:
+        markets = parse_csv(str(markets_raw))
+    if not markets:
+        raise CLIError(f"invalid dataset spec at {source}: markets must be a non-empty list")
+    regions = str(payload.get("regions", "")).strip() or None
+    bookmakers = str(payload.get("bookmakers", "")).strip() or None
+    return DatasetSpec(
+        sport_key=sport_key,
+        markets=markets,
+        regions=regions,
+        bookmakers=bookmakers,
+        include_links=bool(payload.get("include_links", False)),
+        include_sids=bool(payload.get("include_sids", False)),
+        odds_format=str(payload.get("odds_format", "american")).strip() or "american",
+        date_format=str(payload.get("date_format", "iso")).strip() or "iso",
+        historical=bool(payload.get("historical", False)),
+        historical_anchor_hour_local=int(payload.get("historical_anchor_hour_local", 12)),
+        historical_pre_tip_minutes=int(payload.get("historical_pre_tip_minutes", 60)),
+    )
+
+
+def _load_dataset_spec_or_error(data_root: Path, dataset_id_value: str) -> tuple[DatasetSpec, Path]:
+    path = _dataset_spec_path(data_root, dataset_id_value)
+    payload = _load_json_object(path)
+    if payload is None:
+        raise CLIError(f"missing dataset spec: {path}")
+    return _dataset_spec_from_payload(payload, source=str(path)), path
+
+
+def _load_day_status_for_dataset(
+    data_root: Path,
+    *,
+    dataset_id_value: str,
+    day: str,
+) -> dict[str, Any] | None:
+    return _load_json_object(_dataset_days_dir(data_root, dataset_id_value) / f"{day}.json")
+
+
+def _day_row_from_status(day: str, status: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "day": day,
+        "complete": bool(status.get("complete", False)),
+        "missing_count": int(status.get("missing_count", 0)),
+        "total_events": int(status.get("total_events", 0)),
+        "snapshot_id": str(status.get("snapshot_id_for_day", "")),
+        "note": str(status.get("note", "")),
+        "error": str(status.get("error", "")),
+        "updated_at_utc": str(status.get("updated_at_utc", "")),
+    }
+
+
+def _incomplete_reason_code(row: dict[str, Any]) -> str:
+    error_text = str(row.get("error", "")).strip().lower()
+    if error_text:
+        if "404" in error_text:
+            return "upstream_404"
+        if "exceed remaining budget" in error_text:
+            return "budget_exceeded"
+        if "blocked" in error_text:
+            return "spend_blocked"
+        return "error"
+    note_text = str(row.get("note", "")).strip().lower()
+    if note_text == "missing events list response":
+        return "missing_events_list"
+    if note_text:
+        return "note"
+    if int(row.get("missing_count", 0)) > 0:
+        return "missing_event_odds"
+    return "incomplete_unknown"
+
+
+def _build_status_summary_payload(
+    *,
+    dataset_id_value: str,
+    spec: DatasetSpec,
+    rows: list[dict[str, Any]],
+    from_day: str,
+    to_day: str,
+    tz_name: str,
+    warnings: list[dict[str, str]],
+) -> dict[str, Any]:
+    complete_days = [row["day"] for row in rows if bool(row["complete"])]
+    incomplete_days = [row["day"] for row in rows if not bool(row["complete"])]
+    incomplete_reason_counts: Counter[str] = Counter(
+        _incomplete_reason_code(row) for row in rows if not bool(row["complete"])
+    )
+    payload: dict[str, Any] = {
+        "dataset_id": dataset_id_value,
+        "sport_key": spec.sport_key,
+        "markets": sorted(set(spec.markets)),
+        "regions": spec.regions,
+        "bookmakers": spec.bookmakers,
+        "historical": bool(spec.historical),
+        "from_day": from_day,
+        "to_day": to_day,
+        "tz_name": tz_name,
+        "total_days": len(rows),
+        "complete_count": len(complete_days),
+        "incomplete_count": len(incomplete_days),
+        "missing_events_total": sum(int(row["missing_count"]) for row in rows),
+        "complete_days": complete_days,
+        "incomplete_days": incomplete_days,
+        "incomplete_reason_counts": dict(sorted(incomplete_reason_counts.items())),
+        "days": rows,
+        "generated_at_utc": iso_z(_utc_now()),
+    }
+    if warnings:
+        payload["warnings"] = warnings
+    return payload
+
+
+def _print_day_rows(rows: list[dict[str, Any]]) -> None:
+    for row in rows:
         print(
             ("day={} complete={} missing={} events={} snapshot_id={} note={}").format(
                 row["day"],
@@ -807,53 +938,292 @@ def _cmd_data_status(args: argparse.Namespace) -> int:
                 row["note"],
             )
         )
-    if bool(getattr(args, "json_summary", False)):
-        complete_days = [row["day"] for row in rows if bool(row["complete"])]
-        incomplete_days = [row["day"] for row in rows if not bool(row["complete"])]
 
-        def _incomplete_reason(row: dict[str, Any]) -> str:
-            error_text = str(row.get("error", "")).strip().lower()
-            if error_text:
-                if "404" in error_text:
-                    return "upstream_404"
-                if "exceed remaining budget" in error_text:
-                    return "budget_exceeded"
-                if "blocked" in error_text:
-                    return "spend_blocked"
-                return "error"
-            note_text = str(row.get("note", "")).strip().lower()
-            if note_text == "missing events list response":
-                return "missing_events_list"
-            if note_text:
-                return "note"
-            if int(row.get("missing_count", 0)) > 0:
-                return "missing_event_odds"
-            return "incomplete_unknown"
 
-        incomplete_reason_counts: Counter[str] = Counter(
-            _incomplete_reason(row) for row in rows if not bool(row["complete"])
+def _print_warnings(warnings: list[dict[str, str]]) -> None:
+    for warning in warnings:
+        code = str(warning.get("code", "")).strip()
+        detail = str(warning.get("detail", "")).strip()
+        hint = str(warning.get("hint", "")).strip()
+        print(f"warning={code} detail={detail} hint={hint}")
+
+
+def _cmd_data_datasets_ls(args: argparse.Namespace) -> int:
+    data_root = Path(os.environ.get("PROP_EV_DATA_DIR", "data/odds_api"))
+    dataset_ids = _discover_dataset_ids(data_root)
+    summaries: list[dict[str, Any]] = []
+    warnings: list[dict[str, str]] = []
+
+    for dataset_id_value in dataset_ids:
+        day_names = _dataset_day_names(data_root, dataset_id_value)
+        updated_at_values: list[str] = []
+        try:
+            spec, _ = _load_dataset_spec_or_error(data_root, dataset_id_value)
+        except CLIError as exc:
+            summaries.append(
+                {
+                    "dataset_id": dataset_id_value,
+                    "day_count": len(day_names),
+                    "complete_count": 0,
+                    "incomplete_count": len(day_names),
+                    "from_day": day_names[0] if day_names else "",
+                    "to_day": day_names[-1] if day_names else "",
+                    "error": str(exc),
+                }
+            )
+            warnings.append(
+                {
+                    "code": "invalid_dataset_spec",
+                    "detail": dataset_id_value,
+                    "hint": "run `prop-ev data datasets show --dataset-id <id>`",
+                }
+            )
+            continue
+
+        rows: list[dict[str, Any]] = []
+        for day in day_names:
+            status = _load_day_status_for_dataset(
+                data_root,
+                dataset_id_value=dataset_id_value,
+                day=day,
+            )
+            if not isinstance(status, dict):
+                rows.append(
+                    {
+                        "day": day,
+                        "complete": False,
+                        "missing_count": 0,
+                        "total_events": 0,
+                        "snapshot_id": "",
+                        "note": "missing day status",
+                        "error": "",
+                        "updated_at_utc": "",
+                    }
+                )
+                continue
+            row = _day_row_from_status(day, status)
+            rows.append(row)
+            updated_at = str(row.get("updated_at_utc", "")).strip()
+            if updated_at:
+                updated_at_values.append(updated_at)
+
+        complete_count = sum(1 for row in rows if bool(row.get("complete", False)))
+        reason_counts: Counter[str] = Counter(
+            _incomplete_reason_code(row) for row in rows if not bool(row.get("complete", False))
         )
-        payload = {
-            "dataset_id": dataset_id(spec),
+        summary = {
+            "dataset_id": dataset_id_value,
             "sport_key": spec.sport_key,
             "markets": sorted(set(spec.markets)),
             "regions": spec.regions,
             "bookmakers": spec.bookmakers,
             "historical": bool(spec.historical),
-            "from_day": days[0] if days else "",
-            "to_day": days[-1] if days else "",
-            "tz_name": str(getattr(args, "tz_name", "America/New_York")),
-            "total_days": len(rows),
-            "complete_count": len(complete_days),
-            "incomplete_count": len(incomplete_days),
-            "missing_events_total": sum(int(row["missing_count"]) for row in rows),
-            "complete_days": complete_days,
-            "incomplete_days": incomplete_days,
-            "incomplete_reason_counts": dict(sorted(incomplete_reason_counts.items())),
-            "days": rows,
-            "generated_at_utc": iso_z(_utc_now()),
+            "day_count": len(day_names),
+            "complete_count": complete_count,
+            "incomplete_count": len(day_names) - complete_count,
+            "missing_events_total": sum(int(row.get("missing_count", 0)) for row in rows),
+            "incomplete_reason_counts": dict(sorted(reason_counts.items())),
+            "from_day": day_names[0] if day_names else "",
+            "to_day": day_names[-1] if day_names else "",
+            "updated_at_utc": max(updated_at_values) if updated_at_values else "",
         }
+        summaries.append(summary)
+
+    if bool(getattr(args, "json_output", False)):
+        payload: dict[str, Any] = {
+            "generated_at_utc": iso_z(_utc_now()),
+            "dataset_count": len(summaries),
+            "datasets": summaries,
+        }
+        if warnings:
+            payload["warnings"] = warnings
         print(json.dumps(payload, sort_keys=True))
+        return 0
+
+    if warnings:
+        _print_warnings(warnings)
+    for row in summaries:
+        markets = ",".join(row.get("markets", [])) if isinstance(row.get("markets"), list) else ""
+        scope_label = "bookmakers" if str(row.get("bookmakers", "")).strip() else "regions"
+        scope_value = str(row.get("bookmakers", "")).strip() or str(row.get("regions", "")).strip()
+        print(
+            (
+                "dataset_id={} sport_key={} markets={} {}={} historical={} days={} "
+                "complete={} incomplete={} from={} to={}"
+            ).format(
+                row.get("dataset_id", ""),
+                row.get("sport_key", ""),
+                markets,
+                scope_label,
+                scope_value,
+                str(bool(row.get("historical", False))).lower(),
+                int(row.get("day_count", 0)),
+                int(row.get("complete_count", 0)),
+                int(row.get("incomplete_count", 0)),
+                row.get("from_day", ""),
+                row.get("to_day", ""),
+            )
+        )
+    return 0
+
+
+def _cmd_data_datasets_show(args: argparse.Namespace) -> int:
+    data_root = Path(os.environ.get("PROP_EV_DATA_DIR", "data/odds_api"))
+    dataset_id_value = str(getattr(args, "dataset_id", "")).strip()
+    if not dataset_id_value:
+        raise CLIError("--dataset-id is required")
+
+    spec, _ = _load_dataset_spec_or_error(data_root, dataset_id_value)
+    available_days = _dataset_day_names(data_root, dataset_id_value)
+    from_day = str(getattr(args, "from_day", "")).strip()
+    to_day = str(getattr(args, "to_day", "")).strip()
+    if (from_day and not to_day) or (to_day and not from_day):
+        raise CLIError("--from and --to must be provided together")
+
+    if from_day and to_day:
+        selected_days = _resolve_days(
+            days=1,
+            from_day=from_day,
+            to_day=to_day,
+            tz_name=str(getattr(args, "tz_name", "America/New_York")),
+        )
+    else:
+        selected_days = available_days
+
+    rows: list[dict[str, Any]] = []
+    for day in selected_days:
+        status = _load_day_status_for_dataset(
+            data_root,
+            dataset_id_value=dataset_id_value,
+            day=day,
+        )
+        if not isinstance(status, dict):
+            rows.append(
+                {
+                    "day": day,
+                    "complete": False,
+                    "missing_count": 0,
+                    "total_events": 0,
+                    "snapshot_id": "",
+                    "note": "missing day status",
+                    "error": "",
+                    "updated_at_utc": "",
+                }
+            )
+            continue
+        rows.append(_day_row_from_status(day, status))
+
+    payload = _build_status_summary_payload(
+        dataset_id_value=dataset_id_value,
+        spec=spec,
+        rows=rows,
+        from_day=selected_days[0] if selected_days else "",
+        to_day=selected_days[-1] if selected_days else "",
+        tz_name=str(getattr(args, "tz_name", "America/New_York")),
+        warnings=[],
+    )
+    payload["available_day_count"] = len(available_days)
+    payload["available_from_day"] = available_days[0] if available_days else ""
+    payload["available_to_day"] = available_days[-1] if available_days else ""
+
+    if bool(getattr(args, "json_output", False)):
+        print(json.dumps(payload, sort_keys=True))
+        return 0
+
+    markets = ",".join(sorted(set(spec.markets)))
+    scope_label = "bookmakers" if spec.bookmakers else "regions"
+    scope_value = spec.bookmakers or (spec.regions or "")
+    print(
+        f"dataset_id={dataset_id_value} sport_key={spec.sport_key} markets={markets} "
+        f"{scope_label}={scope_value} historical={str(bool(spec.historical)).lower()} "
+        f"available_days={len(available_days)}"
+    )
+    _print_day_rows(rows)
+    return 0
+
+
+def _cmd_data_status(args: argparse.Namespace) -> int:
+    data_root = Path(os.environ.get("PROP_EV_DATA_DIR", "data/odds_api"))
+    store = SnapshotStore(data_root)
+    cache = GlobalCacheStore(data_root)
+    warnings: list[dict[str, str]] = []
+    dataset_id_override = str(getattr(args, "dataset_id", "")).strip()
+    if dataset_id_override:
+        spec, _ = _load_dataset_spec_or_error(data_root, dataset_id_override)
+        warnings.append(
+            {
+                "code": "dataset_id_override",
+                "detail": dataset_id_override,
+                "hint": "status uses stored dataset spec; CLI spec args are ignored",
+            }
+        )
+    else:
+        spec = _dataset_spec_from_args(args)
+    dataset_id_value = dataset_id_override or dataset_id(spec)
+    try:
+        days = _resolve_days(
+            days=int(getattr(args, "days", 10)),
+            from_day=str(getattr(args, "from_day", "")),
+            to_day=str(getattr(args, "to_day", "")),
+            tz_name=str(getattr(args, "tz_name", "America/New_York")),
+        )
+    except (KeyError, ValueError) as exc:
+        raise CLIError(str(exc)) from exc
+
+    if (
+        not dataset_id_override
+        and not bool(getattr(args, "refresh", False))
+        and not _dataset_day_names(data_root, dataset_id_value)
+    ):
+        discovered = [item for item in _discover_dataset_ids(data_root) if item != dataset_id_value]
+        if discovered:
+            warnings.append(
+                {
+                    "code": "dataset_not_found_for_spec",
+                    "detail": dataset_id_value,
+                    "hint": "run `prop-ev data datasets ls` and pick --dataset-id",
+                }
+            )
+
+    rows: list[dict[str, Any]] = []
+    for day in days:
+        status: dict[str, Any] | None = None
+        if not bool(getattr(args, "refresh", False)):
+            if dataset_id_override:
+                status = _load_day_status_for_dataset(
+                    data_root,
+                    dataset_id_value=dataset_id_value,
+                    day=day,
+                )
+            else:
+                status = load_day_status(data_root, spec, day)
+        if not isinstance(status, dict):
+            status = compute_day_status_from_cache(
+                data_root=data_root,
+                store=store,
+                cache=cache,
+                spec=spec,
+                day=day,
+                tz_name=str(getattr(args, "tz_name", "America/New_York")),
+            )
+        row = _day_row_from_status(day, status)
+        rows.append(row)
+
+    if bool(getattr(args, "json_summary", False)):
+        payload = _build_status_summary_payload(
+            dataset_id_value=dataset_id_value,
+            spec=spec,
+            rows=rows,
+            from_day=days[0] if days else "",
+            to_day=days[-1] if days else "",
+            tz_name=str(getattr(args, "tz_name", "America/New_York")),
+            warnings=warnings,
+        )
+        print(json.dumps(payload, sort_keys=True))
+    else:
+        if warnings:
+            _print_warnings(warnings)
+        _print_day_rows(rows)
     return 0
 
 
@@ -2990,6 +3360,11 @@ def _build_parser() -> argparse.ArgumentParser:
 
     data_status = data_subparsers.add_parser("status", help="Show day completeness status")
     data_status.set_defaults(func=_cmd_data_status)
+    data_status.add_argument(
+        "--dataset-id",
+        default="",
+        help="Use an existing dataset id and ignore spec flags",
+    )
     data_status.add_argument("--sport-key", default="basketball_nba")
     data_status.add_argument("--markets", default="player_points")
     data_status.add_argument("--regions", default="us")
@@ -3008,6 +3383,35 @@ def _build_parser() -> argparse.ArgumentParser:
         "--json-summary",
         action="store_true",
         help="Emit machine-readable day summary JSON",
+    )
+
+    data_datasets = data_subparsers.add_parser(
+        "datasets", help="Inspect stored dataset specs and day indexes"
+    )
+    data_datasets_subparsers = data_datasets.add_subparsers(dest="datasets_command")
+
+    data_datasets_ls = data_datasets_subparsers.add_parser("ls", help="List known datasets")
+    data_datasets_ls.set_defaults(func=_cmd_data_datasets_ls)
+    data_datasets_ls.add_argument(
+        "--json",
+        dest="json_output",
+        action="store_true",
+        help="Emit machine-readable JSON payload",
+    )
+
+    data_datasets_show = data_datasets_subparsers.add_parser(
+        "show", help="Show one dataset spec and indexed day rows"
+    )
+    data_datasets_show.set_defaults(func=_cmd_data_datasets_show)
+    data_datasets_show.add_argument("--dataset-id", required=True)
+    data_datasets_show.add_argument("--from", dest="from_day", default="")
+    data_datasets_show.add_argument("--to", dest="to_day", default="")
+    data_datasets_show.add_argument("--tz", dest="tz_name", default="America/New_York")
+    data_datasets_show.add_argument(
+        "--json",
+        dest="json_output",
+        action="store_true",
+        help="Emit machine-readable JSON payload",
     )
 
     data_backfill = data_subparsers.add_parser("backfill", help="Backfill day snapshots")

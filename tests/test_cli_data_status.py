@@ -6,8 +6,8 @@ from pathlib import Path
 import pytest
 
 from prop_ev.cli import main
-from prop_ev.odds_data.day_index import save_day_status
-from prop_ev.odds_data.spec import DatasetSpec
+from prop_ev.odds_data.day_index import save_dataset_spec, save_day_status
+from prop_ev.odds_data.spec import DatasetSpec, dataset_id
 
 
 def _status_payload(
@@ -83,6 +83,18 @@ def test_data_status_json_summary_reports_completion_and_reasons(
             note="missing events list response",
         ),
     )
+    save_day_status(
+        data_root,
+        spec,
+        "2026-02-05",
+        _status_payload(
+            day="2026-02-05",
+            complete=False,
+            missing_count=1,
+            total_events=9,
+            error="Client error '404 Not Found' for url 'https://api.the-odds-api.com/v4/...' ",
+        ),
+    )
 
     code = main(
         [
@@ -97,24 +109,25 @@ def test_data_status_json_summary_reports_completion_and_reasons(
             "--from",
             "2026-02-01",
             "--to",
-            "2026-02-04",
+            "2026-02-05",
             "--json-summary",
         ]
     )
     assert code == 0
     payload = json.loads(capsys.readouterr().out)
 
-    assert payload["total_days"] == 4
+    assert payload["total_days"] == 5
     assert payload["complete_count"] == 1
-    assert payload["incomplete_count"] == 3
+    assert payload["incomplete_count"] == 4
     assert payload["complete_days"] == ["2026-02-01"]
-    assert payload["incomplete_days"] == ["2026-02-02", "2026-02-03", "2026-02-04"]
+    assert payload["incomplete_days"] == ["2026-02-02", "2026-02-03", "2026-02-04", "2026-02-05"]
     assert payload["incomplete_reason_counts"] == {
         "budget_exceeded": 1,
         "missing_event_odds": 1,
         "missing_events_list": 1,
+        "upstream_404": 1,
     }
-    assert payload["missing_events_total"] == 12
+    assert payload["missing_events_total"] == 13
     assert payload["generated_at_utc"].endswith("Z")
 
 
@@ -162,3 +175,109 @@ def test_data_status_default_output_lines(
     assert "day=2026-02-11" in output
     assert "complete=true" in output
     assert "missing=0" in output
+
+
+def test_data_status_with_dataset_id_uses_stored_spec(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    data_root = tmp_path / "data" / "odds_api"
+    monkeypatch.setenv("PROP_EV_DATA_DIR", str(data_root))
+
+    stored_spec = DatasetSpec(
+        sport_key="basketball_nba",
+        markets=["player_points"],
+        regions="us",
+        bookmakers="draftkings,fanduel",
+        include_links=False,
+        include_sids=False,
+        historical=True,
+        historical_anchor_hour_local=12,
+        historical_pre_tip_minutes=60,
+    )
+    save_dataset_spec(data_root, stored_spec)
+    save_day_status(
+        data_root,
+        stored_spec,
+        "2026-02-12",
+        _status_payload(day="2026-02-12", complete=True, missing_count=0, total_events=3),
+    )
+
+    code = main(
+        [
+            "data",
+            "status",
+            "--dataset-id",
+            dataset_id(stored_spec),
+            "--sport-key",
+            "bad_sport_key_ignored",
+            "--markets",
+            "player_rebounds",
+            "--bookmakers",
+            "betmgm",
+            "--from",
+            "2026-02-12",
+            "--to",
+            "2026-02-12",
+            "--json-summary",
+        ]
+    )
+    assert code == 0
+    payload = json.loads(capsys.readouterr().out)
+
+    assert payload["dataset_id"] == dataset_id(stored_spec)
+    assert payload["sport_key"] == "basketball_nba"
+    assert payload["markets"] == ["player_points"]
+    assert payload["bookmakers"] == "draftkings,fanduel"
+    warnings = payload.get("warnings", [])
+    assert isinstance(warnings, list)
+    assert warnings and warnings[0]["code"] == "dataset_id_override"
+
+
+def test_data_status_json_summary_warns_for_missing_spec_dataset(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    data_root = tmp_path / "data" / "odds_api"
+    monkeypatch.setenv("PROP_EV_DATA_DIR", str(data_root))
+
+    existing_spec = DatasetSpec(
+        sport_key="basketball_nba",
+        markets=["player_points"],
+        regions="us",
+        bookmakers="fanduel",
+        include_links=False,
+        include_sids=False,
+    )
+    save_dataset_spec(data_root, existing_spec)
+    save_day_status(
+        data_root,
+        existing_spec,
+        "2026-02-11",
+        _status_payload(day="2026-02-11", complete=True, missing_count=0, total_events=9),
+    )
+
+    code = main(
+        [
+            "data",
+            "status",
+            "--sport-key",
+            "basketball_nba",
+            "--markets",
+            "player_points",
+            "--bookmakers",
+            "draftkings",
+            "--from",
+            "2026-02-11",
+            "--to",
+            "2026-02-11",
+            "--json-summary",
+        ]
+    )
+    assert code == 0
+    payload = json.loads(capsys.readouterr().out)
+    warnings = payload.get("warnings", [])
+    assert isinstance(warnings, list)
+    assert warnings and warnings[0]["code"] == "dataset_not_found_for_spec"

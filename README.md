@@ -116,6 +116,28 @@ uv run prop-ev data status \
   --json-summary
 ```
 
+Discover stored day-index datasets (avoids spec mismatch confusion):
+
+```bash
+uv run prop-ev data datasets ls --json
+uv run prop-ev data datasets show --dataset-id <DATASET_ID> --json
+uv run prop-ev data status --dataset-id <DATASET_ID> --from 2026-02-01 --to 2026-02-12 --json-summary
+```
+
+No-spend completeness check (cache-only, no paid calls):
+
+```bash
+uv run prop-ev data backfill \
+  --historical \
+  --historical-anchor-hour-local 12 \
+  --historical-pre-tip-minutes 60 \
+  --markets player_points \
+  --bookmakers draftkings,fanduel,espnbet,betmgm,betrivers,williamhill_us,bovada,fanatics \
+  --from 2026-01-24 --to 2026-01-25 \
+  --no-spend \
+  --dry-run
+```
+
 Dev mode with free calls allowed but paid odds endpoints blocked:
 
 ```bash
