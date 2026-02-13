@@ -270,6 +270,13 @@ def _dataset_spec_from_args(args: argparse.Namespace) -> DatasetSpec:
         allow_config=not bool(getattr(args, "ignore_bookmaker_config", False)),
     )
     regions = str(getattr(args, "regions", "")).strip()
+    historical = bool(getattr(args, "historical", False))
+    historical_anchor_hour_local = int(getattr(args, "historical_anchor_hour_local", 12))
+    if historical_anchor_hour_local < 0 or historical_anchor_hour_local > 23:
+        raise CLIError("--historical-anchor-hour-local must be within [0, 23]")
+    historical_pre_tip_minutes = int(getattr(args, "historical_pre_tip_minutes", 60))
+    if historical_pre_tip_minutes < 0:
+        raise CLIError("--historical-pre-tip-minutes must be >= 0")
     return DatasetSpec(
         sport_key=str(getattr(args, "sport_key", "basketball_nba")).strip() or "basketball_nba",
         markets=markets,
@@ -279,6 +286,9 @@ def _dataset_spec_from_args(args: argparse.Namespace) -> DatasetSpec:
         include_sids=bool(getattr(args, "include_sids", False)),
         odds_format="american",
         date_format="iso",
+        historical=historical,
+        historical_anchor_hour_local=historical_anchor_hour_local,
+        historical_pre_tip_minutes=historical_pre_tip_minutes,
     )
 
 
@@ -818,7 +828,7 @@ def _cmd_data_backfill(args: argparse.Namespace) -> int:
         print(
             (
                 "day={} snapshot_id={} complete={} missing={} events={} "
-                "estimated_paid_credits={} remaining_credits={} error={}"
+                "estimated_paid_credits={} actual_paid_credits={} remaining_credits={} error={}"
             ).format(
                 str(row.get("day", "")),
                 str(row.get("snapshot_id", "")),
@@ -826,6 +836,7 @@ def _cmd_data_backfill(args: argparse.Namespace) -> int:
                 int(row.get("missing", 0)),
                 int(row.get("events", 0)),
                 int(row.get("estimated_paid_credits", 0)),
+                int(row.get("actual_paid_credits", 0)),
                 int(row.get("remaining_credits", 0)),
                 error,
             )
@@ -2914,6 +2925,9 @@ def _build_parser() -> argparse.ArgumentParser:
     data_status.add_argument("--from", dest="from_day", default="")
     data_status.add_argument("--to", dest="to_day", default="")
     data_status.add_argument("--tz", dest="tz_name", default="America/New_York")
+    data_status.add_argument("--historical", action="store_true")
+    data_status.add_argument("--historical-anchor-hour-local", type=int, default=12)
+    data_status.add_argument("--historical-pre-tip-minutes", type=int, default=60)
     data_status.add_argument("--refresh", action="store_true")
 
     data_backfill = data_subparsers.add_parser("backfill", help="Backfill day snapshots")
@@ -2928,6 +2942,9 @@ def _build_parser() -> argparse.ArgumentParser:
     data_backfill.add_argument("--from", dest="from_day", default="")
     data_backfill.add_argument("--to", dest="to_day", default="")
     data_backfill.add_argument("--tz", dest="tz_name", default="America/New_York")
+    data_backfill.add_argument("--historical", action="store_true")
+    data_backfill.add_argument("--historical-anchor-hour-local", type=int, default=12)
+    data_backfill.add_argument("--historical-pre-tip-minutes", type=int, default=60)
     data_backfill.add_argument(
         "--max-credits",
         type=int,

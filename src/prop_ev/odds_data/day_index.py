@@ -6,8 +6,10 @@ import json
 import os
 import uuid
 from contextlib import suppress
+from datetime import UTC, date, datetime, time, timedelta
 from pathlib import Path
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from prop_ev.odds_data.cache_store import GlobalCacheStore
 from prop_ev.odds_data.spec import DatasetSpec, canonical_dict, dataset_id
@@ -27,6 +29,45 @@ def _atomic_write_json(path: Path, value: Any) -> None:
         with suppress(FileNotFoundError):
             tmp_path.unlink()
         raise
+
+
+def _iso_z(dt: datetime) -> str:
+    return dt.astimezone(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def _parse_iso_utc(raw_value: str) -> datetime | None:
+    value = raw_value.strip()
+    if not value:
+        return None
+    candidate = value[:-1] + "+00:00" if value.endswith("Z") else value
+    try:
+        parsed = datetime.fromisoformat(candidate)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(UTC)
+
+
+def _historical_events_timestamp(day: str, tz_name: str, anchor_hour_local: int) -> str:
+    parsed_day = date.fromisoformat(day)
+    tz = ZoneInfo(tz_name)
+    safe_hour = max(0, min(int(anchor_hour_local), 23))
+    local_dt = datetime.combine(parsed_day, time(hour=safe_hour), tzinfo=tz)
+    return _iso_z(local_dt)
+
+
+def _historical_event_odds_timestamp(
+    *,
+    event_row: dict[str, Any],
+    fallback_timestamp: str,
+    pre_tip_minutes: int,
+) -> str:
+    commence = _parse_iso_utc(str(event_row.get("commence_time", "")))
+    if commence is None:
+        return fallback_timestamp
+    safe_minutes = max(0, int(pre_tip_minutes))
+    return _iso_z(commence - timedelta(minutes=safe_minutes))
 
 
 def dataset_spec_path(data_root: Path | str, spec: DatasetSpec) -> Path:
@@ -69,19 +110,43 @@ def save_day_status(
 
 
 def _events_request(
-    spec: DatasetSpec, *, commence_from: str, commence_to: str
-) -> tuple[str, dict[str, Any]]:
+    spec: DatasetSpec,
+    *,
+    day: str,
+    tz_name: str,
+    commence_from: str,
+    commence_to: str,
+) -> tuple[str, dict[str, Any], str]:
+    if spec.historical:
+        events_timestamp = _historical_events_timestamp(
+            day,
+            tz_name,
+            spec.historical_anchor_hour_local,
+        )
+        return (
+            f"/historical/sports/{spec.sport_key}/events",
+            {"dateFormat": spec.date_format, "date": events_timestamp},
+            events_timestamp,
+        )
     path = f"/sports/{spec.sport_key}/events"
-    params: dict[str, Any] = {
+    params = {
         "dateFormat": spec.date_format,
         "commenceTimeFrom": commence_from,
         "commenceTimeTo": commence_to,
     }
-    return path, params
+    return path, params, ""
 
 
-def _event_odds_request(spec: DatasetSpec, event_id: str) -> tuple[str, dict[str, Any]]:
-    path = f"/sports/{spec.sport_key}/events/{event_id}/odds"
+def _event_odds_request(
+    spec: DatasetSpec,
+    event_id: str,
+    *,
+    historical_date: str | None = None,
+) -> tuple[str, dict[str, Any]]:
+    if historical_date:
+        path = f"/historical/sports/{spec.sport_key}/events/{event_id}/odds"
+    else:
+        path = f"/sports/{spec.sport_key}/events/{event_id}/odds"
     params: dict[str, Any] = {
         "markets": ",".join(sorted(set(spec.markets))),
         "oddsFormat": spec.odds_format,
@@ -95,6 +160,8 @@ def _event_odds_request(spec: DatasetSpec, event_id: str) -> tuple[str, dict[str
         params["includeLinks"] = "true"
     if spec.include_sids:
         params["includeSids"] = "true"
+    if historical_date:
+        params["date"] = historical_date
     return path, params
 
 
@@ -109,8 +176,10 @@ def compute_day_status_from_cache(
 ) -> dict[str, Any]:
     commence_from, commence_to = day_window(day, tz_name)
     snapshot_id = snapshot_id_for_day(spec, day)
-    events_path, events_params = _events_request(
+    events_path, events_params, events_timestamp = _events_request(
         spec,
+        day=day,
+        tz_name=tz_name,
         commence_from=commence_from,
         commence_to=commence_to,
     )
@@ -122,16 +191,39 @@ def compute_day_status_from_cache(
     elif cache.has_response(events_key):
         events_payload = cache.load_response(events_key)
 
-    event_ids: list[str] = []
+    event_rows: list[dict[str, Any]] = []
+    if isinstance(events_payload, dict):
+        events_payload = events_payload.get("data")
     if isinstance(events_payload, list):
-        event_ids = [str(item.get("id", "")) for item in events_payload if isinstance(item, dict)]
-        event_ids = [event_id for event_id in event_ids if event_id]
+        event_rows = [item for item in events_payload if isinstance(item, dict)]
+
+    event_ids: list[str] = []
+    for event_row in event_rows:
+        event_id = str(event_row.get("id", "")).strip()
+        if event_id:
+            event_ids.append(event_id)
 
     expected_event_odds: dict[str, str] = {}
+    event_odds_dates: dict[str, str] = {}
     missing_event_ids: list[str] = []
     present_event_odds = 0
-    for event_id in event_ids:
-        request_path, request_params = _event_odds_request(spec, event_id)
+    for event_row in event_rows:
+        event_id = str(event_row.get("id", "")).strip()
+        if not event_id:
+            continue
+        historical_date = None
+        if spec.historical:
+            historical_date = _historical_event_odds_timestamp(
+                event_row=event_row,
+                fallback_timestamp=events_timestamp,
+                pre_tip_minutes=spec.historical_pre_tip_minutes,
+            )
+            event_odds_dates[event_id] = historical_date
+        request_path, request_params = _event_odds_request(
+            spec,
+            event_id,
+            historical_date=historical_date,
+        )
         key = request_hash("GET", request_path, request_params)
         expected_event_odds[event_id] = key
         if store.has_response(snapshot_id, key) or cache.has_response(key):
@@ -147,14 +239,17 @@ def compute_day_status_from_cache(
 
     return {
         "dataset_id": dataset_id(spec),
+        "historical": bool(spec.historical),
         "day": day,
         "tz_name": tz_name,
         "commence_from": commence_from,
         "commence_to": commence_to,
+        "events_timestamp": events_timestamp,
         "snapshot_id_for_day": snapshot_id,
         "events_key": events_key,
         "event_ids": event_ids,
         "expected_event_odds": expected_event_odds,
+        "event_odds_dates": event_odds_dates,
         "present_event_odds": present_event_odds,
         "missing_event_ids": missing_event_ids,
         "complete": bool(events_payload is not None and not missing_event_ids),
