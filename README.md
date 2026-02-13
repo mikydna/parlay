@@ -274,3 +274,4 @@ Source policy details and fallback rules are documented in `docs/sources.md`.
 - Operator runbook: `docs/runbook.md`
 - Schedule-specific command examples: `docs/scheduled-flow.md`
 - Artifact and gate contracts: `docs/contracts.md`
+- Optional no-slate guard: `prop-ev playbook run --exit-on-no-games`

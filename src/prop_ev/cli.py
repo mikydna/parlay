@@ -2358,6 +2358,21 @@ def _cmd_playbook_run(args: argparse.Namespace) -> int:
                     "error": str(exc),
                 }
 
+            if (
+                bool(getattr(args, "exit_on_no_games", False))
+                and str(live_window.get("status", "")) == "no_events"
+            ):
+                mode = "no_games_exit"
+                print("snapshot_id=")
+                print(f"mode={mode}")
+                mode_desc = playbook_mode_key().get(mode, "")
+                if mode_desc:
+                    print(f"mode_desc={mode_desc}")
+                print("event_count=0")
+                print(f"within_window={str(bool(live_window.get('within_window', False))).lower()}")
+                print("exit_reason=no_games")
+                return 0
+
             odds_cap_reached = bool(start_budget["odds"].get("cap_reached", False))
             block_paid = bool(getattr(args, "block_paid", False))
             should_live = (
@@ -3185,6 +3200,11 @@ def _build_parser() -> argparse.ArgumentParser:
     playbook_run.add_argument("--strategy-top-n", type=int, default=25)
     playbook_run.add_argument("--min-ev", type=float, default=0.01)
     playbook_run.add_argument("--allow-tier-b", action="store_true")
+    playbook_run.add_argument(
+        "--exit-on-no-games",
+        action="store_true",
+        help="Exit 0 early when events lookup returns no games in the selected window",
+    )
     playbook_run.add_argument("--month", default="")
 
     playbook_render = playbook_subparsers.add_parser(

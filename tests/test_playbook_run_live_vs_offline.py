@@ -226,6 +226,52 @@ def test_playbook_run_block_paid_uses_latest_snapshot(
     assert "mode=offline_paid_block" in out
 
 
+def test_playbook_run_exit_on_no_games_returns_early(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys
+) -> None:
+    data_dir = tmp_path / "data" / "odds_api"
+    monkeypatch.setenv("PROP_EV_DATA_DIR", str(data_dir))
+    monkeypatch.setenv("ODDS_API_KEY", "odds-test")
+
+    class FakeOddsClient:
+        def __init__(self, settings) -> None:
+            self.settings = settings
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> None:
+            return None
+
+        def list_events(self, **kwargs):
+            return SimpleNamespace(data=[])
+
+    monkeypatch.setattr(cli, "OddsAPIClient", FakeOddsClient)
+    monkeypatch.setattr(
+        cli,
+        "_run_snapshot_bundle_for_playbook",
+        lambda args, snapshot_id: (_ for _ in ()).throw(AssertionError("should not fetch odds")),
+    )
+    monkeypatch.setattr(
+        cli,
+        "_run_strategy_for_playbook",
+        lambda **kwargs: (_ for _ in ()).throw(AssertionError("should not run strategy")),
+    )
+    monkeypatch.setattr(
+        cli,
+        "generate_brief_for_snapshot",
+        lambda **kwargs: (_ for _ in ()).throw(AssertionError("should not generate brief")),
+    )
+
+    code = main(["playbook", "run", "--month", "2026-02", "--exit-on-no-games"])
+    out = capsys.readouterr().out
+
+    assert code == 0
+    assert "mode=no_games_exit" in out
+    assert "event_count=0" in out
+    assert "exit_reason=no_games" in out
+
+
 def test_playbook_run_context_preflight_official_missing_hard_fails(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys
 ) -> None:
