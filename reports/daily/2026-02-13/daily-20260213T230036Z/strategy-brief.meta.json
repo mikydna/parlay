@@ -1,0 +1,90 @@
+{
+  "brief_analyst_path": "/Users/andy/Documents/Code/parlay/data/reports/snapshots/2026-02-13T18-00-45-ET/brief-analyst.json",
+  "brief_input_path": "/Users/andy/Documents/Code/parlay/data/reports/snapshots/2026-02-13T18-00-45-ET/brief-input.json",
+  "brief_markdown_path": "",
+  "brief_pass1_path": "/Users/andy/Documents/Code/parlay/data/reports/snapshots/2026-02-13T18-00-45-ET/brief-pass1.json",
+  "brief_pdf_path": "/Users/andy/Documents/Code/parlay/data/reports/snapshots/2026-02-13T18-00-45-ET/strategy-brief.pdf",
+  "brief_tex_path": "/Users/andy/Documents/Code/parlay/data/reports/snapshots/2026-02-13T18-00-45-ET/strategy-brief.tex",
+  "generated_at_et": "2026-02-13 06:01:43 PM EST",
+  "generated_at_utc": "2026-02-13T23:01:43Z",
+  "latest": {
+    "latest.json": "/Users/andy/Documents/Code/parlay/data/reports/latest/latest.json",
+    "strategy-brief.meta.json": "/Users/andy/Documents/Code/parlay/data/reports/latest/strategy-brief.meta.json",
+    "strategy-brief.pdf": "/Users/andy/Documents/Code/parlay/data/reports/latest/strategy-brief.pdf",
+    "strategy-report.json": "/Users/andy/Documents/Code/parlay/data/reports/latest/strategy-report.json"
+  },
+  "llm": {
+    "analyst": {
+      "attempts": 1,
+      "cache_key": "5c7e9615c599cfea5744d743121c41fb7a3ea3e917619f2da4d7fdb708fcf6ea",
+      "cached": false,
+      "errors": [],
+      "mode": "llm_web",
+      "status": "ok",
+      "usage": {
+        "cost_usd": 0.007195,
+        "input_tokens": 20434,
+        "output_tokens": 2086,
+        "total_tokens": 22520
+      },
+      "web_source_count": 20
+    },
+    "budget": {
+      "cap_reached": false,
+      "cap_usd": 5.0,
+      "month": "2026-02",
+      "remaining_usd": 4.991537,
+      "request_count": 3,
+      "total_input_tokens": 21980,
+      "total_output_tokens": 2967,
+      "usage_path": "data/odds_api/llm_usage/usage-2026-02.jsonl",
+      "used_usd": 0.008463
+    },
+    "pass1": {
+      "attempts": 1,
+      "cache_key": "652e7cf1c187b26842735bdab3bd10bd8a9e955277d22c871eddaaf3c1a095d9",
+      "cached": false,
+      "errors": [],
+      "status": "ok",
+      "usage": {
+        "cost_usd": 0.000437,
+        "input_tokens": 754,
+        "output_tokens": 248,
+        "total_tokens": 1002
+      }
+    },
+    "pass2": {
+      "attempts": 1,
+      "cache_key": "e2df42f16c33b9854bcad1a848eb6f12a9780d524a67496d71338767778ca993",
+      "cached": false,
+      "errors": [],
+      "status": "ok",
+      "usage": {
+        "cost_usd": 0.000831,
+        "input_tokens": 792,
+        "output_tokens": 633,
+        "total_tokens": 1425
+      }
+    }
+  },
+  "model": "gpt-5-mini",
+  "odds_budget": {
+    "cap_credits": 450,
+    "cap_reached": false,
+    "month": "2026-02",
+    "provider_remaining": "150",
+    "remaining_credits": 450,
+    "usage_path": "data/odds_api/usage/usage-2026-02.jsonl",
+    "used_credits": 0
+  },
+  "pdf": {
+    "message": "pdf generated",
+    "pdf_path": "/Users/andy/Documents/Code/parlay/data/reports/snapshots/2026-02-13T18-00-45-ET/strategy-brief.pdf",
+    "returncode": 0,
+    "status": "ok"
+  },
+  "schema_version": 1,
+  "snapshot_id": "daily-20260213T230036Z",
+  "strategy_report_path": "/Users/andy/Documents/Code/parlay/data/reports/snapshots/2026-02-13T18-00-45-ET/strategy-report.json",
+  "write_markdown": false
+}

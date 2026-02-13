@@ -1,0 +1,376 @@
+{
+  "audit": {
+    "allow_tier_b": true,
+    "audit_trail": [
+      {
+        "category": "injury",
+        "label": "official_nba_injury_report",
+        "note": "status=error",
+        "timestamp_utc": "2026-02-13T23:00:59Z",
+        "url": "https://official.nba.com/nba-injury-report-2025-26-season/"
+      },
+      {
+        "category": "injury",
+        "label": "secondary_injury_source",
+        "note": "status=ok",
+        "timestamp_utc": "2026-02-13T23:00:59Z",
+        "url": "https://www.basketball-reference.com/friv/injuries.fcgi"
+      },
+      {
+        "category": "odds_api",
+        "label": "events_list",
+        "note": "status=ok",
+        "timestamp_utc": "2026-02-13T23:00:52Z",
+        "url": "/sports/basketball_nba/events"
+      },
+      {
+        "category": "odds_api",
+        "label": "slate_odds",
+        "note": "status=skipped",
+        "timestamp_utc": "2026-02-13T23:00:58Z",
+        "url": "/sports/basketball_nba/odds"
+      },
+      {
+        "category": "roster",
+        "label": "roster_context",
+        "note": "status=ok",
+        "timestamp_utc": "2026-02-13T23:00:59Z",
+        "url": "https://cdn.nba.com/static/json/liveData/scoreboard/todaysScoreboard_00.json"
+      }
+    ],
+    "hold_cap": null,
+    "manifest_created_at_utc": "2026-02-13T23:00:45Z",
+    "manifest_schema_version": 1,
+    "market_baseline_fallback": "best_sides",
+    "market_baseline_method": "best_sides",
+    "min_book_pairs": 0,
+    "min_ev": 0.01,
+    "p_over_iqr_cap": null,
+    "report_schema_version": 3,
+    "strategy_config": {
+      "allow_tier_b": true,
+      "min_ev": 0.01,
+      "require_fresh_context": true,
+      "require_official_injuries": false,
+      "stale_quote_minutes": 20,
+      "top_n": 25
+    },
+    "strategy_description": "Best-over/best-under no-vig baseline with deterministic minutes/usage and context gates.",
+    "strategy_id": "s001",
+    "strategy_name": "Baseline Core",
+    "tier_a_min_ev": 0.03,
+    "tier_b_min_ev": 0.05,
+    "timezone": "ET"
+  },
+  "availability": {
+    "key_injuries": [
+      {
+        "date_update": "2025-09-05",
+        "note": "Out For Season (Knee) - The Thunder announced on Friday (Sept. 5) that Sorber will miss the 2025-2026 season with a torn ACL.",
+        "player": "Thomas Sorber",
+        "status": "out_for_season",
+        "team": "Oklahoma City Thunder"
+      },
+      {
+        "date_update": "2025-09-22",
+        "note": "Out For Season (ACL) - The Rockets said on Monday (Sept. 22) that VanVleet suffered a torn ACL and may be out for the entire 2025-26 campaign, per Shams Charania of ESPN.",
+        "player": "Fred VanVleet",
+        "status": "out_for_season",
+        "team": "Houston Rockets"
+      },
+      {
+        "date_update": "2025-09-25",
+        "note": "Out For Season (Achilles) - The Trail Blazers said on Thursday (Sept. 25) that Lillard won't be back on the court for the 2025-26 season due to his achilles injury.",
+        "player": "Damian Lillard",
+        "status": "out_for_season",
+        "team": "Portland Trail Blazers"
+      },
+      {
+        "date_update": "2025-11-05",
+        "note": "Out For Season (Shoulder) - Kessler will undergo left shoulder surgery to address a torn labrum and will miss the remainder of the 2025-26 season, as per Tony Jones of The Athletic.",
+        "player": "Walker Kessler",
+        "status": "out_for_season",
+        "team": "Utah Jazz"
+      },
+      {
+        "date_update": "2025-11-12",
+        "note": "Out For Season (Hip) - Beal will undergo season-ending surgery on his left hip, as per ESPN's Shams Charania reports.",
+        "player": "Bradley Beal",
+        "status": "out_for_season",
+        "team": "Los Angeles Clippers"
+      },
+      {
+        "date_update": "2025-12-03",
+        "note": "Out For Season (Shoulder) - The Bulls reported on Wednesday (Dec. 3) that Essengue will have shoulder surgery and miss the remainder of the season, per HC Billy Donovan.",
+        "player": "Noa Essengue",
+        "status": "out_for_season",
+        "team": "Chicago Bulls"
+      },
+      {
+        "date_update": "2025-12-21",
+        "note": "Out For Season (Foot) - The Mavericks announced on Sunday (Dec. 21) that Lively II has successfully underwent foot surgery.",
+        "player": "Dereck Lively II",
+        "status": "out_for_season",
+        "team": "Dallas Mavericks"
+      },
+      {
+        "date_update": "2026-01-15",
+        "note": "Out For Season (Shoulder) - Whitmore has begun the recovery process for a diagnosed venous condition, and he will miss the remainder of the 2025-26 season.",
+        "player": "Cam Whitmore",
+        "status": "out_for_season",
+        "team": "Washington Wizards"
+      },
+      {
+        "date_update": "2026-01-20",
+        "note": "Out For Season (Knee) - Butler's injury from Monday (Jan. 19) Night's game involves a torn right ACL and he will be out for the rest of the season, as per Shams Charania of ESPN.",
+        "player": "Jimmy Butler",
+        "status": "out_for_season",
+        "team": "Golden State Warriors"
+      },
+      {
+        "date_update": "2026-01-27",
+        "note": "Out For Season (Achilles) - The Pacers said on Tuesday (Jan. 27) that Haliburton will likely be in line for a relatively normal offseason and should be free of restrictions for the start of training camp next fall.",
+        "player": "Tyrese Haliburton",
+        "status": "out_for_season",
+        "team": "Indiana Pacers"
+      },
+      {
+        "date_update": "2026-01-28",
+        "note": "Out For Season (Ankle) - The Rockets said on Wednesday (Jan. 28) that Adams underwent season-ending ankle surgery.",
+        "player": "Steven Adams",
+        "status": "out_for_season",
+        "team": "Houston Rockets"
+      },
+      {
+        "date_update": "2026-02-04",
+        "note": "Out For Season (Ankle) - The Spurs announced on Wednesday (Feb. 4) that Jones Garcia underwent ankle surgery and will miss the remainder of the 2025-26 season, per Tom Orsborn of the San Antonio Express-News.",
+        "player": "David Jones Garc\u00eda",
+        "status": "out_for_season",
+        "team": "San Antonio Spurs"
+      },
+      {
+        "date_update": "2026-02-06",
+        "note": "Out For Season (Finger) - The Wizards said on Friday (Feb. 6) that Davis is expected to sit out the remainder of the 2025-26 season, per Chris Haynes of NBA TV.",
+        "player": "Anthony Davis",
+        "status": "out_for_season",
+        "team": "Washington Wizards"
+      },
+      {
+        "date_update": "2026-02-09",
+        "note": "Out For Season (Knee) - Furphy was diagnosed with a torn right ACL on Monday and will miss the remainder of the season, Michael Scotto of USA Today",
+        "player": "Johnny Furphy",
+        "status": "out_for_season",
+        "team": "Indiana Pacers"
+      },
+      {
+        "date_update": "2026-02-12",
+        "note": "Out For Season (Knee) - The Jazz said on Thursday (Feb. 12) that Jackson Jr. will miss the rest of the season to undergo knee surgery.",
+        "player": "Jaren Jackson Jr.",
+        "status": "out_for_season",
+        "team": "Utah Jazz"
+      },
+      {
+        "date_update": "2025-12-22",
+        "note": "Out (Foot) - The Nuggets announced on Monday (Dec. 22) that Bates will be re-evaluated in 12 weeks.",
+        "player": "Tamar Bates",
+        "status": "out",
+        "team": "Denver Nuggets"
+      },
+      {
+        "date_update": "2025-12-30",
+        "note": "Out (Thumb) - Castleton remains out with an injury and continues to be evaluated; return status is undetermined.",
+        "player": "Colin Castleton",
+        "status": "out",
+        "team": "Orlando Magic"
+      },
+      {
+        "date_update": "2025-12-31",
+        "note": "Out (Foot) - The Pacers announced on Wednesday (Jan. 31) that Toppin doesn't have a timetable for a return yet, per Dustin Dopirak of The Indianapolis Star.",
+        "player": "Obi Toppin",
+        "status": "out",
+        "team": "Indiana Pacers"
+      },
+      {
+        "date_update": "2026-01-01",
+        "note": "Out (Neck) - The Bucks announced on Thursday (Jan. 1) that Prince applied for a Disabled Player Exception for Prince earlier this month, indicating that they anticipate that he's substantially more likely than not to be unable to play through June 15, per",
+        "player": "Taurean Prince",
+        "status": "out",
+        "team": "Milwaukee Bucks"
+      },
+      {
+        "date_update": "2026-01-06",
+        "note": "Out (Foot) - Strus is expected to miss at least four more weeks, per Marc J. Spears of ESPN.com.",
+        "player": "Max Strus",
+        "status": "out",
+        "team": "Cleveland Cavaliers"
+      }
+    ],
+    "official": {
+      "count": 0,
+      "fetched_at_utc": "2026-02-13T23:00:59Z",
+      "parse_coverage": 0.0,
+      "parse_status": "error",
+      "pdf_cached_path": "",
+      "pdf_download_status": "error",
+      "pdf_links": [],
+      "rows_count": 0,
+      "selected_pdf_url": "",
+      "status": "error",
+      "url": "https://official.nba.com/nba-injury-report-2025-26-season/"
+    },
+    "roster": {
+      "count_teams": 0,
+      "fetched_at_utc": "2026-02-13T23:00:59Z",
+      "source": "nba_live_scoreboard",
+      "status": "ok",
+      "url": "https://cdn.nba.com/static/json/liveData/scoreboard/todaysScoreboard_00.json"
+    },
+    "secondary": {
+      "count": 105,
+      "fetched_at_utc": "2026-02-13T23:00:59Z",
+      "status": "ok",
+      "url": "https://www.basketball-reference.com/friv/injuries.fcgi"
+    }
+  },
+  "candidates": [],
+  "gaps": [
+    "Official NBA injury report data was not cleanly parsed (missing links, download failure, or empty parse rows).",
+    "Roster feed returned no team/player rows for these events.",
+    "Slate spreads/totals were unavailable in this snapshot.",
+    "Health gates triggered watchlist-only mode for this snapshot.",
+    "Model uses market-implied fair probabilities with injury/roster/opponent adjustments.",
+    "Minutes/usage projection uses deterministic core rules, not learned distributions.",
+    "SGP/SGPx correlation uses deterministic haircut rules (core model)."
+  ],
+  "generated_at_utc": "2026-02-13T23:01:00Z",
+  "health_report": {
+    "contracts": {
+      "missing_event_mappings": [],
+      "props_rows": {
+        "invalid_count": 0,
+        "invalid_examples": [],
+        "row_count": 0,
+        "status": "ok"
+      }
+    },
+    "excluded_games": [],
+    "feeds": {
+      "injuries_stale": "no",
+      "official_injuries": "error",
+      "official_injuries_parse": "error",
+      "official_injuries_rows": 0,
+      "roster": "ok",
+      "roster_stale": "no",
+      "secondary_injuries": "ok"
+    },
+    "health_gates": [
+      "odds_snapshot_stale"
+    ],
+    "identity_map_entries": 0,
+    "odds": {
+      "age_latest_min": null,
+      "age_oldest_min": null,
+      "latest_quote_utc": "",
+      "odds_stale": true,
+      "oldest_quote_utc": "",
+      "stale_after_min": 20,
+      "status": "missing_last_update"
+    },
+    "require_fresh_context": true,
+    "require_official_injuries": false,
+    "strategy_mode": "watchlist_only"
+  },
+  "kelly_summary": [],
+  "modeled_date_et": "Friday, Feb 13, 2026 (ET)",
+  "one_source_edges": [],
+  "price_dependent_watchlist": [],
+  "ranked_plays": [],
+  "roster_status_warnings": [],
+  "sgp_candidates": [],
+  "slate_snapshot": [],
+  "snapshot_id": "daily-20260213T230036Z",
+  "state_key": {
+    "health_gates": {
+      "injuries_context_stale": "Injury context cache exceeds configured freshness TTL.",
+      "odds_snapshot_stale": "Latest quote timestamp exceeds configured staleness threshold.",
+      "official_injury_missing": "Official NBA injury source is unavailable or unusable.",
+      "roster_context_stale": "Roster context cache exceeds configured freshness TTL."
+    },
+    "strategy_description": {
+      "s001": "Best-over/best-under no-vig baseline with deterministic minutes/usage and context gates.",
+      "s002": "Same core model as s001, but includes tier-B single-book edges with stricter EV floor.",
+      "s003": "Uses median per-book no-vig baseline, with fallback to best-sides baseline.",
+      "s004": "Skips lines unless at least 2 books post both over and under at the same point.",
+      "s005": "Skips lines when median per-book hold exceeds the configured cap.",
+      "s006": "Skips lines when per-book no-vig probability IQR exceeds the configured cap.",
+      "s007": "Composes median no-vig baseline with min-2 book-pair and hold-cap gates (s003 + s004 + s005)."
+    },
+    "strategy_id": {
+      "s001": "Baseline Core",
+      "s002": "Baseline Core + Tier B",
+      "s003": "Median No-Vig Baseline",
+      "s004": "Min-2 Book-Pair Gate",
+      "s005": "Hold-Cap Gate",
+      "s006": "Dispersion-IQR Gate",
+      "s007": "Quality Composite Gate"
+    },
+    "strategy_mode": {
+      "full_board": "No global health gate blocks; ranked eligible board is active.",
+      "watchlist_only": "One or more global health gates are active; all candidates are watchlist-only."
+    },
+    "strategy_status": {
+      "modeled_with_gates": "Deterministic strategy report generated with reliability gates applied."
+    }
+  },
+  "strategy": {
+    "description": "Best-over/best-under no-vig baseline with deterministic minutes/usage and context gates.",
+    "id": "s001",
+    "name": "Baseline Core",
+    "title": "Baseline Core"
+  },
+  "strategy_id": "s001",
+  "strategy_mode": "watchlist_only",
+  "strategy_status": "modeled_with_gates",
+  "summary": {
+    "candidate_lines": 0,
+    "eligible_lines": 0,
+    "eligible_pre_bet_ready": 0,
+    "eligible_tier_a": 0,
+    "eligible_tier_b": 0,
+    "events": 0,
+    "health_gate_count": 1,
+    "injury_source_official": "no",
+    "injury_source_secondary": "yes",
+    "qualified_unders": 0,
+    "quota": {
+      "last": "0",
+      "remaining": "150",
+      "used": "350"
+    },
+    "request_counts": {
+      "ok": 1,
+      "skipped": 1
+    },
+    "roster_source": "no",
+    "roster_team_rows": 0,
+    "sgp_candidates": 0,
+    "strategy_id": "s001",
+    "strategy_mode": "watchlist_only",
+    "tier_a_lines": 0,
+    "tier_b_lines": 0,
+    "under_sweep_status": "insufficient",
+    "watchlist_only": "yes"
+  },
+  "timezone": "ET",
+  "top_ev_plays": [],
+  "under_sweep": {
+    "closest_misses": [],
+    "note": "No Unders >= threshold; showing closest misses with PLAY-TO numbers.",
+    "qualified": [],
+    "qualified_count": 0,
+    "status": "insufficient"
+  },
+  "unresolved_players": [],
+  "verified_players": [],
+  "watchlist": []
+}

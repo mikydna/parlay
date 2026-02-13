@@ -1,0 +1,28 @@
+{
+  "analysis_summary": "Model ran in watchlist-only mode due to missing roster, injury, and market data in the snapshot (daily-20260213T230036Z). Public sources show active, up-to-date injury reports and widely-published sportsbook player-prop lines for February 13, 2026 \u2014 which supports the idea that the model\u2019s data ingestion/feeds (roster and official injury parsing, sportsbook/slate feeds) failed for this snapshot rather than the underlying information being absent. At the same time, multiple teams have current injuries and load-management moves that materially affect player minutes/usage, which validates the model\u2019s caution in not producing live candidate lines when injury/roster certainty is low.",
+  "bottom_line": "Evidence indicates the underlying market and injury information for Feb 13, 2026 were publicly available (sportsbooks and injury trackers published lines and team injury reports). That supports the snapshot\u2019s decision to withhold model plays only if the ingestion/parsing of roster and official injury feeds failed \u2014 which the snapshot gaps explicitly report. In short: (1) the model\u2019s conservative watchlist-only behavior was defensible given the risk from missing/unclean roster and official injury inputs, and (2) the claim that no market lines existed is refuted by sportsbook and odds-aggregation pages publishing player-prop lines on Feb 13, 2026. If you want a production-ready brief, I recommend (A) re-running ingestion for the snapshot timestamp (daily-20260213T230036Z) with priority on the official injury/roster feeds and sportsbook APIs, and (B) validating minutes/usage variability by ingesting recent game log minutes and team rotation notes (to replace deterministic minutes rules) before producing candidate lines. If you want, I can (1) attempt a fresh live ingestion check for the specific roster/injury endpoints and sportsbook APIs now, or (2) produce a prioritized checklist for feed validation and re-run steps.",
+  "refuting_facts": [
+    {
+      "fact": "Major sportsbook and odds-aggregation outlets published player-prop lines for Feb 13, 2026 (points/rebounds/assists etc.) \u2014 e.g., FanDuel/DraftKings props and story pages referenced by SportsBettingDime \u2014 indicating slate spreads/totals and player props were available in the market despite the model snapshot reporting 'slate spreads/totals were unavailable.'",
+      "source_title": "Warriors vs Rockets Predictions, Player Props & Odds (Feb 13)",
+      "source_url": "https://www.sportsbettingdime.com/news/nba/warriors-vs-rockets-predictions-player-props-odds-feb-13/"
+    },
+    {
+      "fact": "Multiple independent outlets published curated 'best player props' pages for Feb 13 (examples: RealGM, Covers, other betting sites) listing specific player prop lines (points/rebounds/3PM) \u2014 contradicting the snapshot claim that 'No playable lines or top plays are available' for that date.",
+      "source_title": "Heat vs. Mavericks Player Props & Odds | February 13 | RealGM",
+      "source_url": "https://basketball.realgm.com/nba/odds/121428/heat-vs-mavericks-props"
+    }
+  ],
+  "supporting_facts": [
+    {
+      "fact": "Comprehensive NBA injury listings (team-by-team) for Feb 13, 2026 are published and include numerous day-to-day and out statuses (e.g., J. Morant out - elbow; A. Sarr out - hamstring). This demonstrates that injury data existed publicly on the date of the snapshot but was not parsed into the model snapshot.",
+      "source_title": "NBA Injuries 2025-2026 - Full Injury Report for Feb 13, 2026",
+      "source_url": "https://www.covers.com/sport/basketball/nba/injuries"
+    },
+    {
+      "fact": "Multiple team reports and news stories on Feb 12\u201313, 2026 document specific recent injuries and multi-week absences (examples in local beat and team coverage), e.g., Alex Sarr (Wizards) expected to miss ~two weeks with a hamstring strain \u2014 supporting the model\u2019s use of injury/health gates and the need to avoid producing lines without cleaned injury data.",
+      "source_title": "Sarr to miss 'at least two weeks' with hamstring strain",
+      "source_url": "https://www.bulletsforever.com/washington-wizards-news/68073/sarr-to-miss-at-least-two-weeks-with-hamstring-strain"
+    }
+  ]
+}

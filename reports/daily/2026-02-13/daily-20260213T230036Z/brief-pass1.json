@@ -1,0 +1,22 @@
+{
+  "confidence_notes": [
+    "Cannot compute play-specific confidence without market lines, prices, roster, and injury statuses.",
+    "Any downstream EV, Kelly, or ticket recommendations are unavailable due to missing inputs."
+  ],
+  "data_quality_flags": [
+    "Missing official injury data (parse/download failure).",
+    "No roster/team/player rows in feed.",
+    "No slate spreads/totals available in snapshot.",
+    "Model operated in watchlist-only/health-gated mode.",
+    "Minutes/usage projections are deterministic rules-based (not learned distributions).",
+    "SGP/SGPx correlation adjustments use deterministic haircuts."
+  ],
+  "slate_summary": "No playable lines or top plays are available in this snapshot due to missing roster, injury, and market data; model ran in watchlist-only mode.",
+  "top_plays_explained": [],
+  "watchouts": [
+    "Official NBA injury report data failed to parse, so injury statuses may be missing or outdated.",
+    "Roster feed returned no team/player rows, preventing player-level projections.",
+    "Slate spreads and totals were unavailable, so no market prices or edges could be computed.",
+    "Health gates placed this snapshot in watchlist-only mode; do not treat this as actionable for wagering."
+  ]
+}

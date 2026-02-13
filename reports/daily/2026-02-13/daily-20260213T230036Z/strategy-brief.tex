@@ -1,0 +1,137 @@
+\documentclass[10pt]{article}
+\usepackage[margin=1in,landscape]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage{hyperref}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{ragged2e}
+\newcolumntype{L}[1]{>{\RaggedRight\arraybackslash}p{#1}}
+\newcolumntype{R}[1]{>{\RaggedLeft\arraybackslash}p{#1}}
+\renewcommand{\arraystretch}{1.05}
+\setlength{\parskip}{4pt}
+\setlength{\parindent}{0pt}
+\sloppy
+\begin{document}
+\begin{center}\LARGE\textbf{NBA Strategy Brief}\end{center}
+\vspace{0.5em}
+\subsection*{Snapshot}
+\begin{itemize}
+\item snapshot\_id: \texttt{daily-20260213T230036Z}
+\item modeled\_date\_et: \texttt{Friday, Feb 13, 2026 (ET)}
+\item generated\_at\_et: \texttt{2026-02-13 06:01:00 PM EST}
+\item source\_data: \texttt{snapshot\_inputs}
+\item scoring: \texttt{deterministic}
+\item narrative: \texttt{llm}
+\end{itemize}
+Generated: 2026-02-13 06:01:00 PM ET (America/New\_York)
+Modeled for: Friday, Feb 13, 2026 (ET)
+Snapshot ID: daily-20260213T230036Z
+Strategy status: modeled\_with\_gates
+Execution\_books: []
+
+Key missing/flagged items (from snapshot):
+\begin{itemize}
+\item Official NBA injury report data was not cleanly parsed.
+\item Roster feed returned no team/player rows.
+\item Slate spreads/totals were unavailable.
+\item Health gates triggered watchlist-only mode.
+\item Model notes: uses market-implied fair probabilities with injury/roster/opponent adjustments; minutes/usage and SGP correlation use deterministic rules.
+\end{itemize}
+
+\subsection*{What The Bet Is}
+This brief covers player-prop over/under bets (player statistic totals). It does not address game winner or spread bets. No specific playable tickets are available in this snapshot due to missing market, roster, and injury data.
+
+\subsection*{Executive Summary}
+\begin{itemize}
+\item No actionable player-prop over/under lines were produced.
+\item The model ran in watchlist-only / health-gated mode because critical inputs (injury reports, rosters, slate prices) failed to parse or were absent.
+\item Because of those gaps, the system did not generate candidate tickets or suggested stakes. Treat this snapshot as informational only — not for wagering.
+\end{itemize}
+
+
+\newpage
+
+\subsection*{Analyst Take}
+
+\begin{itemize}
+\item mode: \texttt{llm\_web}
+\end{itemize}
+
+\subsubsection*{Read This First}
+
+Model ran in watchlist-only mode due to missing roster, injury, and market data in the snapshot (daily-20260213T230036Z). Public sources show active, up-to-date injury reports and widely-published sportsbook player-prop lines for February 13, 2026 — which supports the idea that the model’s data ingestion/feeds (roster and official injury parsing, sportsbook/slate feeds) failed for this snapshot rather than the und...
+
+\subsubsection*{News Signals}
+
+\begin{itemize}
+\item Supports:
+\item [S1] Comprehensive NBA injury listings (team-by-team) for Feb 13, 2026 are published and include numerous day-to-day and out statuses (e.g., J. Morant out - elbow; A. Sarr out - hamstring). This demonstrates that injury data existed publicly on the date of the snapshot but was not parsed into the model snapshot.
+\item [S2] Multiple team reports and news stories on Feb 12–13, 2026 document specific recent injuries and multi-week absences (examples in local beat and team coverage), e.g., Alex Sarr (Wizards) expected to miss \textasciitilde{}two weeks with a hamstring strain — supporting the model’s use of injury/health gates and the need to avoid producing lines without cleaned injury data.
+\item Refutes/Risks:
+\item [S3] Major sportsbook and odds-aggregation outlets published player-prop lines for Feb 13, 2026 (points/rebounds/assists etc.) — e.g., FanDuel/DraftKings props and story pages referenced by SportsBettingDime — indicating slate spreads/totals and player props were available in the market despite the model snapshot reporting 'slate spreads/totals were unavailable.'
+\item [S4] Multiple independent outlets published curated 'best player props' pages for Feb 13 (examples: RealGM, Covers, other betting sites) listing specific player prop lines (points/rebounds/3PM) — contradicting the snapshot claim that 'No playable lines or top plays are available' for that date.
+\end{itemize}
+
+\subsubsection*{Bottom Line}
+
+Evidence indicates the underlying market and injury information for Feb 13, 2026 were publicly available (sportsbooks and injury trackers published lines and team injury reports). That supports the snapshot’s decision to withhold model plays only if the ingestion/parsing of roster and official injury feeds failed — which the snapshot gaps explicitly report.
+
+\subsubsection*{Source Index}
+
+\begin{itemize}
+\item [S1] NBA Injuries 2025-2026 - Full Injury Report for Feb 13, 2026 (www.covers.com)
+\item [S2] Sarr to miss 'at least two weeks' with hamstring strain (www.bulletsforever.com)
+\item [S3] Warriors vs Rockets Predictions, Player Props \& Odds (Feb 13) (www.sportsbettingdime.com)
+\item [S4] Heat vs. Mavericks Player Props \& Odds | February 13 | RealGM (basketball.realgm.com)
+\item Full source URLs are stored in \texttt{brief-analyst.json} for audit/debug use.
+\end{itemize}
+
+\newpage
+
+\subsection*{Best Available Bet Right Now}
+
+\begin{itemize}
+\item status: no actionable GO/LEAN play passed pre-bet availability checks.
+\item action: wait for injury/roster updates, then rerun.
+\end{itemize}
+
+\newpage
+
+\subsection*{Action Plan (GO / LEAN / NO-GO)}
+
+\subsubsection*{Top 5 Across All Games}
+
+This is player-prop over/under betting, not game winner bets.
+
+\begin{itemize}
+\item none
+\end{itemize}
+
+Note: If execution\_books or tickets were present they would be listed here with model\_prob as p(hit). In this snapshot execution\_books is empty.
+
+\newpage
+
+\subsection*{Data Quality}
+Data quality is poor for wagering:
+\begin{itemize}
+\item Missing official injury data (parse/download failure).
+\item No roster/team/player rows in feed.
+\item No slate spreads or totals.
+\item Model operated in watchlist-only / health-gated mode.
+\item Minutes/usage and SGP correlation use deterministic rules (not learned distributions), which reduces fidelity.
+\end{itemize}
+
+\subsection*{Confidence}
+Low. Cannot compute play-specific confidence or EV/Kelly recommendations without market lines, prices, roster, and injury statuses. Any downstream staking or ticket recommendations are unavailable until data issues are resolved.
+
+\subsubsection*{Interpreting p(hit)}
+
+\begin{itemize}
+\item \texttt{p(hit)} = estimated chance the recommended side wins at that line.
+\item Built from no-vig odds + small injury/roster/spread adjustments (clamped 1\%-99\%).
+\item Use it to rank EV, not as a guarantee; judge it by calibration over many bets.
+\item Can be wrong when odds are stale, coverage is thin, or minutes/role are uncertain.
+\end{itemize}
+\end{document}
