@@ -446,7 +446,7 @@ def test_strategy_run_writes_execution_tagged_report(
     assert "execution_bookmakers=draftkings" in out
     assert "execution_tag=execution-draftkings" in out
     assert "execution_report_json=" in out
-    assert "execution_report_md=disabled" in out
+    assert "execution_report_md=" not in out
 
 
 def test_run_strategy_for_playbook_passes_strategy_id(
@@ -527,7 +527,7 @@ def test_playbook_render_non_canonical_strategy_report_skips_refresh(
     assert captured["strategy_report_path"] == non_canonical
     assert captured["write_markdown"] is False
     assert f"strategy_report_path={non_canonical}" in out
-    assert "strategy_brief_md=disabled" in out
+    assert "strategy_brief_md=" not in out
 
 
 def test_global_data_dir_override_from_subcommand_position(

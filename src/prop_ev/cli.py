@@ -2263,23 +2263,15 @@ def _cmd_strategy_run(args: argparse.Namespace) -> int:
     print(f"report_json={json_path}")
     if write_markdown:
         print(f"report_md={md_path}")
-    else:
-        print("report_md=disabled")
     card = reports_dir / "strategy-card.md"
     if not write_canonical:
         card = card.with_name(f"{card.stem}.{strategy_id}{card.suffix}")
     if write_markdown:
         print(f"report_card={card}")
-    else:
-        print("report_card=disabled")
     if write_backtest_artifacts_flag:
         print(f"backtest_seed_jsonl={backtest['seed_jsonl']}")
         print(f"backtest_results_template_csv={backtest['results_template_csv']}")
         print(f"backtest_readiness_json={backtest['readiness_json']}")
-    else:
-        print("backtest_seed_jsonl=disabled")
-        print("backtest_results_template_csv=disabled")
-        print("backtest_readiness_json=disabled")
     reference_dir = store.root / "reference"
     identity_map_path = reference_dir / "player_identity_map.json"
     identity_map = load_identity_map(identity_map_path)
@@ -2331,8 +2323,6 @@ def _cmd_strategy_run(args: argparse.Namespace) -> int:
         print(f"execution_report_json={execution_json}")
         if write_markdown:
             print(f"execution_report_md={execution_md}")
-        else:
-            print("execution_report_md=disabled")
     return 0
 
 
@@ -2659,8 +2649,6 @@ def _cmd_strategy_backtest_summarize(args: argparse.Namespace) -> int:
     print(f"summary_json={json_path}")
     if write_markdown:
         print(f"summary_md={md_path}")
-    else:
-        print("summary_md=disabled")
     if winner is not None:
         print(
             f"winner_strategy_id={winner.strategy_id} roi={winner.roi} graded={winner.rows_graded}"
@@ -2724,6 +2712,35 @@ def _cmd_strategy_backtest_prep(args: argparse.Namespace) -> int:
     return 0
 
 
+def _resolve_settlement_strategy_report_path(
+    *, reports_dir: Path, strategy_report_file: str
+) -> Path | None:
+    requested = strategy_report_file.strip()
+    if requested:
+        candidate = Path(requested).expanduser()
+        return candidate if candidate.is_absolute() else (reports_dir / candidate)
+
+    brief_meta_path = reports_dir / "strategy-brief.meta.json"
+    if brief_meta_path.exists():
+        try:
+            payload = json.loads(brief_meta_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            payload = {}
+        if isinstance(payload, dict):
+            raw = str(payload.get("strategy_report_path", "")).strip()
+            if raw:
+                candidate = Path(raw).expanduser()
+                if not candidate.is_absolute():
+                    candidate = reports_dir / candidate
+                if candidate.exists():
+                    return candidate
+
+    default_path = reports_dir / "strategy-report.json"
+    if default_path.exists():
+        return default_path
+    return None
+
+
 def _cmd_strategy_settle(args: argparse.Namespace) -> int:
     store = SnapshotStore(os.environ.get("PROP_EV_DATA_DIR", "data/odds_api"))
     snapshot_id = args.snapshot_id or _latest_snapshot_id(store)
@@ -2735,19 +2752,30 @@ def _cmd_strategy_settle(args: argparse.Namespace) -> int:
         else reports_dir / "backtest-seed.jsonl"
     )
     seed_rows_override: list[dict[str, Any]] | None = None
+    strategy_report_for_settlement = ""
+    strategy_report_path = _resolve_settlement_strategy_report_path(
+        reports_dir=reports_dir,
+        strategy_report_file=str(getattr(args, "strategy_report_file", "")),
+    )
     using_default_seed_path = not str(getattr(args, "seed_path", "")).strip()
-    if using_default_seed_path and not seed_path.exists():
-        strategy_report_path = reports_dir / "strategy-report.json"
-        if strategy_report_path.exists():
+    if using_default_seed_path and strategy_report_path is not None:
+        try:
             payload = json.loads(strategy_report_path.read_text(encoding="utf-8"))
-            if isinstance(payload, dict):
-                seed_rows_override = build_backtest_seed_rows(
-                    report=payload,
-                    selection="eligible",
-                    top_n=0,
-                )
-        if not seed_rows_override:
+        except (OSError, json.JSONDecodeError) as exc:
+            raise CLIError(f"invalid strategy report: {strategy_report_path}") from exc
+        if isinstance(payload, dict):
+            seed_rows_override = build_backtest_seed_rows(
+                report=payload,
+                selection="eligible",
+                top_n=0,
+            )
+            strategy_report_for_settlement = str(strategy_report_path)
+    if using_default_seed_path and seed_rows_override is None and not seed_path.exists():
+        if strategy_report_path is None:
             raise CLIError(f"missing backtest seed file: {seed_path}")
+        raise CLIError(
+            f"could not derive settlement rows from strategy report: {strategy_report_path}"
+        )
 
     report = settle_snapshot(
         snapshot_dir=snapshot_dir,
@@ -2761,6 +2789,7 @@ def _cmd_strategy_settle(args: argparse.Namespace) -> int:
         write_markdown=bool(getattr(args, "write_markdown", False)),
         keep_tex=bool(getattr(args, "keep_tex", False)),
         seed_rows_override=seed_rows_override,
+        strategy_report_path=strategy_report_for_settlement,
     )
 
     if bool(getattr(args, "json_output", True)):
@@ -2789,13 +2818,9 @@ def _cmd_strategy_settle(args: argparse.Namespace) -> int:
         settlement_md = str(artifacts.get("md", "")).strip()
         if settlement_md:
             print(f"settlement_md={settlement_md}")
-        else:
-            print("settlement_md=disabled")
         settlement_tex = str(artifacts.get("tex", "")).strip()
         if settlement_tex:
             print(f"settlement_tex={settlement_tex}")
-        else:
-            print("settlement_tex=disabled")
         print(f"settlement_pdf={artifacts.get('pdf', '')}")
         print(f"settlement_meta={artifacts.get('meta', '')}")
         csv_artifact = str(artifacts.get("csv", "")).strip()
@@ -3249,12 +3274,8 @@ def _cmd_playbook_run(args: argparse.Namespace) -> int:
         print(f"context_preflight_gates={','.join(preflight_gates)}")
     if brief.get("report_markdown"):
         print(f"strategy_brief_md={brief['report_markdown']}")
-    else:
-        print("strategy_brief_md=disabled")
     if brief.get("report_tex"):
         print(f"strategy_brief_tex={brief['report_tex']}")
-    else:
-        print("strategy_brief_tex=disabled")
     print(f"strategy_brief_pdf={brief['report_pdf']}")
     print(f"strategy_brief_meta={brief['report_meta']}")
     print(
@@ -3353,12 +3374,8 @@ def _cmd_playbook_render(args: argparse.Namespace) -> int:
     print(f"strategy_report_path={strategy_report_path}")
     if brief.get("report_markdown"):
         print(f"strategy_brief_md={brief['report_markdown']}")
-    else:
-        print("strategy_brief_md=disabled")
     if brief.get("report_tex"):
         print(f"strategy_brief_tex={brief['report_tex']}")
-    else:
-        print("strategy_brief_tex=disabled")
     print(f"strategy_brief_pdf={brief['report_pdf']}")
     print(f"strategy_brief_meta={brief['report_meta']}")
     return 0
@@ -3647,12 +3664,8 @@ def _cmd_playbook_discover_execute(args: argparse.Namespace) -> int:
     print(f"discovery_execution_json={compare_json}")
     if compare_md is not None:
         print(f"discovery_execution_md={compare_md}")
-    else:
-        print("discovery_execution_md=disabled")
     if brief.get("report_markdown"):
         print(f"strategy_brief_md={brief['report_markdown']}")
-    else:
-        print("strategy_brief_md=disabled")
     print(f"strategy_brief_pdf={brief['report_pdf']}")
     return 0
 
@@ -4049,6 +4062,14 @@ def _build_parser() -> argparse.ArgumentParser:
         "--seed-path",
         default="",
         help="Optional override path to backtest seed jsonl",
+    )
+    strategy_settle.add_argument(
+        "--strategy-report-file",
+        default="",
+        help=(
+            "Optional strategy report file (relative to snapshot reports/ or absolute). "
+            "When omitted, settle prefers strategy-brief.meta.json strategy_report_path."
+        ),
     )
     strategy_settle.add_argument("--offline", action="store_true")
     strategy_settle.add_argument("--refresh-results", action="store_true")

@@ -79,6 +79,9 @@ Behavior:
   - `historical`: use historical schedule + boxscores path only.
   - `live`: use live scoreboard + boxscores path only.
   - `cache_only`: require existing cached results.
+- By default, settle uses the strategy report path recorded in
+  `strategy-brief.meta.json` (or `strategy-report.json` fallback), so settlement aligns with the
+  brief. Use `--seed-path` to force a specific seed file.
 - `--offline` forces cache-only behavior and ignores `--refresh-results`.
 - Final games are graded `win|loss|push`.
 - In-progress and scheduled games remain `pending`.

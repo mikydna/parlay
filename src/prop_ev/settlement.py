@@ -585,6 +585,7 @@ def settle_snapshot(
     write_markdown: bool = False,
     keep_tex: bool = False,
     seed_rows_override: list[dict[str, Any]] | None = None,
+    strategy_report_path: str = "",
 ) -> dict[str, Any]:
     """Settle snapshot seed tickets and write report artifacts."""
     seed_rows = seed_rows_override if seed_rows_override is not None else _load_jsonl(seed_path)
@@ -654,6 +655,7 @@ def settle_snapshot(
         "refresh_results": effective_refresh,
         "seed_source": "override" if seed_rows_override is not None else "seed_file",
         "seed_path": str(seed_path),
+        "strategy_report_path": strategy_report_path,
         "write_markdown": bool(write_markdown),
         "keep_tex": bool(keep_tex),
         "results_cache_path": str(results_cache_path),
