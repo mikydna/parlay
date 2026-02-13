@@ -100,13 +100,16 @@ def _load_via_source(
     season_type: str,
     game_id: str,
 ) -> Any:
+    provider_settings = {
+        "Games": {"data_provider": provider},
+        "Boxscore": {"data_provider": provider},
+        "EnhancedPbp": {"data_provider": provider},
+        "Possessions": {"data_provider": provider},
+    }
     client = build_client(
         response_dir=layout.pbpstats_response_dir,
         source=source,
-        resource_settings={
-            "Games": {"data_provider": provider},
-            _resource_key(resource): {"data_provider": provider},
-        },
+        resource_settings=provider_settings,
     )
     return load_game_resource(client, game_id=game_id, resource=resource)
 
