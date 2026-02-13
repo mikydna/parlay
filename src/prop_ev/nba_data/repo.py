@@ -7,20 +7,18 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from prop_ev.context_sources import (
-    BOXSCORE_URL_TEMPLATE,
-    TODAYS_SCOREBOARD_URL,
-    canonical_team_name,
+from prop_ev.nba_data.cache_store import NBADataCacheStore
+from prop_ev.nba_data.config import resolve_data_dir
+from prop_ev.nba_data.context_cache import load_or_fetch_context
+from prop_ev.nba_data.context_fetchers import (
     fetch_official_injury_links,
     fetch_roster_context,
     fetch_secondary_injuries,
-    load_or_fetch_context,
-    normalize_person_name,
 )
-from prop_ev.nba_data.cache_store import NBADataCacheStore
-from prop_ev.nba_data.config import resolve_data_dir
 from prop_ev.nba_data.date_resolver import resolve_snapshot_date, resolve_snapshot_date_str
+from prop_ev.nba_data.endpoints import BOXSCORE_URL_TEMPLATE, TODAYS_SCOREBOARD_URL
 from prop_ev.nba_data.gateway import get_json
+from prop_ev.nba_data.normalize import canonical_team_name, normalize_person_name
 from prop_ev.nba_data.request import NBADataRequest
 from prop_ev.nba_data.source_policy import ResultsSourceMode
 from prop_ev.storage import SnapshotStore

@@ -80,14 +80,12 @@ Required top-level keys:
 
 `source_details` required keys:
 - `source`
+- `results_source_mode`
 - `fetched_at_utc`
 - `status`
 - `offline`
 - `refresh_results`
 - `results_cache_path`
-
-`source_details` optional keys:
-- `results_source_mode` (present only when `--results-source` is explicitly set)
 
 ## Health Gate Reason Codes
 
