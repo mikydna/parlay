@@ -64,6 +64,9 @@ def lock_root(root: Path, *, config: LockConfig):
         "hostname": socket.gethostname(),
         "started_at_utc": utc_now_str(),
     }
+    if path.exists() and config.force_lock:
+        with suppress(FileNotFoundError):
+            path.unlink()
     if path.exists() and not config.force_lock:
         try:
             existing = json.loads(path.read_text(encoding="utf-8"))

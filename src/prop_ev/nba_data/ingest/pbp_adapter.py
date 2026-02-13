@@ -26,6 +26,7 @@ def build_client(
     all_resources = ("Games", "EnhancedPbp", "Possessions", "Boxscore")
     for resource in all_resources:
         cfg = dict(resource_settings.get(resource, {}))
+        cfg.setdefault("data_provider", "data_nba")
         cfg["source"] = source
         cfg["data_dir"] = str(response_dir)
         settings[resource] = cfg

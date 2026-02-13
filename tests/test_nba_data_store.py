@@ -57,6 +57,15 @@ def test_stale_lock_is_recovered(tmp_path: Path) -> None:
         assert lock_path.exists()
 
 
+def test_force_lock_replaces_existing_lock(tmp_path: Path) -> None:
+    root = tmp_path / "nba_data"
+    root.mkdir(parents=True, exist_ok=True)
+    lock_path = root / ".lock"
+    lock_path.write_text('{"pid":123,"hostname":"test","started_at_utc":"2026-01-01T00:00:00Z"}\n')
+    with lock_root(root, config=LockConfig(force_lock=True)):
+        assert lock_path.exists()
+
+
 def test_atomic_writes_and_manifest_roundtrip(tmp_path: Path) -> None:
     root = tmp_path / "nba_data"
     layout = build_layout(root)
