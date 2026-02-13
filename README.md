@@ -105,6 +105,17 @@ uv run prop-ev data backfill \
   --max-credits 500
 ```
 
+Machine-readable status summary for a day range:
+
+```bash
+uv run prop-ev data status \
+  --historical \
+  --from 2026-02-01 --to 2026-02-12 \
+  --markets player_points \
+  --bookmakers draftkings,fanduel,espnbet,betmgm,betrivers,williamhill_us,bovada,fanatics \
+  --json-summary
+```
+
 Dev mode with free calls allowed but paid odds endpoints blocked:
 
 ```bash
