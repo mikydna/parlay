@@ -1,7 +1,5 @@
 # nba-prop-ev
 
-[![CI](https://github.com/<OWNER>/<REPO>/actions/workflows/ci.yml/badge.svg)](https://github.com/<OWNER>/<REPO>/actions/workflows/ci.yml)
-
 Cache-first NBA odds snapshot pipeline for The Odds API v4.
 
 ## Install
@@ -34,7 +32,10 @@ uv run prop-ev snapshot props --dry-run --max-events 10
 uv run prop-ev strategy health --offline
 uv run prop-ev strategy ls
 uv run prop-ev playbook budget
-make ci
+uv run ruff format --check .
+uv run ruff check .
+uv run pyright
+uv run pytest -q
 ```
 
 ## Snapshot Workflow
@@ -215,8 +216,6 @@ Source policy details and fallback rules are documented in `docs/sources.md`.
 
 ## Scheduled Runs
 
-Use the schedule-ready runbook in `docs/scheduled-flow.md`.
-
-## CI Badge
-
-Replace `<OWNER>/<REPO>` in the badge URL after pushing to GitHub.
+- Operator runbook: `docs/runbook.md`
+- Schedule-specific command examples: `docs/scheduled-flow.md`
+- Artifact and gate contracts: `docs/contracts.md`

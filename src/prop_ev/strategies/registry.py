@@ -3,22 +3,24 @@ from __future__ import annotations
 from collections.abc import Iterable
 
 from prop_ev.strategies.base import StrategyPlugin, normalize_strategy_id
-from prop_ev.strategies.baseline_median_novig import BaselineMedianNoVigStrategy
-from prop_ev.strategies.gate_book_pairs_min2 import GateBookPairsMin2Strategy
-from prop_ev.strategies.gate_dispersion_iqr import GateDispersionIQRStrategy
-from prop_ev.strategies.gate_hold_cap import GateHoldCapStrategy
-from prop_ev.strategies.v0 import V0Strategy
-from prop_ev.strategies.v0_tier_b import V0TierBStrategy
+from prop_ev.strategies.s001_baseline_core import S001
+from prop_ev.strategies.s002_baseline_core_tier_b import S002
+from prop_ev.strategies.s003_median_no_vig_baseline import S003
+from prop_ev.strategies.s004_min2_book_pair_gate import S004
+from prop_ev.strategies.s005_hold_cap_gate import S005
+from prop_ev.strategies.s006_dispersion_iqr_gate import S006
+from prop_ev.strategies.s007_quality_composite_gate import S007
 
 
 def _registry() -> dict[str, StrategyPlugin]:
     plugins: Iterable[StrategyPlugin] = [
-        V0Strategy(),
-        V0TierBStrategy(),
-        BaselineMedianNoVigStrategy(),
-        GateBookPairsMin2Strategy(),
-        GateHoldCapStrategy(),
-        GateDispersionIQRStrategy(),
+        S001(),
+        S002(),
+        S003(),
+        S004(),
+        S005(),
+        S006(),
+        S007(),
     ]
     out: dict[str, StrategyPlugin] = {}
     for plugin in plugins:
@@ -29,6 +31,14 @@ def _registry() -> dict[str, StrategyPlugin]:
     return out
 
 
+def strategy_aliases() -> dict[str, str]:
+    return {}
+
+
+def resolve_strategy_id(strategy_id: str) -> str:
+    return normalize_strategy_id(strategy_id)
+
+
 def list_strategies() -> list[StrategyPlugin]:
     strategies = list(_registry().values())
     strategies.sort(key=lambda plugin: normalize_strategy_id(plugin.info.id))
@@ -36,7 +46,7 @@ def list_strategies() -> list[StrategyPlugin]:
 
 
 def get_strategy(strategy_id: str) -> StrategyPlugin:
-    normalized = normalize_strategy_id(strategy_id)
+    normalized = resolve_strategy_id(strategy_id)
     registry = _registry()
     plugin = registry.get(normalized)
     if plugin is None:

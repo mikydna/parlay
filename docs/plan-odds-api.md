@@ -225,7 +225,7 @@ Requirements:
    - verify atomic write behavior (no partial files on exceptions)
 
 Verify:
-- `make ci` passes.
+- `uv run ruff check .`, `uv run pyright`, and `uv run pytest -q` pass.
 
 ### Prompt 2: Odds API client with quota guard rails
 
@@ -257,7 +257,7 @@ Requirements:
    - Add `--refresh` to force fetch and overwrite cache entry within a snapshot.
 
 Verify:
-- `make ci` passes.
+- `uv run ruff check .`, `uv run pyright`, and `uv run pytest -q` pass.
 
 ### Prompt 3: CLI commands for snapshots (no modeling)
 
@@ -289,7 +289,7 @@ Requirements:
 
 Verify:
 - `uv run prop-ev snapshot slate --dry-run` works (no network).
-- `make ci` passes.
+- `uv run ruff check .`, `uv run pyright`, and `uv run pytest -q` pass.
 
 ### Prompt 4: Normalization (minimal, for reuse)
 
@@ -305,7 +305,7 @@ Requirements:
 4. Include `provider` and `snapshot_id` fields in derived outputs.
 
 Verify:
-- `make ci` passes.
+- `uv run ruff check .`, `uv run pyright`, and `uv run pytest -q` pass.
 
 ### Prompt 5: Documentation + operating mode
 
@@ -320,7 +320,7 @@ Requirements:
    - `docs/credits.md` with run budgets and example schedules that fit 500 credits/month.
 
 Verify:
-- `make ci` passes.
+- `uv run ruff check .`, `uv run pyright`, and `uv run pytest -q` pass.
 
 ### Prompt 6 (Recommended): Snapshot inspection + diff (offline tools)
 
@@ -335,7 +335,7 @@ Requirements:
    - create a tiny synthetic snapshot folder in `tmp_path` and verify these commands work offline.
 
 Verify:
-- `make ci` passes.
+- `uv run ruff check .`, `uv run pyright`, and `uv run pytest -q` pass.
 
 ### Prompt 7 (Optional): Provider interface for future multi-feed price shopping
 
@@ -347,7 +347,7 @@ Requirements:
 3. Keep storage, normalization, and CLI provider-agnostic (select provider via CLI flag).
 
 Verify:
-- `make ci` passes.
+- `uv run ruff check .`, `uv run pyright`, and `uv run pytest -q` pass.
 
 ### Prompt 8 (Recommended): Schema guards + golden fixtures
 
@@ -363,7 +363,7 @@ Requirements:
 3. Add a `schema_version` for derived outputs and write it into derived headers (or a separate `derived_manifest.json`).
 
 Verify:
-- `make ci` passes.
+- `uv run ruff check .`, `uv run pyright`, and `uv run pytest -q` pass.
 
 ### Prompt 9 (Optional): Credit reporting + budgets
 
@@ -377,7 +377,7 @@ Requirements:
    - given `--events N --markets ... --regions ...`, prints an estimated cost and recommended `--max-credits`
 
 Verify:
-- `make ci` passes.
+- `uv run ruff check .`, `uv run pyright`, and `uv run pytest -q` pass.
 
 ### Prompt 10 (Optional): Snapshot integrity + compression
 
@@ -395,7 +395,7 @@ Requirements:
    - require explicit `--apply` to actually delete
 
 Verify:
-- `make ci` passes.
+- `uv run ruff check .`, `uv run pyright`, and `uv run pytest -q` pass.
 
 ## Suggested Free-Tier Operating Pattern
 

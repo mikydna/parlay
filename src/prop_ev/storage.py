@@ -12,13 +12,14 @@ from pathlib import Path
 from typing import Any
 
 from prop_ev import __version__
+from prop_ev.time_utils import utc_now_str
 
 SCHEMA_VERSION = 1
 
 
 def now_utc() -> str:
     """Return a UTC timestamp string."""
-    return datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    return utc_now_str()
 
 
 def make_snapshot_id() -> str:

@@ -14,6 +14,18 @@ from typing import Any
 
 from prop_ev.backtest import ROW_SELECTIONS, write_backtest_artifacts
 from prop_ev.budget import current_month_utc
+from prop_ev.cli_internal import (
+    default_window,
+    env_bool,
+    env_float,
+    env_int,
+    teams_in_scope_from_events,
+)
+from prop_ev.context_health import (
+    official_rows_count,
+    official_source_ready,
+    secondary_source_ready,
+)
 from prop_ev.context_sources import (
     fetch_official_injury_links,
     fetch_roster_context,
@@ -38,8 +50,13 @@ from prop_ev.odds_client import (
 from prop_ev.playbook import budget_snapshot, compute_live_window, generate_brief_for_snapshot
 from prop_ev.settings import Settings
 from prop_ev.settlement import settle_snapshot
+from prop_ev.state_keys import (
+    playbook_mode_key,
+    strategy_health_state_key,
+    strategy_title,
+)
 from prop_ev.storage import SnapshotStore, make_snapshot_id, request_hash
-from prop_ev.strategies import get_strategy, list_strategies
+from prop_ev.strategies import get_strategy, list_strategies, resolve_strategy_id
 from prop_ev.strategies.base import (
     StrategyInputs,
     StrategyRunConfig,
@@ -47,6 +64,7 @@ from prop_ev.strategies.base import (
     normalize_strategy_id,
 )
 from prop_ev.strategy import build_strategy_report, load_jsonl, write_strategy_reports
+from prop_ev.time_utils import iso_z, utc_now
 
 
 class CLIError(RuntimeError):
@@ -102,50 +120,33 @@ def _resolve_bookmakers(explicit: str, *, allow_config: bool = True) -> tuple[st
 
 
 def _utc_now() -> datetime:
-    return datetime.now(UTC).replace(microsecond=0)
+    return utc_now()
 
 
 def _iso(dt: datetime) -> str:
-    return dt.isoformat().replace("+00:00", "Z")
+    return iso_z(dt)
 
 
 def _default_window() -> tuple[str, str]:
-    start = _utc_now().replace(hour=0, minute=0, second=0)
-    end = start + timedelta(hours=32)
-    return _iso(start), _iso(end)
+    return default_window()
 
 
 def _env_bool(name: str, default: bool) -> bool:
-    raw = os.environ.get(name, "").strip().lower()
-    if not raw:
-        return default
-    return raw in {"1", "true", "yes", "y", "on"}
+    return env_bool(name, default)
 
 
 def _env_int(name: str, default: int) -> int:
-    raw = os.environ.get(name, "").strip()
-    if not raw:
-        return default
-    try:
-        return int(raw)
-    except ValueError:
-        return default
+    return env_int(name, default)
 
 
 def _env_float(name: str, default: float) -> float:
-    raw = os.environ.get(name, "").strip()
-    if not raw:
-        return default
-    try:
-        return float(raw)
-    except ValueError:
-        return default
+    return env_float(name, default)
 
 
 def _resolve_strategy_id(raw: str, *, default_id: str) -> str:
     requested = raw.strip() if isinstance(raw, str) else ""
-    candidate = requested or default_id.strip() or "v0"
-    plugin = get_strategy(candidate)
+    candidate = requested or default_id.strip() or "s001"
+    plugin = get_strategy(resolve_strategy_id(candidate))
     return normalize_strategy_id(plugin.info.id)
 
 
@@ -699,62 +700,19 @@ def _teams_in_scope(event_context: dict[str, dict[str, str]]) -> set[str]:
 
 
 def _teams_in_scope_from_events(events: list[dict[str, Any]]) -> set[str]:
-    teams: set[str] = set()
-    for event in events:
-        if not isinstance(event, dict):
-            continue
-        home = str(event.get("home_team", "")).strip()
-        away = str(event.get("away_team", "")).strip()
-        if home:
-            teams.add(home)
-        if away:
-            teams.add(away)
-    return teams
+    return teams_in_scope_from_events(events)
 
 
 def _official_rows_count(official: dict[str, Any]) -> int:
-    rows = official.get("rows", [])
-    rows_count = len(rows) if isinstance(rows, list) else 0
-    raw_count = official.get("rows_count", rows_count)
-    if isinstance(raw_count, bool):
-        return rows_count
-    if isinstance(raw_count, (int, float)):
-        return max(0, int(raw_count))
-    if isinstance(raw_count, str):
-        try:
-            return max(0, int(raw_count.strip()))
-        except ValueError:
-            return rows_count
-    return rows_count
+    return official_rows_count(official)
 
 
 def _official_source_ready(official: dict[str, Any]) -> bool:
-    if str(official.get("status", "")) != "ok":
-        return False
-    if _official_rows_count(official) <= 0:
-        return False
-    parse_status = str(official.get("parse_status", ""))
-    return parse_status in {"", "ok"}
+    return official_source_ready(official)
 
 
 def _secondary_source_ready(secondary: dict[str, Any]) -> bool:
-    if str(secondary.get("status", "")) != "ok":
-        return False
-    rows = secondary.get("rows", [])
-    row_count = len(rows) if isinstance(rows, list) else 0
-    raw_count = secondary.get("count", row_count)
-    if isinstance(raw_count, bool):
-        count = row_count
-    elif isinstance(raw_count, (int, float)):
-        count = int(raw_count)
-    elif isinstance(raw_count, str):
-        try:
-            count = int(raw_count.strip())
-        except ValueError:
-            count = row_count
-    else:
-        count = row_count
-    return count > 0
+    return secondary_source_ready(secondary)
 
 
 def _allow_secondary_injuries_override(*, cli_flag: bool) -> bool:
@@ -1226,6 +1184,7 @@ def _cmd_strategy_health(args: argparse.Namespace) -> int:
             "injuries_context": str(injuries_path),
             "roster_context": str(roster_path),
         },
+        "state_key": strategy_health_state_key(),
     }
     if bool(getattr(args, "json_output", True)):
         print(json.dumps(payload, sort_keys=True, indent=2))
@@ -1394,7 +1353,7 @@ def _cmd_strategy_run(args: argparse.Namespace) -> int:
     if secondary_override_active:
         print("note=official_injury_missing_using_secondary_override")
 
-    strategy_requested = str(getattr(args, "strategy", "v0"))
+    strategy_requested = str(getattr(args, "strategy", "s001"))
     plugin = get_strategy(strategy_requested)
     config = StrategyRunConfig(
         top_n=int(args.top_n),
@@ -1419,7 +1378,7 @@ def _cmd_strategy_run(args: argparse.Namespace) -> int:
     strategy_id = normalize_strategy_id(plugin.info.id)
     write_canonical_raw = getattr(args, "write_canonical", None)
     if write_canonical_raw is None:
-        write_canonical = bool(strategy_id == "v0")
+        write_canonical = bool(strategy_id == "s001")
     else:
         write_canonical = bool(write_canonical_raw)
 
@@ -1461,6 +1420,9 @@ def _cmd_strategy_run(args: argparse.Namespace) -> int:
         )
     )
     print(f"strategy_id={strategy_id}")
+    title = strategy_title(strategy_id)
+    if title:
+        print(f"strategy_title={title}")
     print(f"health_gates={','.join(health_gates) if health_gates else 'none'}")
     print(f"report_json={json_path}")
     print(f"report_md={md_path}")
@@ -1487,7 +1449,7 @@ def _cmd_strategy_ls(args: argparse.Namespace) -> int:
     del args
     for plugin in list_strategies():
         strategy_id = normalize_strategy_id(plugin.info.id)
-        print(f"{strategy_id}\t{plugin.info.description}")
+        print(f"{strategy_id}\t{plugin.info.name}\t{plugin.info.description}")
     return 0
 
 
@@ -1496,11 +1458,12 @@ def _parse_strategy_ids(raw: str) -> list[str]:
     seen: set[str] = set()
     parsed: list[str] = []
     for value in values:
-        normalized = normalize_strategy_id(value)
-        if normalized in seen:
+        plugin = get_strategy(resolve_strategy_id(value))
+        canonical_id = normalize_strategy_id(plugin.info.id)
+        if canonical_id in seen:
             continue
-        seen.add(normalized)
-        parsed.append(normalized)
+        seen.add(canonical_id)
+        parsed.append(canonical_id)
     return parsed
 
 
@@ -1762,7 +1725,7 @@ def _cmd_strategy_backtest_summarize(args: argparse.Namespace) -> int:
             raise CLIError("backtest-summarize requires --strategies or --results")
         for strategy_id in strategy_ids:
             path = reports_dir / f"backtest-results-template.{strategy_id}.csv"
-            if strategy_id == "v0" and not path.exists():
+            if strategy_id == "s001" and not path.exists():
                 path = reports_dir / "backtest-results-template.csv"
             paths.append((strategy_id, path))
 
@@ -2301,7 +2264,13 @@ def _cmd_playbook_run(args: argparse.Namespace) -> int:
             end_budget["odds"].get("cap_reached", False),
         )
     )
+    mode_desc = playbook_mode_key().get(mode, "")
+    if mode_desc:
+        print(f"mode_desc={mode_desc}")
     print(f"strategy_id={strategy_id}")
+    title = strategy_title(strategy_id)
+    if title:
+        print(f"strategy_title={title}")
     preflight_gates = (
         preflight_context.get("health_gates", [])
         if isinstance(preflight_context.get("health_gates"), list)
@@ -2350,7 +2319,7 @@ def _cmd_playbook_render(args: argparse.Namespace) -> int:
             existing_id = ""
             if isinstance(existing, dict):
                 existing_id = str(existing.get("strategy_id", "")).strip()
-            existing_id = normalize_strategy_id(existing_id) if existing_id else "v0"
+            existing_id = normalize_strategy_id(existing_id) if existing_id else "s001"
             strategy_needs_refresh = existing_id != strategy_id
     if strategy_needs_refresh:
         code = _run_strategy_for_playbook(
@@ -2382,6 +2351,9 @@ def _cmd_playbook_render(args: argparse.Namespace) -> int:
     )
     print(f"snapshot_id={snapshot_id}")
     print(f"strategy_id={strategy_id}")
+    title = strategy_title(strategy_id)
+    if title:
+        print(f"strategy_title={title}")
     print(f"strategy_brief_md={brief['report_markdown']}")
     print(f"strategy_brief_tex={brief['report_tex']}")
     print(f"strategy_brief_pdf={brief['report_pdf']}")
@@ -2568,6 +2540,9 @@ def _cmd_playbook_discover_execute(args: argparse.Namespace) -> int:
     print(f"discovery_snapshot_id={discovery_snapshot_id}")
     print(f"execution_snapshot_id={execution_snapshot_id}")
     print(f"strategy_id={strategy_id}")
+    title = strategy_title(strategy_id)
+    if title:
+        print(f"strategy_title={title}")
     print(
         "actionable_rows={} matched_rows={} discovery_eligible_rows={}".format(
             summary.get("actionable_rows", 0),
@@ -2665,7 +2640,7 @@ def _build_parser() -> argparse.ArgumentParser:
     strategy_run = strategy_subparsers.add_parser("run", help="Generate strategy report")
     strategy_run.set_defaults(func=_cmd_strategy_run)
     strategy_run.add_argument("--snapshot-id", default="")
-    strategy_run.add_argument("--strategy", default="v0")
+    strategy_run.add_argument("--strategy", default="s001")
     strategy_run.add_argument("--top-n", type=int, default=25)
     strategy_run.add_argument("--min-ev", type=float, default=0.01)
     strategy_run.add_argument("--allow-tier-b", action="store_true")

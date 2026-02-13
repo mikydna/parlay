@@ -57,7 +57,7 @@ Deliverables:
   - the exact execution price used for grading (graded_price_american)
 
 Acceptance:
-- `make ci` passes
+- `uv run ruff check .`, `uv run pyright`, and `uv run pytest -q` pass
 - The same snapshot rerun produces identical reports.
 
 ### M1: Strategy Plugin Framework + CLI Harness
@@ -65,13 +65,13 @@ Acceptance:
 Goal: run multiple strategies on the same snapshot and write artifacts side-by-side.
 
 Deliverables:
-- Strategy registry with ids like: v0, baseline_median_novig, gate_dispersion_iqr, ...
+- Strategy registry with ids like: s001, s003, s006, ...
 - CLI:
   - `prop-ev strategy ls`
   - `prop-ev strategy run --strategy <id>`
   - `prop-ev strategy compare --strategies <csv>`
 - Report outputs:
-  - canonical `strategy-report.json` for v0
+  - canonical `strategy-report.json` for s001
   - suffixed outputs for all strategies:
     - `strategy-report.<id>.json`
     - `strategy-report.<id>.md`
@@ -108,22 +108,22 @@ Acceptance:
 Goal: reduce fake edges caused by stale inputs and outlier lines.
 
 Initial plugins to implement (recommended):
-1) `baseline_median_novig`
+1) `s003` (Median No-Vig Baseline)
 - Change only: compute market baseline as:
   - for each book with both sides: no-vig p_over_book, hold_book
   - aggregate baseline p_over_fair = median(p_over_book)
   - aggregate hold = median(hold_book)
 - Rationale: makes hold interpretable and avoids "best-over + best-under" artifacts.
 
-2) `gate_book_pairs_min2`
+2) `s004` (Min-2 Book-Pair Gate)
 - Change only: require at least 2 books that have both over+under for that exact line.
 - Rationale: avoid false Tier A depth when only one side is populated.
 
-3) `gate_hold_cap`
+3) `s005` (Hold-Cap Gate)
 - Change only: demote/skip when median hold exceeds a threshold.
 - Rationale: high overround implies worse price quality and more fragility.
 
-4) `gate_dispersion_iqr`
+4) `s006` (Dispersion-IQR Gate)
 - Change only: demote/skip when dispersion of p_over_book is high (IQR or max-min).
 - Rationale: large disagreement signals alt-line confusion, stale feed, or news.
 
@@ -169,7 +169,7 @@ Goal: converge to one strategy id for daily use without overfitting.
 Policy (recommended):
 - Select global winner by ROI subject to:
   - minimum graded bet count (example: >= 200)
-  - guardrails: no catastrophic calibration (Brier materially worse than v0)
+  - guardrails: no catastrophic calibration (Brier materially worse than s001 baseline)
 - When a winner is chosen:
   - set it as the default strategy id in CLI/env
   - document the rationale and evaluation window in the repo
@@ -196,4 +196,3 @@ Runbook (high-level):
   - if missing, assume 1.0 for ROI
 - Determinism:
   - no network calls during strategy evaluation; strategies operate on snapshot-derived rows only.
-
