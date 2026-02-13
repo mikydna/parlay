@@ -14,6 +14,18 @@ from typing import Any
 
 from prop_ev.backtest import ROW_SELECTIONS, write_backtest_artifacts
 from prop_ev.budget import current_month_utc
+from prop_ev.cli_internal import (
+    default_window,
+    env_bool,
+    env_float,
+    env_int,
+    teams_in_scope_from_events,
+)
+from prop_ev.context_health import (
+    official_rows_count,
+    official_source_ready,
+    secondary_source_ready,
+)
 from prop_ev.context_sources import (
     fetch_official_injury_links,
     fetch_roster_context,
@@ -47,6 +59,7 @@ from prop_ev.strategies.base import (
     normalize_strategy_id,
 )
 from prop_ev.strategy import build_strategy_report, load_jsonl, write_strategy_reports
+from prop_ev.time_utils import iso_z, utc_now
 
 
 class CLIError(RuntimeError):
@@ -102,44 +115,27 @@ def _resolve_bookmakers(explicit: str, *, allow_config: bool = True) -> tuple[st
 
 
 def _utc_now() -> datetime:
-    return datetime.now(UTC).replace(microsecond=0)
+    return utc_now()
 
 
 def _iso(dt: datetime) -> str:
-    return dt.isoformat().replace("+00:00", "Z")
+    return iso_z(dt)
 
 
 def _default_window() -> tuple[str, str]:
-    start = _utc_now().replace(hour=0, minute=0, second=0)
-    end = start + timedelta(hours=32)
-    return _iso(start), _iso(end)
+    return default_window()
 
 
 def _env_bool(name: str, default: bool) -> bool:
-    raw = os.environ.get(name, "").strip().lower()
-    if not raw:
-        return default
-    return raw in {"1", "true", "yes", "y", "on"}
+    return env_bool(name, default)
 
 
 def _env_int(name: str, default: int) -> int:
-    raw = os.environ.get(name, "").strip()
-    if not raw:
-        return default
-    try:
-        return int(raw)
-    except ValueError:
-        return default
+    return env_int(name, default)
 
 
 def _env_float(name: str, default: float) -> float:
-    raw = os.environ.get(name, "").strip()
-    if not raw:
-        return default
-    try:
-        return float(raw)
-    except ValueError:
-        return default
+    return env_float(name, default)
 
 
 def _resolve_strategy_id(raw: str, *, default_id: str) -> str:
@@ -699,62 +695,19 @@ def _teams_in_scope(event_context: dict[str, dict[str, str]]) -> set[str]:
 
 
 def _teams_in_scope_from_events(events: list[dict[str, Any]]) -> set[str]:
-    teams: set[str] = set()
-    for event in events:
-        if not isinstance(event, dict):
-            continue
-        home = str(event.get("home_team", "")).strip()
-        away = str(event.get("away_team", "")).strip()
-        if home:
-            teams.add(home)
-        if away:
-            teams.add(away)
-    return teams
+    return teams_in_scope_from_events(events)
 
 
 def _official_rows_count(official: dict[str, Any]) -> int:
-    rows = official.get("rows", [])
-    rows_count = len(rows) if isinstance(rows, list) else 0
-    raw_count = official.get("rows_count", rows_count)
-    if isinstance(raw_count, bool):
-        return rows_count
-    if isinstance(raw_count, (int, float)):
-        return max(0, int(raw_count))
-    if isinstance(raw_count, str):
-        try:
-            return max(0, int(raw_count.strip()))
-        except ValueError:
-            return rows_count
-    return rows_count
+    return official_rows_count(official)
 
 
 def _official_source_ready(official: dict[str, Any]) -> bool:
-    if str(official.get("status", "")) != "ok":
-        return False
-    if _official_rows_count(official) <= 0:
-        return False
-    parse_status = str(official.get("parse_status", ""))
-    return parse_status in {"", "ok"}
+    return official_source_ready(official)
 
 
 def _secondary_source_ready(secondary: dict[str, Any]) -> bool:
-    if str(secondary.get("status", "")) != "ok":
-        return False
-    rows = secondary.get("rows", [])
-    row_count = len(rows) if isinstance(rows, list) else 0
-    raw_count = secondary.get("count", row_count)
-    if isinstance(raw_count, bool):
-        count = row_count
-    elif isinstance(raw_count, (int, float)):
-        count = int(raw_count)
-    elif isinstance(raw_count, str):
-        try:
-            count = int(raw_count.strip())
-        except ValueError:
-            count = row_count
-    else:
-        count = row_count
-    return count > 0
+    return secondary_source_ready(secondary)
 
 
 def _allow_secondary_injuries_override(*, cli_flag: bool) -> bool:

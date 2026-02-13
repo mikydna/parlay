@@ -17,6 +17,8 @@ from zoneinfo import ZoneInfo
 
 import httpx
 
+from prop_ev.time_utils import parse_iso_z, utc_now_str
+
 OFFICIAL_INJURY_URLS = [
     "https://official.nba.com/nba-injury-report-2025-26-season/",
     "https://official.nba.com/nba-injury-report/",
@@ -166,7 +168,7 @@ OFFICIAL_ET_ZONE = ZoneInfo("America/New_York")
 
 def now_utc() -> str:
     """Return an ISO UTC timestamp."""
-    return datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    return utc_now_str()
 
 
 def canonical_team_name(name: str) -> str:
@@ -966,18 +968,7 @@ def fetch_roster_context(*, teams_in_scope: list[str] | None = None) -> dict[str
 
 
 def _parse_iso_utc(value: str) -> datetime | None:
-    raw = value.strip()
-    if not raw:
-        return None
-    if raw.endswith("Z"):
-        raw = raw[:-1] + "+00:00"
-    try:
-        parsed = datetime.fromisoformat(raw)
-    except ValueError:
-        return None
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=UTC)
-    return parsed.astimezone(UTC)
+    return parse_iso_z(value)
 
 
 def _apply_stale_flag(payload: dict[str, Any], stale_after_hours: float | None) -> dict[str, Any]:

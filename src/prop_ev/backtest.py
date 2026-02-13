@@ -5,15 +5,16 @@ from __future__ import annotations
 import csv
 import hashlib
 import json
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+
+from prop_ev.time_utils import utc_now_str
 
 ROW_SELECTIONS = {"eligible", "ranked", "top_ev", "one_source", "all_candidates"}
 
 
 def _now_utc() -> str:
-    return datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    return utc_now_str()
 
 
 def _safe_float(value: Any) -> float | None:

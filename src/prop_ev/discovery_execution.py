@@ -3,19 +3,21 @@
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from prop_ev.odds_math import american_to_decimal, ev_from_prob_and_price
 from prop_ev.storage import SnapshotStore
+from prop_ev.time_utils import iso_z, utc_now
 
 
 def _utc_now() -> datetime:
-    return datetime.now(UTC).replace(microsecond=0)
+    return utc_now()
 
 
 def _iso(dt: datetime) -> str:
-    return dt.isoformat().replace("+00:00", "Z")
+    return iso_z(dt)
 
 
 def _to_price(value: Any) -> int | None:
@@ -39,22 +41,11 @@ def _to_price(value: Any) -> int | None:
 
 
 def _american_to_decimal(price: int | None) -> float | None:
-    if price is None:
-        return None
-    if price > 0:
-        return 1.0 + (price / 100.0)
-    if price < 0:
-        return 1.0 + (100.0 / abs(price))
-    return None
+    return american_to_decimal(price)
 
 
 def _ev_from_prob_and_price(probability: float | None, price: int | None) -> float | None:
-    if probability is None or probability <= 0 or probability >= 1:
-        return None
-    decimal_odds = _american_to_decimal(price)
-    if decimal_odds is None or decimal_odds <= 1.0:
-        return None
-    return (probability * (decimal_odds - 1.0)) - (1.0 - probability)
+    return ev_from_prob_and_price(probability, price)
 
 
 def _format_price(price: int | None) -> str:

@@ -7,7 +7,6 @@ import json
 import os
 import time
 from collections.abc import Callable
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -16,6 +15,7 @@ import httpx
 from prop_ev.budget import current_month_utc, llm_budget_status
 from prop_ev.odds_client import parse_csv
 from prop_ev.settings import Settings
+from prop_ev.time_utils import utc_now_str
 
 INPUT_RATE_PER_1M_USD = 0.25
 OUTPUT_RATE_PER_1M_USD = 1.0
@@ -46,7 +46,7 @@ PostFn = Callable[[str, dict[str, str], dict[str, Any], float], dict[str, Any]]
 
 
 def _now_utc() -> str:
-    return datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    return utc_now_str()
 
 
 def _to_int(value: Any) -> int:

@@ -4,17 +4,17 @@ from __future__ import annotations
 
 import json
 import re
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 from prop_ev.context_sources import canonical_team_name, normalize_person_name
+from prop_ev.time_utils import utc_now_str
 
 SUFFIXES = {"jr", "sr", "ii", "iii", "iv", "v"}
 
 
 def _now_utc() -> str:
-    return datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    return utc_now_str()
 
 
 def name_aliases(name: str) -> list[str]:

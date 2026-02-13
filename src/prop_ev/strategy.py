@@ -11,8 +11,18 @@ from urllib.parse import quote_plus
 from zoneinfo import ZoneInfo
 
 from prop_ev.brief_builder import TEAM_ABBREVIATIONS
+from prop_ev.context_health import official_rows_count
 from prop_ev.context_sources import canonical_team_name, normalize_person_name
 from prop_ev.identity_map import name_aliases
+from prop_ev.models.v0_minutes_usage import market_side_adjustment_v0, minutes_usage_v0
+from prop_ev.odds_math import (
+    american_to_decimal,
+    decimal_to_american,
+    ev_from_prob_and_price,
+    implied_prob_from_american,
+    normalize_prob_pair,
+)
+from prop_ev.time_utils import parse_iso_z, utc_now_str
 
 ET_ZONE = ZoneInfo("America/New_York")
 MARKET_LABELS = {
@@ -64,22 +74,11 @@ TEAM_NBA_ROSTER_SLUGS = {
 
 
 def _now_utc() -> str:
-    return datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    return utc_now_str()
 
 
 def _parse_iso_utc(value: str) -> datetime | None:
-    raw = value.strip()
-    if not raw:
-        return None
-    if raw.endswith("Z"):
-        raw = raw[:-1] + "+00:00"
-    try:
-        parsed = datetime.fromisoformat(raw)
-    except ValueError:
-        return None
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=UTC)
-    return parsed.astimezone(UTC)
+    return parse_iso_z(value)
 
 
 def _et_date_label(event_context: dict[str, dict[str, str]] | None) -> str:
@@ -164,39 +163,19 @@ def _fmt_american(value: Any) -> str:
 
 
 def _implied_prob_from_american(price: int | None) -> float | None:
-    if price is None:
-        return None
-    if price > 0:
-        return 100.0 / (price + 100.0)
-    if price < 0:
-        value = -price
-        return value / (value + 100.0)
-    return None
+    return implied_prob_from_american(price)
 
 
 def _american_to_decimal(price: int | None) -> float | None:
-    if price is None:
-        return None
-    if price > 0:
-        return 1.0 + (price / 100.0)
-    if price < 0:
-        return 1.0 + (100.0 / abs(price))
-    return None
+    return american_to_decimal(price)
 
 
 def _decimal_to_american(decimal_odds: float | None) -> int | None:
-    if decimal_odds is None or decimal_odds <= 1.0:
-        return None
-    if decimal_odds >= 2.0:
-        return int(round((decimal_odds - 1.0) * 100.0))
-    return int(round(-100.0 / (decimal_odds - 1.0)))
+    return decimal_to_american(decimal_odds)
 
 
 def _normalize_prob_pair(over_prob: float, under_prob: float) -> tuple[float, float]:
-    total = over_prob + under_prob
-    if total <= 0:
-        return 0.5, 0.5
-    return over_prob / total, under_prob / total
+    return normalize_prob_pair(over_prob, under_prob)
 
 
 def _median(values: list[float]) -> float | None:
@@ -388,21 +367,7 @@ def _merged_injury_rows(injuries: dict[str, Any] | None) -> list[dict[str, Any]]
 
 
 def _official_rows_count(official: dict[str, Any] | None) -> int:
-    if not isinstance(official, dict):
-        return 0
-    rows = official.get("rows", [])
-    rows_count = len(rows) if isinstance(rows, list) else 0
-    raw_count = official.get("rows_count", rows_count)
-    if isinstance(raw_count, bool):
-        return rows_count
-    if isinstance(raw_count, (int, float)):
-        return max(0, int(raw_count))
-    if isinstance(raw_count, str):
-        try:
-            return max(0, int(raw_count.strip()))
-        except ValueError:
-            return rows_count
-    return rows_count
+    return official_rows_count(official)
 
 
 def _injury_index(injuries: dict[str, Any] | None) -> dict[str, dict[str, str]]:
@@ -600,50 +565,13 @@ def _minutes_usage_v0(
     teammate_counts: dict[str, int],
     spread_abs: float | None,
 ) -> dict[str, float]:
-    """Simple deterministic minutes/usage projection layer (v0)."""
-    baseline_minutes_by_market = {
-        "player_points": 31.0,
-        "player_rebounds": 30.0,
-        "player_assists": 31.0,
-        "player_threes": 30.0,
-        "player_points_rebounds_assists": 32.0,
-    }
-    baseline = baseline_minutes_by_market.get(market, 30.0)
-    projected = baseline
-
-    teammate_out = teammate_counts.get("out", 0) + teammate_counts.get("out_for_season", 0)
-    teammate_doubtful = teammate_counts.get("doubtful", 0)
-    projected += min(4.0, (teammate_out * 1.1) + (teammate_doubtful * 0.5))
-
-    if injury_status == "doubtful":
-        projected -= 6.0
-    elif injury_status == "questionable":
-        projected -= 3.0
-    elif injury_status == "day_to_day":
-        projected -= 2.0
-    elif injury_status == "probable":
-        projected -= 0.5
-
-    if roster_status in {"unknown_roster", "unknown_event"}:
-        projected -= 1.5
-
-    if spread_abs is not None and spread_abs >= 8.0:
-        projected -= 1.0
-    if spread_abs is not None and spread_abs >= 12.0:
-        projected -= 1.0
-
-    projected = max(10.0, min(40.0, projected))
-    minutes_delta = projected - baseline
-    usage_delta = min(0.09, max(-0.08, (teammate_out * 0.012) + (teammate_doubtful * 0.006)))
-    if injury_status in {"questionable", "doubtful"}:
-        usage_delta -= 0.01
-
-    return {
-        "baseline_minutes": round(baseline, 2),
-        "projected_minutes": round(projected, 2),
-        "minutes_delta": round(minutes_delta, 2),
-        "usage_delta": round(usage_delta, 4),
-    }
+    return minutes_usage_v0(
+        market=market,
+        injury_status=injury_status,
+        roster_status=roster_status,
+        teammate_counts=teammate_counts,
+        spread_abs=spread_abs,
+    )
 
 
 def _market_side_adjustment_v0(
@@ -652,50 +580,11 @@ def _market_side_adjustment_v0(
     minutes_projection: dict[str, float],
     opponent_counts: dict[str, int],
 ) -> float:
-    """Convert minutes/usage/opponent context into probability delta for OVER side."""
-    minutes_delta = float(minutes_projection.get("minutes_delta", 0.0))
-    usage_delta = float(minutes_projection.get("usage_delta", 0.0))
-    opponent_out = opponent_counts.get("out", 0) + opponent_counts.get("out_for_season", 0)
-
-    minutes_weight = {
-        "player_points": 0.008,
-        "player_rebounds": 0.007,
-        "player_assists": 0.008,
-        "player_threes": 0.006,
-        "player_points_rebounds_assists": 0.009,
-        "player_turnovers": 0.005,
-        "player_blocks": 0.004,
-        "player_steals": 0.004,
-        "player_blocks_steals": 0.004,
-    }.get(market, 0.007)
-
-    usage_weight = {
-        "player_points": 0.65,
-        "player_rebounds": 0.35,
-        "player_assists": 0.45,
-        "player_threes": 0.5,
-        "player_points_rebounds_assists": 0.75,
-        "player_turnovers": 0.4,
-        "player_blocks": 0.2,
-        "player_steals": 0.2,
-        "player_blocks_steals": 0.2,
-    }.get(market, 0.4)
-
-    opponent_weight = {
-        "player_points": 0.006,
-        "player_rebounds": 0.004,
-        "player_assists": 0.004,
-        "player_threes": 0.003,
-        "player_points_rebounds_assists": 0.007,
-        "player_turnovers": -0.005,
-        "player_blocks": -0.003,
-        "player_steals": -0.003,
-        "player_blocks_steals": -0.003,
-    }.get(market, 0.003)
-
-    delta = (minutes_delta * minutes_weight) + (usage_delta * usage_weight)
-    delta += opponent_out * opponent_weight
-    return max(-0.12, min(0.12, delta))
+    return market_side_adjustment_v0(
+        market=market,
+        minutes_projection=minutes_projection,
+        opponent_counts=opponent_counts,
+    )
 
 
 def _probability_adjustment(
@@ -745,7 +634,8 @@ def _probability_adjustment(
 def _ev_and_kelly(
     probability: float | None, american_price: int | None
 ) -> tuple[float | None, float | None]:
-    if probability is None:
+    ev = ev_from_prob_and_price(probability, american_price)
+    if ev is None:
         return None, None
     decimal_odds = _american_to_decimal(american_price)
     if decimal_odds is None:
@@ -753,7 +643,6 @@ def _ev_and_kelly(
     profit_if_win = decimal_odds - 1.0
     if profit_if_win <= 0:
         return None, None
-    ev = (probability * profit_if_win) - (1.0 - probability)
     kelly = ev / profit_if_win
     return round(ev, 6), round(kelly, 6)
 

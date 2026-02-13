@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 from shutil import copy2
 from typing import Any
@@ -47,25 +47,15 @@ from prop_ev.llm_client import (
 )
 from prop_ev.settings import Settings
 from prop_ev.storage import SnapshotStore
+from prop_ev.time_utils import parse_iso_z, utc_now_str
 
 
 def _now_utc() -> str:
-    return datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    return utc_now_str()
 
 
 def _parse_iso_utc(value: str) -> datetime | None:
-    raw = value.strip()
-    if not raw:
-        return None
-    if raw.endswith("Z"):
-        raw = raw[:-1] + "+00:00"
-    try:
-        parsed = datetime.fromisoformat(raw)
-    except ValueError:
-        return None
-    if parsed.tzinfo is None:
-        return parsed.replace(tzinfo=UTC)
-    return parsed.astimezone(UTC)
+    return parse_iso_z(value)
 
 
 def _write_json(path: Path, value: Any) -> Path:
