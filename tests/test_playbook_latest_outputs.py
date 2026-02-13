@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 import prop_ev.playbook as playbook
-from prop_ev.playbook import generate_brief_for_snapshot
+from prop_ev.playbook import generate_brief_for_snapshot, report_outputs_root
 from prop_ev.settings import Settings
 from prop_ev.storage import SnapshotStore
 
@@ -109,7 +109,7 @@ def test_generate_brief_writes_snapshot_and_latest(
     assert (reports_dir / "strategy-brief.tex").exists()
     assert (reports_dir / "strategy-brief.meta.json").exists()
 
-    latest_dir = store.root / "reports" / "latest"
+    latest_dir = report_outputs_root(store) / "latest"
     assert (latest_dir / "strategy-brief.md").exists()
     assert (latest_dir / "strategy-brief.tex").exists()
     markdown = (reports_dir / "strategy-brief.md").read_text(encoding="utf-8")
@@ -126,6 +126,54 @@ def test_generate_brief_writes_snapshot_and_latest(
     latest_payload = json.loads((latest_dir / "latest.json").read_text(encoding="utf-8"))
     assert latest_payload["snapshot_id"] == snapshot_id
     assert result["snapshot_id"] == snapshot_id
+
+
+def test_generate_brief_tagged_outputs_skip_latest_publish(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("ODDS_API_KEY", "odds-test")
+    monkeypatch.setenv("PROP_EV_DATA_DIR", str(tmp_path / "data" / "odds_api"))
+
+    store = SnapshotStore(tmp_path / "data" / "odds_api")
+    snapshot_id = "2026-02-11T17-30-00Z"
+    reports_dir = store.ensure_snapshot(snapshot_id) / "reports"
+    reports_dir.mkdir(parents=True, exist_ok=True)
+
+    tagged_strategy_path = reports_dir / "strategy-report.execution-draftkings.json"
+    tagged_strategy_path.write_text(
+        json.dumps(_sample_strategy_report(), sort_keys=True, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+    settings = Settings(_env_file=None)
+    result = generate_brief_for_snapshot(
+        store=store,
+        settings=settings,
+        snapshot_id=snapshot_id,
+        top_n=5,
+        llm_refresh=False,
+        llm_offline=True,
+        strategy_report_path=tagged_strategy_path,
+        artifact_tag="draftkings-replay",
+    )
+
+    assert (reports_dir / "brief-input.draftkings-replay.json").exists()
+    assert (reports_dir / "brief-pass1.draftkings-replay.json").exists()
+    assert (reports_dir / "brief-analyst.draftkings-replay.json").exists()
+    assert (reports_dir / "strategy-brief.draftkings-replay.md").exists()
+    assert (reports_dir / "strategy-brief.draftkings-replay.tex").exists()
+    assert (reports_dir / "strategy-brief.meta.draftkings-replay.json").exists()
+    assert not (reports_dir / "strategy-brief.md").exists()
+    assert not (reports_dir / "brief-input.json").exists()
+
+    latest_dir = report_outputs_root(store) / "latest"
+    assert not (latest_dir / "strategy-brief.md").exists()
+    assert not (latest_dir / "latest.json").exists()
+
+    meta = json.loads(Path(result["report_meta"]).read_text(encoding="utf-8"))
+    assert meta["artifact_tag"] == "draftkings-replay"
+    assert meta["strategy_report_path"] == str(tagged_strategy_path)
+    assert result["report_markdown"].endswith("strategy-brief.draftkings-replay.md")
 
 
 def test_generate_brief_pass1_retries_then_succeeds(

@@ -1,10 +1,12 @@
 import json
 import shutil
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 
 from prop_ev.cli import _run_strategy_for_playbook, main
+from prop_ev.playbook import report_outputs_root
 from prop_ev.storage import SnapshotStore
 
 
@@ -13,6 +15,110 @@ def local_data_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     data_dir = tmp_path / "data" / "odds_api"
     monkeypatch.setenv("PROP_EV_DATA_DIR", str(data_dir))
     return data_dir
+
+
+def _seed_strategy_snapshot(store: SnapshotStore, snapshot_id: str) -> Path:
+    snapshot_dir = store.ensure_snapshot(snapshot_id)
+    now_utc = datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    context_dir = snapshot_dir / "context"
+    context_dir.mkdir(parents=True, exist_ok=True)
+    (context_dir / "injuries.json").write_text(
+        json.dumps(
+            {
+                "fetched_at_utc": now_utc,
+                "official": {
+                    "status": "ok",
+                    "parse_status": "ok",
+                    "rows_count": 1,
+                    "count": 1,
+                    "pdf_links": ["https://example.com/injury.pdf"],
+                    "rows": [
+                        {
+                            "player": "Player A",
+                            "player_norm": "playera",
+                            "team": "Boston Celtics",
+                            "team_norm": "boston celtics",
+                            "status": "available",
+                            "note": "",
+                            "source": "official_nba_pdf",
+                        }
+                    ],
+                },
+                "secondary": {"status": "ok", "rows": [], "count": 0},
+            },
+            sort_keys=True,
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (context_dir / "roster.json").write_text(
+        json.dumps(
+            {
+                "source": "nba_live_scoreboard",
+                "url": "https://example.com/roster",
+                "status": "ok",
+                "fetched_at_utc": now_utc,
+                "count_teams": 0,
+                "missing_roster_teams": [],
+                "teams": {},
+            },
+            sort_keys=True,
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    store.write_jsonl(
+        snapshot_dir / "derived" / "event_props.jsonl",
+        [
+            {
+                "event_id": "event-1",
+                "market": "player_points",
+                "player": "Player A",
+                "point": 22.5,
+                "side": "Over",
+                "price": -105,
+                "book": "draftkings",
+                "link": "https://example.com/dk-over",
+                "last_update": now_utc,
+            },
+            {
+                "event_id": "event-1",
+                "market": "player_points",
+                "player": "Player A",
+                "point": 22.5,
+                "side": "Under",
+                "price": -115,
+                "book": "draftkings",
+                "link": "https://example.com/dk-under",
+                "last_update": now_utc,
+            },
+            {
+                "event_id": "event-1",
+                "market": "player_points",
+                "player": "Player A",
+                "point": 22.5,
+                "side": "Over",
+                "price": -108,
+                "book": "fanduel",
+                "link": "https://example.com/fd-over",
+                "last_update": now_utc,
+            },
+            {
+                "event_id": "event-1",
+                "market": "player_points",
+                "player": "Player A",
+                "point": 22.5,
+                "side": "Under",
+                "price": -112,
+                "book": "fanduel",
+                "link": "https://example.com/fd-under",
+                "last_update": now_utc,
+            },
+        ],
+    )
+    return snapshot_dir
 
 
 def test_snapshot_ls_show_diff(local_data_dir: Path, capsys) -> None:
@@ -244,6 +350,68 @@ def test_strategy_compare_writes_suffixed_outputs(
     assert (snapshot_dir / "reports" / "strategy-report.s002.json").exists()
 
 
+def test_strategy_run_replay_mode_adjusts_freshness_config(
+    local_data_dir: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    store = SnapshotStore(local_data_dir)
+    snapshot_id = "2026-02-11T10-12-00Z"
+    _seed_strategy_snapshot(store, snapshot_id)
+
+    code = main(
+        [
+            "strategy",
+            "run",
+            "--snapshot-id",
+            snapshot_id,
+            "--offline",
+            "--mode",
+            "replay",
+        ]
+    )
+    out = capsys.readouterr().out
+
+    assert code == 0
+    assert "strategy_run_mode=replay" in out
+    assert "stale_quote_minutes=1000000" in out
+    assert "require_fresh_context=false" in out
+
+
+def test_strategy_run_writes_execution_tagged_report(
+    local_data_dir: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    store = SnapshotStore(local_data_dir)
+    snapshot_id = "2026-02-11T10-13-00Z"
+    snapshot_dir = _seed_strategy_snapshot(store, snapshot_id)
+
+    code = main(
+        [
+            "strategy",
+            "run",
+            "--snapshot-id",
+            snapshot_id,
+            "--strategy",
+            "s002",
+            "--offline",
+            "--execution-bookmakers",
+            "draftkings",
+            "--execution-requires-pre-bet-ready",
+            "--execution-requires-meets-play-to",
+            "--execution-top-n",
+            "5",
+        ]
+    )
+    out = capsys.readouterr().out
+
+    assert code == 0
+    assert (snapshot_dir / "reports" / "strategy-report.execution-draftkings.json").exists()
+    assert (snapshot_dir / "reports" / "strategy-report.execution-draftkings.md").exists()
+    assert (snapshot_dir / "reports" / "strategy-card.execution-draftkings.md").exists()
+    assert "execution_bookmakers=draftkings" in out
+    assert "execution_tag=execution-draftkings" in out
+    assert "execution_report_json=" in out
+    assert "execution_report_md=" in out
+
+
 def test_run_strategy_for_playbook_passes_strategy_id(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -251,6 +419,7 @@ def test_run_strategy_for_playbook_passes_strategy_id(
 
     def _fake_cmd(args) -> int:
         captured["strategy"] = getattr(args, "strategy", "")
+        captured["mode"] = getattr(args, "mode", "")
         captured["write_canonical"] = getattr(args, "write_canonical", None)
         return 0
 
@@ -264,12 +433,65 @@ def test_run_strategy_for_playbook_passes_strategy_id(
         offline=True,
         block_paid=True,
         refresh_context=False,
+        strategy_mode="replay",
         write_canonical=True,
     )
 
     assert code == 0
     assert captured["strategy"] == "s002"
+    assert captured["mode"] == "replay"
     assert captured["write_canonical"] is True
+
+
+def test_playbook_render_non_canonical_strategy_report_skips_refresh_and_forwards_tag(
+    local_data_dir: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setenv("ODDS_API_KEY", "odds-test")
+    store = SnapshotStore(local_data_dir)
+    snapshot_id = "2026-02-11T10-14-00Z"
+    reports_dir = store.ensure_snapshot(snapshot_id) / "reports"
+    reports_dir.mkdir(parents=True, exist_ok=True)
+    non_canonical = reports_dir / "strategy-report.execution-draftkings.json"
+    non_canonical.write_text("{}\n", encoding="utf-8")
+
+    captured: dict[str, object] = {}
+
+    def _fake_run_strategy(**kwargs) -> int:
+        raise AssertionError("strategy rerun should not execute for non-canonical report file")
+
+    def _fake_generate(**kwargs):
+        captured["strategy_report_path"] = kwargs.get("strategy_report_path")
+        captured["artifact_tag"] = kwargs.get("artifact_tag")
+        return {
+            "report_markdown": "brief.md",
+            "report_tex": "brief.tex",
+            "report_pdf": "brief.pdf",
+            "report_meta": "brief.meta.json",
+        }
+
+    monkeypatch.setattr("prop_ev.cli._run_strategy_for_playbook", _fake_run_strategy)
+    monkeypatch.setattr("prop_ev.cli.generate_brief_for_snapshot", _fake_generate)
+
+    code = main(
+        [
+            "playbook",
+            "render",
+            "--snapshot-id",
+            snapshot_id,
+            "--offline",
+            "--strategy-report-file",
+            "strategy-report.execution-draftkings.json",
+            "--brief-tag",
+            "draftkings-replay",
+        ]
+    )
+    out = capsys.readouterr().out
+
+    assert code == 0
+    assert captured["strategy_report_path"] == non_canonical
+    assert captured["artifact_tag"] == "draftkings-replay"
+    assert f"strategy_report_path={non_canonical}" in out
+    assert "brief_tag=draftkings-replay" in out
 
 
 def test_global_data_dir_override_from_subcommand_position(
@@ -458,8 +680,9 @@ def test_playbook_publish_copies_only_compact_outputs(local_data_dir: Path) -> N
         == 0
     )
 
-    daily_dir = local_data_dir / "reports" / "daily" / "2026-02-11" / f"snapshot={snapshot_id}"
-    latest_dir = local_data_dir / "reports" / "latest"
+    reports_root = report_outputs_root(store)
+    daily_dir = reports_root / "daily" / "2026-02-11" / f"snapshot={snapshot_id}"
+    latest_dir = reports_root / "latest"
     assert (daily_dir / "strategy-report.json").exists()
     assert (daily_dir / "strategy-brief.md").exists()
     assert (daily_dir / "strategy-brief.meta.json").exists()
@@ -487,7 +710,38 @@ def test_playbook_publish_derives_date_for_legacy_daily_snapshot_id(local_data_d
         == 0
     )
 
-    expected_daily_dir = (
-        local_data_dir / "reports" / "daily" / "2026-02-12" / f"snapshot={snapshot_id}"
-    )
+    reports_root = report_outputs_root(store)
+    expected_daily_dir = reports_root / "daily" / "2026-02-12" / f"snapshot={snapshot_id}"
     assert (expected_daily_dir / "strategy-report.json").exists()
+
+
+def test_global_reports_dir_override_from_subcommand_position(
+    local_data_dir: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    store = SnapshotStore(local_data_dir)
+    snapshot_id = "2026-02-11T14-14-14Z"
+    reports_dir = store.ensure_snapshot(snapshot_id) / "reports"
+    reports_dir.mkdir(parents=True, exist_ok=True)
+    (reports_dir / "strategy-report.json").write_text("{}\n", encoding="utf-8")
+    (reports_dir / "strategy-brief.md").write_text("# Brief\n", encoding="utf-8")
+    (reports_dir / "strategy-brief.meta.json").write_text("{}\n", encoding="utf-8")
+
+    override_root = tmp_path / "custom-reports"
+    assert (
+        main(
+            [
+                "--data-dir",
+                str(local_data_dir),
+                "playbook",
+                "publish",
+                "--snapshot-id",
+                snapshot_id,
+                "--reports-dir",
+                str(override_root),
+            ]
+        )
+        == 0
+    )
+    out = capsys.readouterr().out
+    assert f"daily_dir={override_root / 'daily' / '2026-02-11' / f'snapshot={snapshot_id}'}" in out
+    assert (override_root / "latest" / "strategy-brief.md").exists()
