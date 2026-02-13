@@ -2,6 +2,8 @@ import json
 from pathlib import Path
 
 from prop_ev.backtest import build_backtest_seed_rows, write_backtest_artifacts
+from prop_ev.report_paths import snapshot_reports_dir
+from prop_ev.storage import SnapshotStore
 
 
 def _sample_report() -> dict:
@@ -113,7 +115,10 @@ def test_ticket_key_stable_across_price_and_book() -> None:
 
 def test_write_backtest_artifacts(tmp_path: Path) -> None:
     snapshot_dir = tmp_path / "data" / "odds_api" / "snapshots" / "snap-1"
-    (snapshot_dir / "reports").mkdir(parents=True, exist_ok=True)
+    store = SnapshotStore(tmp_path / "data" / "odds_api")
+    store.ensure_snapshot("snap-1")
+    reports_dir = snapshot_reports_dir(store, "snap-1")
+    reports_dir.mkdir(parents=True, exist_ok=True)
     (snapshot_dir / "derived").mkdir(parents=True, exist_ok=True)
     (snapshot_dir / "context").mkdir(parents=True, exist_ok=True)
     (snapshot_dir / "derived" / "event_props.jsonl").write_text(
@@ -132,13 +137,14 @@ def test_write_backtest_artifacts(tmp_path: Path) -> None:
         json.dumps({"status": "ok"}) + "\n",
         encoding="utf-8",
     )
-    (snapshot_dir / "reports" / "strategy-report.json").write_text(
+    (reports_dir / "strategy-report.json").write_text(
         json.dumps(_sample_report(), sort_keys=True, indent=2) + "\n",
         encoding="utf-8",
     )
 
     result = write_backtest_artifacts(
         snapshot_dir=snapshot_dir,
+        reports_dir=reports_dir,
         report=_sample_report(),
         selection="eligible",
         top_n=0,

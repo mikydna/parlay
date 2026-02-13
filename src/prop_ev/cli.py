@@ -59,13 +59,13 @@ from prop_ev.odds_data.policy import SpendPolicy
 from prop_ev.odds_data.repo import OddsRepository
 from prop_ev.odds_data.request import OddsRequest
 from prop_ev.odds_data.spec import DatasetSpec, dataset_id
-from prop_ev.playbook import (
-    budget_snapshot,
-    compute_live_window,
-    generate_brief_for_snapshot,
-    report_outputs_root,
-)
+from prop_ev.playbook import budget_snapshot, compute_live_window, generate_brief_for_snapshot
 from prop_ev.quote_table import EVENT_PROPS_TABLE
+from prop_ev.report_paths import (
+    canonical_report_outputs_root,
+    report_outputs_root,
+    snapshot_reports_dir,
+)
 from prop_ev.settings import Settings
 from prop_ev.settlement import settle_snapshot
 from prop_ev.snapshot_artifacts import (
@@ -2194,6 +2194,7 @@ def _cmd_strategy_run(args: argparse.Namespace) -> int:
     result = plugin.run(inputs=inputs, config=config)
     report = decorate_report(result.report, strategy=plugin.info, config=result.config)
     strategy_id = normalize_strategy_id(plugin.info.id)
+    reports_dir = snapshot_reports_dir(store, snapshot_id)
     write_canonical_raw = getattr(args, "write_canonical", None)
     if write_canonical_raw is None:
         write_canonical = bool(strategy_id == "s001")
@@ -2201,7 +2202,7 @@ def _cmd_strategy_run(args: argparse.Namespace) -> int:
         write_canonical = bool(write_canonical_raw)
 
     json_path, md_path = write_strategy_reports(
-        snapshot_dir=snapshot_dir,
+        reports_dir=reports_dir,
         report=report,
         top_n=args.top_n,
         strategy_id=strategy_id,
@@ -2209,6 +2210,7 @@ def _cmd_strategy_run(args: argparse.Namespace) -> int:
     )
     backtest = write_backtest_artifacts(
         snapshot_dir=snapshot_dir,
+        reports_dir=reports_dir,
         report=report,
         selection="eligible",
         top_n=0,
@@ -2247,7 +2249,7 @@ def _cmd_strategy_run(args: argparse.Namespace) -> int:
     print(f"health_gates={','.join(health_gates) if health_gates else 'none'}")
     print(f"report_json={json_path}")
     print(f"report_md={md_path}")
-    card = snapshot_dir / "reports" / "strategy-card.md"
+    card = reports_dir / "strategy-card.md"
     if not write_canonical:
         card = card.with_name(f"{card.stem}.{strategy_id}{card.suffix}")
     print(f"report_card={card}")
@@ -2283,7 +2285,7 @@ def _cmd_strategy_run(args: argparse.Namespace) -> int:
         )
         execution_tag = _execution_projection_tag(execution_books)
         execution_json, execution_md = write_tagged_strategy_reports(
-            snapshot_dir=snapshot_dir,
+            reports_dir=reports_dir,
             report=projected_report,
             top_n=max(0, execution_top_n),
             tag=execution_tag,
@@ -2383,6 +2385,7 @@ def _render_strategy_compare_markdown(report: dict[str, Any]) -> str:
 def _cmd_strategy_compare(args: argparse.Namespace) -> int:
     store = SnapshotStore(os.environ.get("PROP_EV_DATA_DIR", "data/odds_api"))
     snapshot_id = args.snapshot_id or _latest_snapshot_id(store)
+    reports_dir = snapshot_reports_dir(store, snapshot_id)
 
     strategy_ids = _parse_strategy_ids(getattr(args, "strategies", ""))
     if len(strategy_ids) < 2:
@@ -2437,7 +2440,7 @@ def _cmd_strategy_compare(args: argparse.Namespace) -> int:
         strategy_id = normalize_strategy_id(report.get("strategy_id", plugin.info.id))
 
         write_strategy_reports(
-            snapshot_dir=snapshot_dir,
+            reports_dir=reports_dir,
             report=report,
             top_n=int(args.top_n),
             strategy_id=strategy_id,
@@ -2445,6 +2448,7 @@ def _cmd_strategy_compare(args: argparse.Namespace) -> int:
         )
         write_backtest_artifacts(
             snapshot_dir=snapshot_dir,
+            reports_dir=reports_dir,
             report=report,
             selection="eligible",
             top_n=0,
@@ -2494,7 +2498,6 @@ def _cmd_strategy_compare(args: argparse.Namespace) -> int:
             "union_all": len(union),
         },
     }
-    reports_dir = snapshot_dir / "reports"
     reports_dir.mkdir(parents=True, exist_ok=True)
     json_path = reports_dir / "strategy-compare.json"
     md_path = reports_dir / "strategy-compare.md"
@@ -2559,8 +2562,7 @@ def _cmd_strategy_backtest_summarize(args: argparse.Namespace) -> int:
 
     store = SnapshotStore(os.environ.get("PROP_EV_DATA_DIR", "data/odds_api"))
     snapshot_id = args.snapshot_id or _latest_snapshot_id(store)
-    snapshot_dir = store.snapshot_dir(snapshot_id)
-    reports_dir = snapshot_dir / "reports"
+    reports_dir = snapshot_reports_dir(store, snapshot_id)
 
     bin_size = float(getattr(args, "bin_size", 0.05))
     min_graded = int(getattr(args, "min_graded", 0))
@@ -2633,7 +2635,7 @@ def _cmd_strategy_backtest_prep(args: argparse.Namespace) -> int:
     store = SnapshotStore(os.environ.get("PROP_EV_DATA_DIR", "data/odds_api"))
     snapshot_id = args.snapshot_id or _latest_snapshot_id(store)
     snapshot_dir = store.snapshot_dir(snapshot_id)
-    reports_dir = snapshot_dir / "reports"
+    reports_dir = snapshot_reports_dir(store, snapshot_id)
     requested = str(getattr(args, "strategy", "") or "").strip()
     write_canonical = True
     strategy_id: str | None = None
@@ -2664,6 +2666,7 @@ def _cmd_strategy_backtest_prep(args: argparse.Namespace) -> int:
 
     result = write_backtest_artifacts(
         snapshot_dir=snapshot_dir,
+        reports_dir=reports_dir,
         report=report,
         selection=args.selection,
         top_n=max(0, int(args.top_n)),
@@ -2688,14 +2691,16 @@ def _cmd_strategy_settle(args: argparse.Namespace) -> int:
     store = SnapshotStore(os.environ.get("PROP_EV_DATA_DIR", "data/odds_api"))
     snapshot_id = args.snapshot_id or _latest_snapshot_id(store)
     snapshot_dir = store.snapshot_dir(snapshot_id)
+    reports_dir = snapshot_reports_dir(store, snapshot_id)
     seed_path = (
         Path(str(args.seed_path)).expanduser()
         if str(getattr(args, "seed_path", "")).strip()
-        else snapshot_dir / "reports" / "backtest-seed.jsonl"
+        else reports_dir / "backtest-seed.jsonl"
     )
 
     report = settle_snapshot(
         snapshot_dir=snapshot_dir,
+        reports_dir=reports_dir,
         snapshot_id=snapshot_id,
         seed_path=seed_path,
         offline=bool(args.offline),
@@ -3154,6 +3159,7 @@ def _cmd_playbook_run(args: argparse.Namespace) -> int:
         per_game_top_n=per_game_top_n,
         game_card_min_ev=max(0.0, args.min_ev),
         month=month,
+        write_markdown=bool(getattr(args, "write_markdown", False)),
     )
     end_budget = budget_snapshot(store=store, settings=settings, month=month)
     print(
@@ -3178,7 +3184,10 @@ def _cmd_playbook_run(args: argparse.Namespace) -> int:
     )
     if preflight_gates:
         print(f"context_preflight_gates={','.join(preflight_gates)}")
-    print(f"strategy_brief_md={brief['report_markdown']}")
+    if brief.get("report_markdown"):
+        print(f"strategy_brief_md={brief['report_markdown']}")
+    else:
+        print("strategy_brief_md=disabled")
     print(f"strategy_brief_tex={brief['report_tex']}")
     print(f"strategy_brief_pdf={brief['report_pdf']}")
     print(f"strategy_brief_meta={brief['report_meta']}")
@@ -3205,7 +3214,7 @@ def _cmd_playbook_render(args: argparse.Namespace) -> int:
         args.per_game_top_n if args.per_game_top_n > 0 else settings.playbook_per_game_top_n
     )
     snapshot_id = args.snapshot_id
-    reports_dir = store.snapshot_dir(snapshot_id) / "reports"
+    reports_dir = snapshot_reports_dir(store, snapshot_id)
     strategy_report_file = (
         str(getattr(args, "strategy_report_file", "strategy-report.json")).strip()
         or "strategy-report.json"
@@ -3219,7 +3228,6 @@ def _cmd_playbook_render(args: argparse.Namespace) -> int:
     is_canonical_strategy_report = strategy_report_path.resolve(
         strict=False
     ) == canonical_strategy_path.resolve(strict=False)
-    brief_tag = str(getattr(args, "brief_tag", "")).strip()
     refresh_context = bool(args.refresh_context and not args.offline)
     if bool(args.refresh_context) and bool(args.offline):
         print(f"note=refresh_context_ignored_in_offline_mode snapshot_id={snapshot_id}")
@@ -3268,7 +3276,7 @@ def _cmd_playbook_render(args: argparse.Namespace) -> int:
         game_card_min_ev=max(0.0, args.min_ev),
         month=month,
         strategy_report_path=strategy_report_path,
-        artifact_tag=brief_tag,
+        write_markdown=bool(getattr(args, "write_markdown", False)),
     )
     print(f"snapshot_id={snapshot_id}")
     print(f"strategy_id={strategy_id}")
@@ -3276,9 +3284,10 @@ def _cmd_playbook_render(args: argparse.Namespace) -> int:
     if title:
         print(f"strategy_title={title}")
     print(f"strategy_report_path={strategy_report_path}")
-    if brief_tag:
-        print(f"brief_tag={brief_tag}")
-    print(f"strategy_brief_md={brief['report_markdown']}")
+    if brief.get("report_markdown"):
+        print(f"strategy_brief_md={brief['report_markdown']}")
+    else:
+        print("strategy_brief_md=disabled")
     print(f"strategy_brief_tex={brief['report_tex']}")
     print(f"strategy_brief_pdf={brief['report_pdf']}")
     print(f"strategy_brief_meta={brief['report_meta']}")
@@ -3315,7 +3324,11 @@ def _snapshot_date(snapshot_id: str) -> str:
 def _publish_compact_playbook_outputs(
     *, store: SnapshotStore, snapshot_id: str
 ) -> tuple[list[str], Path, Path, Path]:
-    reports_dir = store.snapshot_dir(snapshot_id) / "reports"
+    reports_dir = snapshot_reports_dir(
+        store,
+        snapshot_id,
+        reports_root=canonical_report_outputs_root(store),
+    )
     if not reports_dir.exists():
         raise CLIError(f"missing reports directory: {reports_dir}")
 
@@ -3512,10 +3525,10 @@ def _cmd_playbook_discover_execute(args: argparse.Namespace) -> int:
         return 2
 
     discovery_report_path = (
-        store.snapshot_dir(discovery_snapshot_id) / "reports" / "strategy-report.json"
+        snapshot_reports_dir(store, discovery_snapshot_id) / "strategy-report.json"
     )
     execution_report_path = (
-        store.snapshot_dir(execution_snapshot_id) / "reports" / "strategy-report.json"
+        snapshot_reports_dir(store, execution_snapshot_id) / "strategy-report.json"
     )
     discovery_report = json.loads(discovery_report_path.read_text(encoding="utf-8"))
     execution_report = json.loads(execution_report_path.read_text(encoding="utf-8"))
@@ -3542,6 +3555,7 @@ def _cmd_playbook_discover_execute(args: argparse.Namespace) -> int:
         per_game_top_n=max(1, getattr(args, "per_game_top_n", 5)),
         game_card_min_ev=max(0.0, args.min_ev),
         month=month,
+        write_markdown=bool(getattr(args, "write_markdown", False)),
     )
 
     summary = compare_report.get("summary", {})
@@ -3560,7 +3574,10 @@ def _cmd_playbook_discover_execute(args: argparse.Namespace) -> int:
     )
     print(f"discovery_execution_json={compare_json}")
     print(f"discovery_execution_md={compare_md}")
-    print(f"strategy_brief_md={brief['report_markdown']}")
+    if brief.get("report_markdown"):
+        print(f"strategy_brief_md={brief['report_markdown']}")
+    else:
+        print("strategy_brief_md=disabled")
     print(f"strategy_brief_pdf={brief['report_pdf']}")
     return 0
 
@@ -4016,6 +4033,11 @@ def _build_parser() -> argparse.ArgumentParser:
     playbook_run.add_argument("--min-ev", type=float, default=0.01)
     playbook_run.add_argument("--allow-tier-b", action="store_true")
     playbook_run.add_argument(
+        "--write-markdown",
+        action="store_true",
+        help="Write `strategy-brief.md` artifact (disabled by default).",
+    )
+    playbook_run.add_argument(
         "--strategy-mode",
         choices=("auto", "live", "replay"),
         default="auto",
@@ -4054,9 +4076,9 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Strategy report file name (relative to snapshot reports/) or absolute path.",
     )
     playbook_render.add_argument(
-        "--brief-tag",
-        default="",
-        help="Optional artifact tag for writing non-canonical brief outputs.",
+        "--write-markdown",
+        action="store_true",
+        help="Write `strategy-brief.md` artifact (disabled by default).",
     )
     playbook_render.add_argument(
         "--strategy-mode",
@@ -4125,6 +4147,11 @@ def _build_parser() -> argparse.ArgumentParser:
     playbook_discover_execute.add_argument("--strategy-top-n", type=int, default=50)
     playbook_discover_execute.add_argument("--min-ev", type=float, default=0.01)
     playbook_discover_execute.add_argument("--allow-tier-b", action="store_true")
+    playbook_discover_execute.add_argument(
+        "--write-markdown",
+        action="store_true",
+        help="Write `strategy-brief.md` artifact (disabled by default).",
+    )
     playbook_discover_execute.add_argument(
         "--strategy-mode",
         choices=("auto", "live", "replay"),

@@ -5,7 +5,7 @@ This document defines stable artifact shapes and gate reason codes used by CLI f
 ## Strategy Report Contract
 
 Path:
-- `data/odds_api/snapshots/<snapshot_id>/reports/strategy-report.json`
+- `<REPORTS_DIR>/snapshots/<report_snapshot>/strategy-report.json`
 
 Required top-level keys:
 - `snapshot_id`
@@ -54,7 +54,7 @@ Paths:
 ## Backtest Readiness Contract
 
 Path:
-- `data/odds_api/snapshots/<snapshot_id>/reports/backtest-readiness.json`
+- `<REPORTS_DIR>/snapshots/<report_snapshot>/backtest-readiness.json`
 
 Required keys:
 - `snapshot_id`
@@ -67,7 +67,7 @@ Required keys:
 ## Settlement Contract
 
 Path:
-- `data/odds_api/snapshots/<snapshot_id>/reports/backtest-settlement.json`
+- `<REPORTS_DIR>/snapshots/<report_snapshot>/backtest-settlement.json`
 
 Required top-level keys:
 - `snapshot_id`
@@ -205,7 +205,7 @@ For machine parsing, keep stable `key=value` lines where currently emitted, incl
 - `snapshot_id=<...> mode=<...> within_window=<...> odds_cap_reached=<...>`
 - `strategy_id=<...>`
 - `context_preflight_gates=<...>` (when present)
-- `strategy_brief_md=<...>`
+- `strategy_brief_md=<path|disabled>`
 - `strategy_brief_tex=<...>`
 - `strategy_brief_pdf=<...>`
 - `strategy_brief_meta=<...>`

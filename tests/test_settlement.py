@@ -3,7 +3,9 @@ from pathlib import Path
 
 import pytest
 
+from prop_ev.report_paths import snapshot_reports_dir
 from prop_ev.settlement import grade_seed_rows, render_settlement_markdown, settle_snapshot
+from prop_ev.storage import SnapshotStore
 
 
 def _seed_row(
@@ -193,7 +195,9 @@ def test_render_settlement_markdown_uses_compact_labels() -> None:
 
 def test_settle_snapshot_writes_artifacts(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     snapshot_dir = tmp_path / "data" / "odds_api" / "snapshots" / "snap-1"
-    reports_dir = snapshot_dir / "reports"
+    store = SnapshotStore(tmp_path / "data" / "odds_api")
+    store.ensure_snapshot("snap-1")
+    reports_dir = snapshot_reports_dir(store, "snap-1")
     reports_dir.mkdir(parents=True, exist_ok=True)
     seed_path = reports_dir / "backtest-seed.jsonl"
     seed_rows = [
@@ -230,6 +234,7 @@ def test_settle_snapshot_writes_artifacts(tmp_path: Path, monkeypatch: pytest.Mo
 
     report = settle_snapshot(
         snapshot_dir=snapshot_dir,
+        reports_dir=reports_dir,
         snapshot_id="snap-1",
         seed_path=seed_path,
         offline=False,
@@ -254,7 +259,9 @@ def test_settle_snapshot_default_schema_includes_auto_results_source_mode(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     snapshot_dir = tmp_path / "data" / "odds_api" / "snapshots" / "snap-1"
-    reports_dir = snapshot_dir / "reports"
+    store = SnapshotStore(tmp_path / "data" / "odds_api")
+    store.ensure_snapshot("snap-1")
+    reports_dir = snapshot_reports_dir(store, "snap-1")
     reports_dir.mkdir(parents=True, exist_ok=True)
     seed_path = reports_dir / "backtest-seed.jsonl"
     seed_path.write_text(
@@ -282,6 +289,7 @@ def test_settle_snapshot_default_schema_includes_auto_results_source_mode(
 
     report = settle_snapshot(
         snapshot_dir=snapshot_dir,
+        reports_dir=reports_dir,
         snapshot_id="snap-1",
         seed_path=seed_path,
         offline=False,
@@ -298,7 +306,9 @@ def test_settle_snapshot_offline_forces_cache_only(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     snapshot_dir = tmp_path / "data" / "odds_api" / "snapshots" / "snap-1"
-    reports_dir = snapshot_dir / "reports"
+    store = SnapshotStore(tmp_path / "data" / "odds_api")
+    store.ensure_snapshot("snap-1")
+    reports_dir = snapshot_reports_dir(store, "snap-1")
     reports_dir.mkdir(parents=True, exist_ok=True)
     seed_path = reports_dir / "backtest-seed.jsonl"
     seed_path.write_text(
@@ -332,6 +342,7 @@ def test_settle_snapshot_offline_forces_cache_only(
 
     report = settle_snapshot(
         snapshot_dir=snapshot_dir,
+        reports_dir=reports_dir,
         snapshot_id="snap-1",
         seed_path=seed_path,
         offline=True,

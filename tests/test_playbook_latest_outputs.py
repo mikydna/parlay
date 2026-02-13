@@ -6,6 +6,7 @@ import pytest
 
 import prop_ev.playbook as playbook
 from prop_ev.playbook import generate_brief_for_snapshot, report_outputs_root
+from prop_ev.report_paths import snapshot_reports_dir
 from prop_ev.settings import Settings
 from prop_ev.storage import SnapshotStore
 
@@ -84,8 +85,8 @@ def test_generate_brief_writes_snapshot_and_latest(
 
     store = SnapshotStore(tmp_path / "data" / "odds_api")
     snapshot_id = "2026-02-11T17-00-00Z"
-    snapshot_dir = store.ensure_snapshot(snapshot_id)
-    reports_dir = snapshot_dir / "reports"
+    store.ensure_snapshot(snapshot_id)
+    reports_dir = snapshot_reports_dir(store, snapshot_id)
     reports_dir.mkdir(parents=True, exist_ok=True)
     (reports_dir / "strategy-report.json").write_text(
         json.dumps(_sample_strategy_report(), sort_keys=True, indent=2) + "\n",
@@ -105,15 +106,52 @@ def test_generate_brief_writes_snapshot_and_latest(
     assert (reports_dir / "brief-input.json").exists()
     assert (reports_dir / "brief-pass1.json").exists()
     assert (reports_dir / "brief-analyst.json").exists()
-    assert (reports_dir / "strategy-brief.md").exists()
+    assert not (reports_dir / "strategy-brief.md").exists()
     assert (reports_dir / "strategy-brief.tex").exists()
+    assert (reports_dir / "strategy-brief.pdf").exists()
     assert (reports_dir / "strategy-brief.meta.json").exists()
+    assert result["report_markdown"] == ""
 
     latest_dir = report_outputs_root(store) / "latest"
     assert (latest_dir / "strategy-report.json").exists()
     assert (latest_dir / "strategy-brief.meta.json").exists()
     assert not (latest_dir / "strategy-brief.md").exists()
     assert not (latest_dir / "strategy-brief.tex").exists()
+    meta = json.loads((reports_dir / "strategy-brief.meta.json").read_text(encoding="utf-8"))
+    assert meta["write_markdown"] is False
+    latest_payload = json.loads((latest_dir / "latest.json").read_text(encoding="utf-8"))
+    assert latest_payload["snapshot_id"] == snapshot_id
+    assert result["snapshot_id"] == snapshot_id
+
+
+def test_generate_brief_writes_markdown_when_enabled(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("ODDS_API_KEY", "odds-test")
+    monkeypatch.setenv("PROP_EV_DATA_DIR", str(tmp_path / "data" / "odds_api"))
+
+    store = SnapshotStore(tmp_path / "data" / "odds_api")
+    snapshot_id = "2026-02-11T17-20-00Z"
+    store.ensure_snapshot(snapshot_id)
+    reports_dir = snapshot_reports_dir(store, snapshot_id)
+    reports_dir.mkdir(parents=True, exist_ok=True)
+    (reports_dir / "strategy-report.json").write_text(
+        json.dumps(_sample_strategy_report(), sort_keys=True, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+    settings = Settings(_env_file=None)
+    result = generate_brief_for_snapshot(
+        store=store,
+        settings=settings,
+        snapshot_id=snapshot_id,
+        top_n=5,
+        llm_refresh=False,
+        llm_offline=True,
+        write_markdown=True,
+    )
+
+    assert (reports_dir / "strategy-brief.md").exists()
     markdown = (reports_dir / "strategy-brief.md").read_text(encoding="utf-8")
     assert "## Analyst Take" in markdown
     assert markdown.index("## Analyst Take") < markdown.index("## Action Plan (GO / LEAN / NO-GO)")
@@ -125,12 +163,43 @@ def test_generate_brief_writes_snapshot_and_latest(
     assert markdown.rfind("## Data Quality") > markdown.rfind("## Game Cards by Matchup")
     assert markdown.rfind("## Confidence") > markdown.rfind("## Data Quality")
     assert "<!-- pagebreak -->" in markdown
-    latest_payload = json.loads((latest_dir / "latest.json").read_text(encoding="utf-8"))
-    assert latest_payload["snapshot_id"] == snapshot_id
-    assert result["snapshot_id"] == snapshot_id
+    assert "- execution_books:" not in markdown
+    assert result["report_markdown"].endswith("strategy-brief.md")
 
 
-def test_generate_brief_tagged_outputs_skip_latest_publish(
+def test_generate_brief_includes_execution_books_in_markdown(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("ODDS_API_KEY", "odds-test")
+    monkeypatch.setenv("PROP_EV_DATA_DIR", str(tmp_path / "data" / "odds_api"))
+
+    store = SnapshotStore(tmp_path / "data" / "odds_api")
+    snapshot_id = "2026-02-11T17-25-00Z"
+    store.ensure_snapshot(snapshot_id)
+    reports_dir = snapshot_reports_dir(store, snapshot_id)
+    reports_dir.mkdir(parents=True, exist_ok=True)
+    report = _sample_strategy_report()
+    report["execution_projection"] = {"bookmakers": ["draftkings", "fanduel"]}
+    (reports_dir / "strategy-report.json").write_text(
+        json.dumps(report, sort_keys=True, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+    settings = Settings(_env_file=None)
+    generate_brief_for_snapshot(
+        store=store,
+        settings=settings,
+        snapshot_id=snapshot_id,
+        top_n=5,
+        llm_refresh=False,
+        llm_offline=True,
+        write_markdown=True,
+    )
+    markdown = (reports_dir / "strategy-brief.md").read_text(encoding="utf-8")
+    assert "- execution_books: `draftkings, fanduel`" in markdown
+
+
+def test_generate_brief_non_canonical_strategy_report_writes_canonical_outputs(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("ODDS_API_KEY", "odds-test")
@@ -138,7 +207,8 @@ def test_generate_brief_tagged_outputs_skip_latest_publish(
 
     store = SnapshotStore(tmp_path / "data" / "odds_api")
     snapshot_id = "2026-02-11T17-30-00Z"
-    reports_dir = store.ensure_snapshot(snapshot_id) / "reports"
+    store.ensure_snapshot(snapshot_id)
+    reports_dir = snapshot_reports_dir(store, snapshot_id)
     reports_dir.mkdir(parents=True, exist_ok=True)
 
     tagged_strategy_path = reports_dir / "strategy-report.execution-draftkings.json"
@@ -156,26 +226,24 @@ def test_generate_brief_tagged_outputs_skip_latest_publish(
         llm_refresh=False,
         llm_offline=True,
         strategy_report_path=tagged_strategy_path,
-        artifact_tag="draftkings-replay",
     )
 
-    assert (reports_dir / "brief-input.draftkings-replay.json").exists()
-    assert (reports_dir / "brief-pass1.draftkings-replay.json").exists()
-    assert (reports_dir / "brief-analyst.draftkings-replay.json").exists()
-    assert (reports_dir / "strategy-brief.draftkings-replay.md").exists()
-    assert (reports_dir / "strategy-brief.draftkings-replay.tex").exists()
-    assert (reports_dir / "strategy-brief.meta.draftkings-replay.json").exists()
+    assert (reports_dir / "brief-input.json").exists()
+    assert (reports_dir / "brief-pass1.json").exists()
+    assert (reports_dir / "brief-analyst.json").exists()
+    assert (reports_dir / "strategy-brief.tex").exists()
+    assert (reports_dir / "strategy-brief.pdf").exists()
+    assert (reports_dir / "strategy-brief.meta.json").exists()
     assert not (reports_dir / "strategy-brief.md").exists()
-    assert not (reports_dir / "brief-input.json").exists()
+    assert result["report_markdown"] == ""
 
     latest_dir = report_outputs_root(store) / "latest"
     assert not (latest_dir / "strategy-brief.md").exists()
-    assert not (latest_dir / "latest.json").exists()
+    assert (latest_dir / "latest.json").exists()
 
     meta = json.loads(Path(result["report_meta"]).read_text(encoding="utf-8"))
-    assert meta["artifact_tag"] == "draftkings-replay"
+    assert meta["write_markdown"] is False
     assert meta["strategy_report_path"] == str(tagged_strategy_path)
-    assert result["report_markdown"].endswith("strategy-brief.draftkings-replay.md")
 
 
 def test_generate_brief_pass1_retries_then_succeeds(
@@ -187,8 +255,8 @@ def test_generate_brief_pass1_retries_then_succeeds(
 
     store = SnapshotStore(tmp_path / "data" / "odds_api")
     snapshot_id = "2026-02-11T18-00-00Z"
-    snapshot_dir = store.ensure_snapshot(snapshot_id)
-    reports_dir = snapshot_dir / "reports"
+    store.ensure_snapshot(snapshot_id)
+    reports_dir = snapshot_reports_dir(store, snapshot_id)
     reports_dir.mkdir(parents=True, exist_ok=True)
     (reports_dir / "strategy-report.json").write_text(
         json.dumps(_sample_strategy_report(), sort_keys=True, indent=2) + "\n",
@@ -237,6 +305,7 @@ def test_generate_brief_pass1_retries_then_succeeds(
         top_n=5,
         llm_refresh=True,
         llm_offline=False,
+        write_markdown=True,
     )
     meta = json.loads(Path(result["report_meta"]).read_text(encoding="utf-8"))
     markdown = Path(result["report_markdown"]).read_text(encoding="utf-8")
@@ -255,8 +324,8 @@ def test_generate_brief_offline_rerender_is_stable_after_normalization(
 
     store = SnapshotStore(tmp_path / "data" / "odds_api")
     snapshot_id = "2026-02-11T19-00-00Z"
-    snapshot_dir = store.ensure_snapshot(snapshot_id)
-    reports_dir = snapshot_dir / "reports"
+    store.ensure_snapshot(snapshot_id)
+    reports_dir = snapshot_reports_dir(store, snapshot_id)
     reports_dir.mkdir(parents=True, exist_ok=True)
     (reports_dir / "strategy-report.json").write_text(
         json.dumps(_sample_strategy_report(), sort_keys=True, indent=2) + "\n",
@@ -271,6 +340,7 @@ def test_generate_brief_offline_rerender_is_stable_after_normalization(
         top_n=5,
         llm_refresh=False,
         llm_offline=True,
+        write_markdown=True,
     )
     first_markdown = Path(first["report_markdown"]).read_text(encoding="utf-8")
 
@@ -281,6 +351,7 @@ def test_generate_brief_offline_rerender_is_stable_after_normalization(
         top_n=5,
         llm_refresh=False,
         llm_offline=True,
+        write_markdown=True,
     )
     second_markdown = Path(second["report_markdown"]).read_text(encoding="utf-8")
 

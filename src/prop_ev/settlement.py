@@ -575,6 +575,7 @@ def _build_counts(rows: list[dict[str, Any]]) -> dict[str, int]:
 def settle_snapshot(
     *,
     snapshot_dir: Path,
+    reports_dir: Path,
     snapshot_id: str,
     seed_path: Path,
     offline: bool,
@@ -621,7 +622,6 @@ def settle_snapshot(
     overall = "complete" if counts["pending"] == 0 and counts["unresolved"] == 0 else "partial"
     exit_code = 0 if overall == "complete" else 1
 
-    reports_dir = snapshot_dir / "reports"
     reports_dir.mkdir(parents=True, exist_ok=True)
     json_path = reports_dir / "backtest-settlement.json"
     md_path = reports_dir / "backtest-settlement.md"

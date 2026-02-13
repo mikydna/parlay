@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 
 from prop_ev.cli import main
+from prop_ev.report_paths import snapshot_reports_dir
 from prop_ev.storage import SnapshotStore
 
 
@@ -67,8 +68,9 @@ def test_strategy_settle_returns_pending_exit_code(
 ) -> None:
     store = SnapshotStore(local_data_dir)
     snapshot_id = "snap-1"
-    snapshot_dir = store.ensure_snapshot(snapshot_id)
-    seed_path = snapshot_dir / "reports" / "backtest-seed.jsonl"
+    store.ensure_snapshot(snapshot_id)
+    reports_dir = snapshot_reports_dir(store, snapshot_id)
+    seed_path = reports_dir / "backtest-seed.jsonl"
     _write_seed(seed_path, player="Player One", side="over", point=20.5)
 
     monkeypatch.setattr(
@@ -94,9 +96,9 @@ def test_strategy_settle_returns_pending_exit_code(
     assert code == 1
     assert "settlement_json=" in out
     assert "pending=1" in out
-    assert (snapshot_dir / "reports" / "backtest-settlement.json").exists()
-    assert (snapshot_dir / "reports" / "backtest-settlement.md").exists()
-    assert (snapshot_dir / "reports" / "backtest-settlement.tex").exists()
+    assert (reports_dir / "backtest-settlement.json").exists()
+    assert (reports_dir / "backtest-settlement.md").exists()
+    assert (reports_dir / "backtest-settlement.tex").exists()
 
 
 def test_strategy_settle_returns_complete_exit_code(
@@ -106,8 +108,9 @@ def test_strategy_settle_returns_complete_exit_code(
 ) -> None:
     store = SnapshotStore(local_data_dir)
     snapshot_id = "snap-1"
-    snapshot_dir = store.ensure_snapshot(snapshot_id)
-    seed_path = snapshot_dir / "reports" / "backtest-seed.jsonl"
+    store.ensure_snapshot(snapshot_id)
+    reports_dir = snapshot_reports_dir(store, snapshot_id)
+    seed_path = reports_dir / "backtest-seed.jsonl"
     _write_seed(seed_path, player="Player One", side="over", point=20.5)
 
     monkeypatch.setattr(
@@ -134,8 +137,9 @@ def test_strategy_settle_offline_forces_cache_only(
 ) -> None:
     store = SnapshotStore(local_data_dir)
     snapshot_id = "snap-1"
-    snapshot_dir = store.ensure_snapshot(snapshot_id)
-    seed_path = snapshot_dir / "reports" / "backtest-seed.jsonl"
+    store.ensure_snapshot(snapshot_id)
+    reports_dir = snapshot_reports_dir(store, snapshot_id)
+    seed_path = reports_dir / "backtest-seed.jsonl"
     _write_seed(seed_path, player="Player One", side="over", point=20.5)
     captured: dict[str, object] = {}
 

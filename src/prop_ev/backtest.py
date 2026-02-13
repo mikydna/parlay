@@ -259,6 +259,7 @@ def _context_status(path: Path) -> dict[str, Any]:
 def build_backtest_readiness(
     *,
     snapshot_dir: Path,
+    reports_dir: Path,
     report: dict[str, Any],
     seed_rows: list[dict[str, Any]],
     selection: str,
@@ -274,8 +275,6 @@ def build_backtest_readiness(
     summary = report.get("summary", {}) if isinstance(report.get("summary"), dict) else {}
     context_dir = snapshot_dir / "context"
     derived_dir = snapshot_dir / "derived"
-    reports_dir = snapshot_dir / "reports"
-
     event_props_path = derived_dir / "event_props.jsonl"
     featured_path = derived_dir / "featured_odds.jsonl"
     strategy_path = strategy_report_path or (reports_dir / "strategy-report.json")
@@ -338,6 +337,7 @@ def build_backtest_readiness(
 def write_backtest_artifacts(
     *,
     snapshot_dir: Path,
+    reports_dir: Path,
     report: dict[str, Any],
     selection: str = "eligible",
     top_n: int = 0,
@@ -346,7 +346,6 @@ def write_backtest_artifacts(
 ) -> dict[str, Any]:
     from prop_ev.strategies.base import normalize_strategy_id
 
-    reports_dir = snapshot_dir / "reports"
     reports_dir.mkdir(parents=True, exist_ok=True)
     seed_rows = build_backtest_seed_rows(report=report, selection=selection, top_n=top_n)
 
@@ -382,6 +381,7 @@ def write_backtest_artifacts(
         _write_template_csv(template_path, seed_rows)
         readiness = build_backtest_readiness(
             snapshot_dir=snapshot_dir,
+            reports_dir=reports_dir,
             report=report,
             seed_rows=seed_rows,
             selection=selection,
@@ -394,6 +394,7 @@ def write_backtest_artifacts(
 
     readiness = build_backtest_readiness(
         snapshot_dir=snapshot_dir,
+        reports_dir=reports_dir,
         report=report,
         seed_rows=seed_rows,
         selection=selection,

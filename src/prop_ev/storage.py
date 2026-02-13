@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from prop_ev import __version__
-from prop_ev.time_utils import utc_now_str
+from prop_ev.time_utils import et_snapshot_id_now, utc_now_str
 
 SCHEMA_VERSION = 1
 
@@ -24,7 +24,7 @@ def now_utc() -> str:
 
 def make_snapshot_id() -> str:
     """Build a filesystem-safe snapshot id."""
-    return now_utc().replace(":", "-")
+    return et_snapshot_id_now()
 
 
 def sanitize_params(params: dict[str, Any]) -> dict[str, Any]:

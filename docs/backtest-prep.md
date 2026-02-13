@@ -6,9 +6,9 @@ Use the snapshot artifacts from strategy run, then grade outcomes tomorrow.
 
 `strategy run` now auto-writes:
 
-- `data/odds_api/snapshots/<snapshot_id>/reports/backtest-seed.jsonl`
-- `data/odds_api/snapshots/<snapshot_id>/reports/backtest-results-template.csv`
-- `data/odds_api/snapshots/<snapshot_id>/reports/backtest-readiness.json`
+- `<REPORTS_DIR>/snapshots/<report_snapshot>/backtest-seed.jsonl`
+- `<REPORTS_DIR>/snapshots/<report_snapshot>/backtest-results-template.csv`
+- `<REPORTS_DIR>/snapshots/<report_snapshot>/backtest-readiness.json`
 
 You can re-generate explicitly:
 
@@ -41,7 +41,7 @@ In `backtest-results-template.csv`, fill:
 Check:
 
 ```bash
-jq . data/odds_api/snapshots/<snapshot_id>/reports/backtest-readiness.json
+jq . <REPORTS_DIR>/snapshots/<report_snapshot>/backtest-readiness.json
 ```
 
 `ready_for_backtest_seed=true` means snapshot inputs are complete enough for grading prep.
@@ -56,13 +56,13 @@ uv run prop-ev strategy settle --snapshot-id <snapshot_id> --refresh-results --r
 
 Outputs:
 
-- `data/odds_api/snapshots/<snapshot_id>/reports/backtest-settlement.json`
-- `data/odds_api/snapshots/<snapshot_id>/reports/backtest-settlement.md`
-- `data/odds_api/snapshots/<snapshot_id>/reports/backtest-settlement.tex`
-- `data/odds_api/snapshots/<snapshot_id>/reports/backtest-settlement.pdf`
-- `data/odds_api/snapshots/<snapshot_id>/reports/backtest-settlement.meta.json`
+- `<REPORTS_DIR>/snapshots/<report_snapshot>/backtest-settlement.json`
+- `<REPORTS_DIR>/snapshots/<report_snapshot>/backtest-settlement.md`
+- `<REPORTS_DIR>/snapshots/<report_snapshot>/backtest-settlement.tex`
+- `<REPORTS_DIR>/snapshots/<report_snapshot>/backtest-settlement.pdf`
+- `<REPORTS_DIR>/snapshots/<report_snapshot>/backtest-settlement.meta.json`
 - optional CSV via `--write-csv`:
-  `data/odds_api/snapshots/<snapshot_id>/reports/backtest-settlement.csv`
+  `<REPORTS_DIR>/snapshots/<report_snapshot>/backtest-settlement.csv`
 
 Behavior:
 

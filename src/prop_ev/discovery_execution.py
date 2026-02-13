@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from prop_ev.odds_math import american_to_decimal, ev_from_prob_and_price
+from prop_ev.report_paths import snapshot_reports_dir
 from prop_ev.storage import SnapshotStore
 from prop_ev.time_utils import iso_z, utc_now
 
@@ -299,7 +300,7 @@ def write_discovery_execution_reports(
     report: dict[str, Any],
 ) -> tuple[Path, Path]:
     """Write discovery-vs-execution JSON + markdown artifacts."""
-    reports_dir = store.snapshot_dir(execution_snapshot_id) / "reports"
+    reports_dir = snapshot_reports_dir(store, execution_snapshot_id)
     reports_dir.mkdir(parents=True, exist_ok=True)
     json_path = reports_dir / "discovery-execution.json"
     md_path = reports_dir / "discovery-execution.md"

@@ -7,6 +7,7 @@ import pytest
 
 from prop_ev.cli import _run_strategy_for_playbook, main
 from prop_ev.playbook import report_outputs_root
+from prop_ev.report_paths import snapshot_reports_dir
 from prop_ev.storage import SnapshotStore
 
 
@@ -267,15 +268,16 @@ def test_strategy_run_from_snapshot(local_data_dir: Path) -> None:
         )
         == 0
     )
-    assert (snapshot_dir / "reports" / "strategy-report.json").exists()
-    assert (snapshot_dir / "reports" / "strategy-report.md").exists()
-    assert (snapshot_dir / "reports" / "backtest-seed.jsonl").exists()
-    assert (snapshot_dir / "reports" / "backtest-readiness.json").exists()
-    assert not (snapshot_dir / "reports" / "strategy-report.s001.json").exists()
-    assert not (snapshot_dir / "reports" / "strategy-report.s001.md").exists()
-    assert not (snapshot_dir / "reports" / "backtest-seed.s001.jsonl").exists()
-    assert not (snapshot_dir / "reports" / "backtest-results-template.s001.csv").exists()
-    assert not (snapshot_dir / "reports" / "backtest-readiness.s001.json").exists()
+    reports_dir = snapshot_reports_dir(store, snapshot_id)
+    assert (reports_dir / "strategy-report.json").exists()
+    assert (reports_dir / "strategy-report.md").exists()
+    assert (reports_dir / "backtest-seed.jsonl").exists()
+    assert (reports_dir / "backtest-readiness.json").exists()
+    assert not (reports_dir / "strategy-report.s001.json").exists()
+    assert not (reports_dir / "strategy-report.s001.md").exists()
+    assert not (reports_dir / "backtest-seed.s001.jsonl").exists()
+    assert not (reports_dir / "backtest-results-template.s001.csv").exists()
+    assert not (reports_dir / "backtest-readiness.s001.json").exists()
 
     assert (
         main(
@@ -344,10 +346,11 @@ def test_strategy_compare_writes_suffixed_outputs(
         )
         == 0
     )
-    assert (snapshot_dir / "reports" / "strategy-compare.json").exists()
-    assert (snapshot_dir / "reports" / "strategy-compare.md").exists()
-    assert (snapshot_dir / "reports" / "strategy-report.s001.json").exists()
-    assert (snapshot_dir / "reports" / "strategy-report.s002.json").exists()
+    reports_dir = snapshot_reports_dir(store, snapshot_id)
+    assert (reports_dir / "strategy-compare.json").exists()
+    assert (reports_dir / "strategy-compare.md").exists()
+    assert (reports_dir / "strategy-report.s001.json").exists()
+    assert (reports_dir / "strategy-report.s002.json").exists()
 
 
 def test_strategy_run_replay_mode_adjusts_freshness_config(
@@ -381,7 +384,7 @@ def test_strategy_run_writes_execution_tagged_report(
 ) -> None:
     store = SnapshotStore(local_data_dir)
     snapshot_id = "2026-02-11T10-13-00Z"
-    snapshot_dir = _seed_strategy_snapshot(store, snapshot_id)
+    _seed_strategy_snapshot(store, snapshot_id)
 
     code = main(
         [
@@ -403,9 +406,10 @@ def test_strategy_run_writes_execution_tagged_report(
     out = capsys.readouterr().out
 
     assert code == 0
-    assert (snapshot_dir / "reports" / "strategy-report.execution-draftkings.json").exists()
-    assert (snapshot_dir / "reports" / "strategy-report.execution-draftkings.md").exists()
-    assert (snapshot_dir / "reports" / "strategy-card.execution-draftkings.md").exists()
+    reports_dir = snapshot_reports_dir(store, snapshot_id)
+    assert (reports_dir / "strategy-report.execution-draftkings.json").exists()
+    assert (reports_dir / "strategy-report.execution-draftkings.md").exists()
+    assert (reports_dir / "strategy-card.execution-draftkings.md").exists()
     assert "execution_bookmakers=draftkings" in out
     assert "execution_tag=execution-draftkings" in out
     assert "execution_report_json=" in out
@@ -443,13 +447,14 @@ def test_run_strategy_for_playbook_passes_strategy_id(
     assert captured["write_canonical"] is True
 
 
-def test_playbook_render_non_canonical_strategy_report_skips_refresh_and_forwards_tag(
+def test_playbook_render_non_canonical_strategy_report_skips_refresh(
     local_data_dir: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     monkeypatch.setenv("ODDS_API_KEY", "odds-test")
     store = SnapshotStore(local_data_dir)
     snapshot_id = "2026-02-11T10-14-00Z"
-    reports_dir = store.ensure_snapshot(snapshot_id) / "reports"
+    store.ensure_snapshot(snapshot_id)
+    reports_dir = snapshot_reports_dir(store, snapshot_id)
     reports_dir.mkdir(parents=True, exist_ok=True)
     non_canonical = reports_dir / "strategy-report.execution-draftkings.json"
     non_canonical.write_text("{}\n", encoding="utf-8")
@@ -461,9 +466,9 @@ def test_playbook_render_non_canonical_strategy_report_skips_refresh_and_forward
 
     def _fake_generate(**kwargs):
         captured["strategy_report_path"] = kwargs.get("strategy_report_path")
-        captured["artifact_tag"] = kwargs.get("artifact_tag")
+        captured["write_markdown"] = kwargs.get("write_markdown")
         return {
-            "report_markdown": "brief.md",
+            "report_markdown": "",
             "report_tex": "brief.tex",
             "report_pdf": "brief.pdf",
             "report_meta": "brief.meta.json",
@@ -481,17 +486,15 @@ def test_playbook_render_non_canonical_strategy_report_skips_refresh_and_forward
             "--offline",
             "--strategy-report-file",
             "strategy-report.execution-draftkings.json",
-            "--brief-tag",
-            "draftkings-replay",
         ]
     )
     out = capsys.readouterr().out
 
     assert code == 0
     assert captured["strategy_report_path"] == non_canonical
-    assert captured["artifact_tag"] == "draftkings-replay"
+    assert captured["write_markdown"] is False
     assert f"strategy_report_path={non_canonical}" in out
-    assert "brief_tag=draftkings-replay" in out
+    assert "strategy_brief_md=disabled" in out
 
 
 def test_global_data_dir_override_from_subcommand_position(
@@ -666,7 +669,8 @@ def test_snapshot_verify_check_derived_enforces_required_table_and_parquet(
 def test_playbook_publish_copies_only_compact_outputs(local_data_dir: Path) -> None:
     store = SnapshotStore(local_data_dir)
     snapshot_id = "2026-02-11T13-13-13Z"
-    reports_dir = store.ensure_snapshot(snapshot_id) / "reports"
+    store.ensure_snapshot(snapshot_id)
+    reports_dir = snapshot_reports_dir(store, snapshot_id)
     reports_dir.mkdir(parents=True, exist_ok=True)
     (reports_dir / "strategy-report.json").write_text("{}\n", encoding="utf-8")
     (reports_dir / "strategy-brief.meta.json").write_text("{}\n", encoding="utf-8")
@@ -696,7 +700,8 @@ def test_playbook_publish_copies_only_compact_outputs(local_data_dir: Path) -> N
 def test_playbook_publish_derives_date_for_legacy_daily_snapshot_id(local_data_dir: Path) -> None:
     store = SnapshotStore(local_data_dir)
     snapshot_id = "daily-20260212T230052Z"
-    reports_dir = store.ensure_snapshot(snapshot_id) / "reports"
+    store.ensure_snapshot(snapshot_id)
+    reports_dir = snapshot_reports_dir(store, snapshot_id)
     reports_dir.mkdir(parents=True, exist_ok=True)
     (reports_dir / "strategy-report.json").write_text("{}\n", encoding="utf-8")
     (reports_dir / "strategy-brief.meta.json").write_text("{}\n", encoding="utf-8")
@@ -718,7 +723,8 @@ def test_global_reports_dir_override_from_subcommand_position(
 ) -> None:
     store = SnapshotStore(local_data_dir)
     snapshot_id = "2026-02-11T14-14-14Z"
-    reports_dir = store.ensure_snapshot(snapshot_id) / "reports"
+    store.ensure_snapshot(snapshot_id)
+    reports_dir = snapshot_reports_dir(store, snapshot_id)
     reports_dir.mkdir(parents=True, exist_ok=True)
     (reports_dir / "strategy-report.json").write_text("{}\n", encoding="utf-8")
     (reports_dir / "strategy-brief.md").write_text("# Brief\n", encoding="utf-8")

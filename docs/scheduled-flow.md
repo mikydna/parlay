@@ -6,6 +6,8 @@ For operator policy and contract references, see:
 - `docs/runbook.md`
 - `docs/contracts.md`
 
+`REPORTS_DIR` defaults to sibling `reports/` next to `ODDS_DATA_DIR`.
+
 ## Hourly Schedule Command
 
 ```bash
@@ -29,7 +31,7 @@ If `--bookmakers` is not passed, the command uses `config/bookmakers.json`
 - check if now is inside the configured live window (`pre_tip=3h`, `post_tip=1h`),
 - skip live odds fetch when outside window or monthly odds cap is reached,
 - run deterministic strategy report,
-- build markdown + LaTeX + PDF brief artifacts.
+- build PDF + LaTeX brief artifacts (`--write-markdown` is opt-in).
 
 ## Offline Re-Run (No Credits)
 
@@ -40,13 +42,13 @@ uv run prop-ev playbook run --offline
 Render a specific cached snapshot:
 
 ```bash
-uv run prop-ev playbook render --snapshot-id 2026-02-11T16-44-54Z --offline
+uv run prop-ev playbook render --snapshot-id 2026-02-11T16-44-54-ET --offline
 ```
 
 ## Validate Snapshot Integrity
 
 ```bash
-uv run prop-ev snapshot verify --snapshot-id 2026-02-11T16-44-54Z
+uv run prop-ev snapshot verify --snapshot-id 2026-02-11T16-44-54-ET
 ```
 
 ## Validate Day-Index Coverage (No Spend)
@@ -63,23 +65,23 @@ uv run prop-ev data status --dataset-id <DATASET_ID> --from 2026-01-22 --to 2026
 - Normalized props table:
   - `data/odds_api/snapshots/<snapshot_id>/derived/event_props.jsonl`
 - Strategy outputs:
-  - `data/odds_api/snapshots/<snapshot_id>/reports/strategy-report.json`
-  - `data/odds_api/snapshots/<snapshot_id>/reports/strategy-report.md`
-  - `data/odds_api/snapshots/<snapshot_id>/reports/backtest-seed.jsonl`
-  - `data/odds_api/snapshots/<snapshot_id>/reports/backtest-results-template.csv`
-  - `data/odds_api/snapshots/<snapshot_id>/reports/backtest-readiness.json`
+  - `<REPORTS_DIR>/snapshots/<report_snapshot>/strategy-report.json`
+  - `<REPORTS_DIR>/snapshots/<report_snapshot>/strategy-report.md`
+  - `<REPORTS_DIR>/snapshots/<report_snapshot>/backtest-seed.jsonl`
+  - `<REPORTS_DIR>/snapshots/<report_snapshot>/backtest-results-template.csv`
+  - `<REPORTS_DIR>/snapshots/<report_snapshot>/backtest-readiness.json`
 - Playbook outputs:
-  - `data/odds_api/snapshots/<snapshot_id>/reports/brief-input.json`
-  - `data/odds_api/snapshots/<snapshot_id>/reports/brief-pass1.json`
-  - `data/odds_api/snapshots/<snapshot_id>/reports/strategy-brief.md`
-  - `data/odds_api/snapshots/<snapshot_id>/reports/strategy-brief.tex`
-  - `data/odds_api/snapshots/<snapshot_id>/reports/strategy-brief.pdf` (if `tectonic` installed)
-  - `data/odds_api/snapshots/<snapshot_id>/reports/strategy-brief.meta.json`
+  - `<REPORTS_DIR>/snapshots/<report_snapshot>/brief-input.json`
+  - `<REPORTS_DIR>/snapshots/<report_snapshot>/brief-pass1.json`
+  - `<REPORTS_DIR>/snapshots/<report_snapshot>/strategy-brief.md` (only with `--write-markdown`)
+  - `<REPORTS_DIR>/snapshots/<report_snapshot>/strategy-brief.tex`
+  - `<REPORTS_DIR>/snapshots/<report_snapshot>/strategy-brief.pdf` (if `tectonic` installed)
+  - `<REPORTS_DIR>/snapshots/<report_snapshot>/strategy-brief.meta.json`
 - Latest mirrors:
-  - `data/odds_api/reports/latest/strategy-report.json`
-  - `data/odds_api/reports/latest/strategy-brief.meta.json`
-  - `data/odds_api/reports/latest/strategy-brief.pdf` (if generated)
-  - `data/odds_api/reports/latest/latest.json`
+  - `<REPORTS_DIR>/latest/strategy-report.json`
+  - `<REPORTS_DIR>/latest/strategy-brief.meta.json`
+  - `<REPORTS_DIR>/latest/strategy-brief.pdf` (if generated)
+  - `<REPORTS_DIR>/latest/latest.json`
 
 ## Current Gaps (Explicit)
 

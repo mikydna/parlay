@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 import json
-import os
-import re
 from datetime import datetime, timedelta
 from pathlib import Path
 from shutil import copy2
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from prop_ev.brief_builder import (
     append_game_cards_section,
@@ -47,6 +46,8 @@ from prop_ev.llm_client import (
     LLMClientError,
     LLMOfflineCacheMissError,
 )
+from prop_ev.report_paths import latest_reports_dir, snapshot_reports_dir
+from prop_ev.report_paths import report_outputs_root as _report_outputs_root
 from prop_ev.settings import Settings
 from prop_ev.storage import SnapshotStore
 from prop_ev.time_utils import parse_iso_z, utc_now_str
@@ -56,6 +57,7 @@ _LATEST_REPORT_FILES: tuple[str, ...] = (
     "strategy-brief.meta.json",
     "strategy-brief.pdf",
 )
+ET_ZONE = ZoneInfo("America/New_York")
 
 
 def _now_utc() -> str:
@@ -64,6 +66,13 @@ def _now_utc() -> str:
 
 def _parse_iso_utc(value: str) -> datetime | None:
     return parse_iso_z(value)
+
+
+def _format_et(value: str) -> str:
+    parsed = _parse_iso_utc(value)
+    if parsed is None:
+        return ""
+    return parsed.astimezone(ET_ZONE).strftime("%Y-%m-%d %I:%M:%S %p %Z")
 
 
 def _write_json(path: Path, value: Any) -> Path:
@@ -79,56 +88,9 @@ def _load_json(path: Path) -> dict[str, Any]:
     return payload
 
 
-def _sanitize_artifact_tag(tag: str) -> str:
-    cleaned = re.sub(r"[^A-Za-z0-9._-]+", "-", tag.strip())
-    cleaned = re.sub(r"-{2,}", "-", cleaned).strip("._-")
-    return cleaned
-
-
 def report_outputs_root(store: SnapshotStore) -> Path:
-    """Return user-facing report root outside odds snapshot storage when possible."""
-    override = os.environ.get("PROP_EV_REPORTS_DIR", "").strip()
-    if override:
-        return Path(override).expanduser().resolve()
-    root = store.root.resolve()
-    if root.name == "odds_api":
-        return root.parent / "reports"
-    return root / "reports"
-
-
-def _snapshot_output_dir(*, store: SnapshotStore, snapshot_id: str) -> Path:
-    return report_outputs_root(store) / "snapshots" / snapshot_id
-
-
-def _publish_snapshot_outputs(
-    *,
-    snapshot_output_dir: Path,
-    markdown_path: Path,
-    tex_path: Path,
-    pdf_path: Path,
-    meta_path: Path,
-    brief_input_path: Path,
-    pass1_path: Path,
-    analyst_path: Path,
-) -> dict[str, Path]:
-    snapshot_output_dir.mkdir(parents=True, exist_ok=True)
-    copied = {
-        "report_markdown": snapshot_output_dir / markdown_path.name,
-        "report_tex": snapshot_output_dir / tex_path.name,
-        "report_pdf": snapshot_output_dir / pdf_path.name,
-        "report_meta": snapshot_output_dir / meta_path.name,
-        "brief_input": snapshot_output_dir / brief_input_path.name,
-        "brief_pass1": snapshot_output_dir / pass1_path.name,
-        "brief_analyst": snapshot_output_dir / analyst_path.name,
-    }
-    copy2(markdown_path, copied["report_markdown"])
-    copy2(tex_path, copied["report_tex"])
-    copy2(pdf_path, copied["report_pdf"])
-    copy2(meta_path, copied["report_meta"])
-    copy2(brief_input_path, copied["brief_input"])
-    copy2(pass1_path, copied["brief_pass1"])
-    copy2(analyst_path, copied["brief_analyst"])
-    return copied
+    """Expose canonical report root helper for callers/tests."""
+    return _report_outputs_root(store)
 
 
 def _pass1_structured_output_options() -> dict[str, Any]:
@@ -293,9 +255,11 @@ def _publish_latest(
         dst = latest_dir / filename
         copy2(src, dst)
         published[filename] = str(dst)
+    now_utc = _now_utc()
     latest_pointer = {
         "snapshot_id": snapshot_id,
-        "updated_at_utc": _now_utc(),
+        "updated_at_utc": now_utc,
+        "updated_at_et": _format_et(now_utc),
     }
     latest_json = latest_dir / "latest.json"
     _write_json(latest_json, latest_pointer)
@@ -315,16 +279,11 @@ def generate_brief_for_snapshot(
     game_card_min_ev: float = 0.01,
     month: str | None = None,
     strategy_report_path: Path | None = None,
-    artifact_tag: str = "",
+    write_markdown: bool = False,
 ) -> dict[str, Any]:
     """Generate markdown + LaTeX + PDF brief for one snapshot."""
-    snapshot_dir = store.snapshot_dir(snapshot_id)
-    reports_dir = snapshot_dir / "reports"
+    reports_dir = snapshot_reports_dir(store, snapshot_id)
     reports_dir.mkdir(parents=True, exist_ok=True)
-    safe_tag = _sanitize_artifact_tag(artifact_tag) if artifact_tag else ""
-    if artifact_tag and not safe_tag:
-        raise ValueError("artifact_tag must contain at least one filename-safe character")
-    suffix = f".{safe_tag}" if safe_tag else ""
 
     strategy_json_path = (
         Path(strategy_report_path).expanduser()
@@ -341,7 +300,7 @@ def generate_brief_for_snapshot(
         per_game_top_n=per_game_top_n,
         game_card_min_ev=game_card_min_ev,
     )
-    brief_input_path = _write_json(reports_dir / f"brief-input{suffix}.json", brief_input)
+    brief_input_path = _write_json(reports_dir / "brief-input.json", brief_input)
 
     llm = LLMClient(settings=settings, data_root=store.root)
     model = settings.openai_model
@@ -436,7 +395,7 @@ def generate_brief_for_snapshot(
             "errors": pass1_errors,
         }
 
-    pass1_path = _write_json(reports_dir / f"brief-pass1{suffix}.json", pass1)
+    pass1_path = _write_json(reports_dir / "brief-pass1.json", pass1)
 
     pass2_prompt = build_pass2_prompt(brief_input, pass1)
     pass2_payload = {
@@ -637,7 +596,7 @@ def generate_brief_for_snapshot(
             "errors": analyst_errors,
         }
 
-    analyst_path = _write_json(reports_dir / f"brief-analyst{suffix}.json", analyst_take)
+    analyst_path = _write_json(reports_dir / "brief-analyst.json", analyst_take)
 
     fallback_md = render_fallback_markdown(
         brief_input=brief_input,
@@ -667,13 +626,15 @@ def generate_brief_for_snapshot(
         llm_pass2_status=str(pass2_meta.get("status", "")),
     )
     markdown = enforce_snapshot_dates_et(markdown, brief_input=brief_input)
-    markdown_path = reports_dir / f"strategy-brief{suffix}.md"
-    markdown_path.write_text(markdown, encoding="utf-8")
+    markdown_path: Path | None = None
+    if write_markdown:
+        markdown_path = reports_dir / "strategy-brief.md"
+        markdown_path.write_text(markdown, encoding="utf-8")
 
-    tex_path = reports_dir / f"strategy-brief{suffix}.tex"
+    tex_path = reports_dir / "strategy-brief.tex"
     write_latex(markdown, tex_path=tex_path, title="NBA Strategy Brief", landscape=True)
 
-    pdf_path = reports_dir / f"strategy-brief{suffix}.pdf"
+    pdf_path = reports_dir / "strategy-brief.pdf"
     pdf_result = render_pdf_from_markdown(
         markdown,
         tex_path=tex_path,
@@ -682,17 +643,19 @@ def generate_brief_for_snapshot(
         landscape=True,
     )
 
+    generated_at_utc = _now_utc()
     meta = {
         "schema_version": 1,
-        "generated_at_utc": _now_utc(),
+        "generated_at_utc": generated_at_utc,
+        "generated_at_et": _format_et(generated_at_utc),
         "snapshot_id": snapshot_id,
         "strategy_report_path": str(strategy_json_path),
-        "artifact_tag": safe_tag,
+        "write_markdown": bool(write_markdown),
         "model": model,
         "brief_input_path": str(brief_input_path),
         "brief_pass1_path": str(pass1_path),
         "brief_analyst_path": str(analyst_path),
-        "brief_markdown_path": str(markdown_path),
+        "brief_markdown_path": str(markdown_path) if markdown_path is not None else "",
         "brief_tex_path": str(tex_path),
         "brief_pdf_path": str(pdf_path),
         "llm": {
@@ -705,38 +668,25 @@ def generate_brief_for_snapshot(
         "pdf": pdf_result,
         "latest": {},
     }
-    meta_path = reports_dir / f"strategy-brief.meta{suffix}.json"
+    meta_path = reports_dir / "strategy-brief.meta.json"
     _write_json(meta_path, meta)
-    latest_dir = report_outputs_root(store) / "latest"
-    published: dict[str, str] = {}
-    if not safe_tag:
-        published = _publish_latest(reports_dir, latest_dir, snapshot_id)
-        meta["latest"] = published
-        _write_json(meta_path, meta)
-        latest_meta_path = latest_dir / meta_path.name
-        if latest_meta_path.exists():
-            copy2(meta_path, latest_meta_path)
-
-    published_paths = _publish_snapshot_outputs(
-        snapshot_output_dir=_snapshot_output_dir(store=store, snapshot_id=snapshot_id),
-        markdown_path=markdown_path,
-        tex_path=tex_path,
-        pdf_path=pdf_path,
-        meta_path=meta_path,
-        brief_input_path=brief_input_path,
-        pass1_path=pass1_path,
-        analyst_path=analyst_path,
-    )
+    latest_dir = latest_reports_dir(store)
+    published = _publish_latest(reports_dir, latest_dir, snapshot_id)
+    meta["latest"] = published
+    _write_json(meta_path, meta)
+    latest_meta_path = latest_dir / meta_path.name
+    if latest_meta_path.exists():
+        copy2(meta_path, latest_meta_path)
 
     return {
         "snapshot_id": snapshot_id,
-        "report_markdown": str(published_paths["report_markdown"]),
-        "report_tex": str(published_paths["report_tex"]),
-        "report_pdf": str(published_paths["report_pdf"]),
-        "report_meta": str(published_paths["report_meta"]),
-        "brief_input": str(published_paths["brief_input"]),
-        "brief_pass1": str(published_paths["brief_pass1"]),
-        "brief_analyst": str(published_paths["brief_analyst"]),
+        "report_markdown": str(markdown_path) if markdown_path is not None else "",
+        "report_tex": str(tex_path),
+        "report_pdf": str(pdf_path),
+        "report_meta": str(meta_path),
+        "brief_input": str(brief_input_path),
+        "brief_pass1": str(pass1_path),
+        "brief_analyst": str(analyst_path),
         "llm_pass1_status": pass1_meta.get("status", ""),
         "llm_pass2_status": pass2_meta.get("status", ""),
         "pdf_status": pdf_result.get("status", ""),

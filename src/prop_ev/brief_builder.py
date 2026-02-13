@@ -126,6 +126,24 @@ def _to_optional_bool(value: Any) -> bool | None:
     return None
 
 
+def _execution_books(report: dict[str, Any]) -> list[str]:
+    projection = report.get("execution_projection", {})
+    if not isinstance(projection, dict):
+        return []
+    raw_books = projection.get("bookmakers", [])
+    if not isinstance(raw_books, list):
+        return []
+    books: list[str] = []
+    seen: set[str] = set()
+    for raw in raw_books:
+        name = _to_str(raw).strip().lower()
+        if not name or name in seen:
+            continue
+        seen.add(name)
+        books.append(name)
+    return books
+
+
 def _pick_side_fields(item: dict[str, Any]) -> dict[str, Any]:
     side = _to_str(item.get("recommended_side", "")).lower()
     if side == "under":
@@ -664,6 +682,7 @@ def build_brief_input(
     )
 
     generated_at_utc = _to_str(report.get("generated_at_utc", ""))
+    execution_books = _execution_books(report)
 
     return {
         "snapshot_id": _to_str(report.get("snapshot_id", "")),
@@ -671,6 +690,7 @@ def build_brief_input(
         "generated_at_utc": generated_at_utc,
         "generated_at_et": _format_timestamp_et(generated_at_utc),
         "modeled_date_et": _to_str(report.get("modeled_date_et", "")),
+        "execution_books": execution_books,
         "summary": {
             "events": summary.get("events", 0),
             "candidate_lines": summary.get("candidate_lines", 0),
@@ -796,6 +816,7 @@ def build_pass2_prompt(brief_input: dict[str, Any], pass1: dict[str, Any]) -> st
         "## Data Quality\n"
         "## Confidence\n\n"
         "Within Snapshot, show dates/times in ET (America/New_York); do not use UTC/Z.\n"
+        "Within Snapshot, include execution_books when present.\n"
         "Within Action Plan, use a markdown table with columns: Action, Game, Tier, Ticket, "
         "p(hit), Edge Note, Why.\n"
         "p(hit) must come from the provided model_prob for that ticket.\n"
@@ -880,6 +901,13 @@ def render_fallback_markdown(
         lines.append(f"- generated_at_et: `{generated_at_et}`")
     else:
         lines.append(f"- generated_at_utc: `{brief_input.get('generated_at_utc', '')}`")
+    execution_books = (
+        brief_input.get("execution_books", [])
+        if isinstance(brief_input.get("execution_books"), list)
+        else []
+    )
+    if execution_books:
+        lines.append(f"- execution_books: `{', '.join(_to_str(book) for book in execution_books)}`")
     lines.append(f"- source: `{source_label}`")
     lines.append("")
     lines.append("## What The Bet Is")
@@ -1930,7 +1958,9 @@ def enforce_snapshot_dates_et(markdown: str, *, brief_input: dict[str, Any]) -> 
     filtered: list[str] = []
     for row in section:
         stripped = row.strip()
-        if stripped.startswith(("- snapshot_id:", "- modeled_date_et:", "- generated_at_et:")):
+        if stripped.startswith(
+            ("- snapshot_id:", "- modeled_date_et:", "- generated_at_et:", "- execution_books:")
+        ):
             continue
         if stripped.startswith("- generated_at_utc:"):
             continue
@@ -1946,6 +1976,11 @@ def enforce_snapshot_dates_et(markdown: str, *, brief_input: dict[str, Any]) -> 
     modeled_date_et = _to_str(brief_input.get("modeled_date_et", "")).strip()
     generated_at_et = _to_str(brief_input.get("generated_at_et", "")).strip()
     generated_at_utc = _to_str(brief_input.get("generated_at_utc", "")).strip()
+    execution_books = (
+        brief_input.get("execution_books", [])
+        if isinstance(brief_input.get("execution_books"), list)
+        else []
+    )
 
     meta: list[str] = []
     if snapshot_id:
@@ -1956,6 +1991,8 @@ def enforce_snapshot_dates_et(markdown: str, *, brief_input: dict[str, Any]) -> 
         meta.append(f"- generated_at_et: `{generated_at_et}`")
     elif generated_at_utc:
         meta.append(f"- generated_at_utc: `{generated_at_utc}`")
+    if execution_books:
+        meta.append(f"- execution_books: `{', '.join(_to_str(book) for book in execution_books)}`")
 
     if not meta:
         return markdown.rstrip() + "\n"

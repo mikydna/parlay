@@ -17,6 +17,13 @@ def test_request_hash_excludes_api_key() -> None:
     assert hash_a == hash_b
 
 
+def test_make_snapshot_id_uses_et_friendly_format() -> None:
+    snapshot_id = make_snapshot_id()
+    assert snapshot_id.endswith("-ET")
+    assert "Z" not in snapshot_id
+    assert len(snapshot_id) >= len("2026-02-11T10-00-00-ET")
+
+
 def test_cache_hit_prevents_fetch_path(tmp_path: Path) -> None:
     store = SnapshotStore(tmp_path / "data")
     snapshot_id = make_snapshot_id()

@@ -19,6 +19,9 @@ If env vars are missing, the CLI also checks key files at repo root:
 `ODDS_API_KEY` / `ODDS_API_KEY.ignore`.
 Set `OPENAI_API_KEY` for LLM summaries, or place the key in `OPENAI_KEY` /
 `OPENAI_KEY.ignore` at repo root.
+Set `ODDS_DATA_DIR` in your shell (or pass `--data-dir`) to the storage location,
+for example `/Users/$USER/Documents/Code/parlay-data/odds_api`.
+Reports are written to `REPORTS_DIR` (default: sibling `reports/` next to `ODDS_DATA_DIR`).
 
 Bookmaker whitelist defaults are in `config/bookmakers.json` (currently DraftKings + FanDuel).
 When `--bookmakers` is omitted, snapshot/playbook commands use this whitelist automatically.
@@ -99,7 +102,7 @@ Bundle snapshots and convert JSONL -> Parquet:
 ```bash
 uv run prop-ev snapshot lake --snapshot-id <SNAPSHOT_ID>
 uv run prop-ev snapshot pack --snapshot-id <SNAPSHOT_ID>
-uv run prop-ev snapshot unpack --bundle data/odds_api/bundles/snapshots/<SNAPSHOT_ID>.tar.zst
+uv run prop-ev snapshot unpack --bundle <ODDS_DATA_DIR>/bundles/snapshots/<SNAPSHOT_ID>.tar.zst
 ```
 
 Historical day backfill (paid key, per-event historical endpoints):
@@ -157,16 +160,16 @@ uv run prop-ev playbook run --block-paid
 This allows free endpoints (like event listing) but makes paid endpoints cache-only.
 
 Strategy reports are written to:
-- `data/odds_api/snapshots/<SNAPSHOT_ID>/reports/strategy-report.json`
-- `data/odds_api/snapshots/<SNAPSHOT_ID>/reports/strategy-report.md`
-- `data/odds_api/snapshots/<SNAPSHOT_ID>/reports/backtest-seed.jsonl`
-- `data/odds_api/snapshots/<SNAPSHOT_ID>/reports/backtest-results-template.csv`
-- `data/odds_api/snapshots/<SNAPSHOT_ID>/reports/backtest-readiness.json`
+- `<REPORTS_DIR>/snapshots/<REPORT_SNAPSHOT>/strategy-report.json`
+- `<REPORTS_DIR>/snapshots/<REPORT_SNAPSHOT>/strategy-report.md`
+- `<REPORTS_DIR>/snapshots/<REPORT_SNAPSHOT>/backtest-seed.jsonl`
+- `<REPORTS_DIR>/snapshots/<REPORT_SNAPSHOT>/backtest-results-template.csv`
+- `<REPORTS_DIR>/snapshots/<REPORT_SNAPSHOT>/backtest-readiness.json`
 
 Per-strategy runs also write suffixed artifacts:
-- `data/odds_api/snapshots/<SNAPSHOT_ID>/reports/strategy-report.<STRATEGY_ID>.json`
-- `data/odds_api/snapshots/<SNAPSHOT_ID>/reports/strategy-report.<STRATEGY_ID>.md`
-- `data/odds_api/snapshots/<SNAPSHOT_ID>/reports/backtest-results-template.<STRATEGY_ID>.csv`
+- `<REPORTS_DIR>/snapshots/<REPORT_SNAPSHOT>/strategy-report.<STRATEGY_ID>.json`
+- `<REPORTS_DIR>/snapshots/<REPORT_SNAPSHOT>/strategy-report.<STRATEGY_ID>.md`
+- `<REPORTS_DIR>/snapshots/<REPORT_SNAPSHOT>/backtest-results-template.<STRATEGY_ID>.csv`
 
 Rebuild backtest artifacts for any snapshot:
 
@@ -177,15 +180,15 @@ uv run prop-ev strategy backtest-summarize --snapshot-id <SNAPSHOT_ID> --strateg
 ```
 
 Strategy context caches are written to:
-- `data/odds_api/snapshots/<SNAPSHOT_ID>/context/injuries.json`
-- `data/odds_api/snapshots/<SNAPSHOT_ID>/context/roster.json`
-- `data/odds_api/snapshots/<SNAPSHOT_ID>/context/results.json`
-- `data/odds_api/snapshots/<SNAPSHOT_ID>/context/official_injury_pdf/latest.pdf`
+- `<ODDS_DATA_DIR>/snapshots/<SNAPSHOT_ID>/context/injuries.json`
+- `<ODDS_DATA_DIR>/snapshots/<SNAPSHOT_ID>/context/roster.json`
+- `<ODDS_DATA_DIR>/snapshots/<SNAPSHOT_ID>/context/results.json`
+- `<ODDS_DATA_DIR>/snapshots/<SNAPSHOT_ID>/context/official_injury_pdf/latest.pdf`
 
 Global context mirrors (for fallback and reruns) are written to:
-- `data/odds_api/reference/injuries/latest.json`
-- `data/odds_api/reference/rosters/latest.json`
-- `data/odds_api/reference/rosters/roster-YYYY-MM-DD.json`
+- `<ODDS_DATA_DIR>/reference/injuries/latest.json`
+- `<ODDS_DATA_DIR>/reference/rosters/latest.json`
+- `<ODDS_DATA_DIR>/reference/rosters/roster-YYYY-MM-DD.json`
 
 ## Playbook Workflow (Reader-Friendly Briefs)
 
@@ -219,10 +222,18 @@ Force offline rerun from latest cached snapshot:
 uv run prop-ev playbook run --offline
 ```
 
-Render a specific snapshot into markdown + LaTeX + PDF artifacts:
+Default live snapshot ids are now ET-friendly (example: `2026-02-13T18-05-42-ET`).
+
+Render a specific snapshot into PDF + LaTeX artifacts (markdown is opt-in):
 
 ```bash
 uv run prop-ev playbook render --snapshot-id <SNAPSHOT_ID> --offline
+```
+
+Add markdown artifact only when needed:
+
+```bash
+uv run prop-ev playbook render --snapshot-id <SNAPSHOT_ID> --offline --write-markdown
 ```
 
 Show monthly odds + LLM budget status:
@@ -238,16 +249,16 @@ uv run prop-ev playbook publish --snapshot-id <SNAPSHOT_ID>
 ```
 
 Playbook outputs per snapshot:
-- `data/odds_api/snapshots/<SNAPSHOT_ID>/reports/brief-input.json`
-- `data/odds_api/snapshots/<SNAPSHOT_ID>/reports/brief-pass1.json`
-- `data/odds_api/snapshots/<SNAPSHOT_ID>/reports/strategy-brief.md`
-- `data/odds_api/snapshots/<SNAPSHOT_ID>/reports/strategy-brief.tex`
-- `data/odds_api/snapshots/<SNAPSHOT_ID>/reports/strategy-brief.pdf` (if `tectonic` exists)
-- `data/odds_api/snapshots/<SNAPSHOT_ID>/reports/strategy-brief.meta.json`
+- `<REPORTS_DIR>/snapshots/<REPORT_SNAPSHOT>/brief-input.json`
+- `<REPORTS_DIR>/snapshots/<REPORT_SNAPSHOT>/brief-pass1.json`
+- `<REPORTS_DIR>/snapshots/<REPORT_SNAPSHOT>/strategy-brief.md` (only with `--write-markdown`)
+- `<REPORTS_DIR>/snapshots/<REPORT_SNAPSHOT>/strategy-brief.tex`
+- `<REPORTS_DIR>/snapshots/<REPORT_SNAPSHOT>/strategy-brief.pdf` (if `tectonic` exists)
+- `<REPORTS_DIR>/snapshots/<REPORT_SNAPSHOT>/strategy-brief.meta.json`
 
 Discovery vs execution report output:
-- `data/odds_api/snapshots/<EXEC_SNAPSHOT_ID>/reports/discovery-execution.json`
-- `data/odds_api/snapshots/<EXEC_SNAPSHOT_ID>/reports/discovery-execution.md`
+- `<REPORTS_DIR>/snapshots/<REPORT_SNAPSHOT>/discovery-execution.json`
+- `<REPORTS_DIR>/snapshots/<REPORT_SNAPSHOT>/discovery-execution.md`
 
 Strategy report health now includes:
 - feed status contract (`official_injuries`, `secondary_injuries`, `roster`)
@@ -256,10 +267,10 @@ Strategy report health now includes:
 - automatic mode downgrade to `watchlist_only` when required data is missing/stale.
 
 Latest mirrors:
-- `data/odds_api/reports/latest/strategy-brief.meta.json`
-- `data/odds_api/reports/latest/strategy-report.json`
-- `data/odds_api/reports/latest/strategy-brief.pdf` (if generated)
-- `data/odds_api/reports/latest/latest.json`
+- `<REPORTS_DIR>/latest/strategy-brief.meta.json`
+- `<REPORTS_DIR>/latest/strategy-report.json`
+- `<REPORTS_DIR>/latest/strategy-brief.pdf` (if generated)
+- `<REPORTS_DIR>/latest/latest.json`
 
 ## Free-Tier Guardrails (500 credits/month)
 

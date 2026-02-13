@@ -2487,7 +2487,7 @@ def render_strategy_markdown(report: dict[str, Any], top_n: int) -> str:
 
 def write_strategy_reports(
     *,
-    snapshot_dir: Path,
+    reports_dir: Path,
     report: dict[str, Any],
     top_n: int,
     strategy_id: str | None = None,
@@ -2496,7 +2496,6 @@ def write_strategy_reports(
     """Write json and markdown strategy reports."""
     from prop_ev.strategies.base import normalize_strategy_id
 
-    reports_dir = snapshot_dir / "reports"
     reports_dir.mkdir(parents=True, exist_ok=True)
     markdown = render_strategy_markdown(report, top_n=top_n)
 
@@ -2538,7 +2537,7 @@ def _sanitize_artifact_tag(tag: str) -> str:
 
 def write_tagged_strategy_reports(
     *,
-    snapshot_dir: Path,
+    reports_dir: Path,
     report: dict[str, Any],
     top_n: int,
     tag: str,
@@ -2548,7 +2547,6 @@ def write_tagged_strategy_reports(
     if not safe_tag:
         raise ValueError("tag must contain at least one filename-safe character")
 
-    reports_dir = snapshot_dir / "reports"
     reports_dir.mkdir(parents=True, exist_ok=True)
     markdown = render_strategy_markdown(report, top_n=top_n)
 

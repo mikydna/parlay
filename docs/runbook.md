@@ -2,6 +2,11 @@
 
 Operator-focused flow for daily execution, offline replay, and health triage.
 
+Assume `ODDS_DATA_DIR=/Users/$USER/Documents/Code/parlay-data/odds_api`
+or pass `--data-dir` explicitly on commands.
+`REPORTS_DIR` defaults to `/Users/$USER/Documents/Code/parlay-data/reports`
+unless overridden via `--reports-dir` / `PROP_EV_REPORTS_DIR`.
+
 ## Standard Run (Auto-gated Live/Offline)
 
 ```bash
@@ -40,6 +45,12 @@ Render an existing snapshot only:
 
 ```bash
 uv run prop-ev playbook render --snapshot-id <SNAPSHOT_ID> --offline
+```
+
+Write markdown artifact only when explicitly requested:
+
+```bash
+uv run prop-ev playbook render --snapshot-id <SNAPSHOT_ID> --offline --write-markdown
 ```
 
 ## Zero-Credit Readiness Validation
@@ -133,20 +144,20 @@ Implementation model:
 ## Key Artifacts
 
 Per snapshot:
-- `data/odds_api/snapshots/<snapshot_id>/reports/strategy-report.json`
-- `data/odds_api/snapshots/<snapshot_id>/reports/strategy-report.md`
-- `data/odds_api/snapshots/<snapshot_id>/reports/backtest-seed.jsonl`
-- `data/odds_api/snapshots/<snapshot_id>/reports/backtest-results-template.csv`
-- `data/odds_api/snapshots/<snapshot_id>/reports/backtest-readiness.json`
-- `data/odds_api/snapshots/<snapshot_id>/reports/brief-input.json`
-- `data/odds_api/snapshots/<snapshot_id>/reports/brief-pass1.json`
-- `data/odds_api/snapshots/<snapshot_id>/reports/strategy-brief.md`
-- `data/odds_api/snapshots/<snapshot_id>/reports/strategy-brief.tex`
-- `data/odds_api/snapshots/<snapshot_id>/reports/strategy-brief.pdf` (when PDF tooling is installed)
-- `data/odds_api/snapshots/<snapshot_id>/reports/strategy-brief.meta.json`
+- `<REPORTS_DIR>/snapshots/<report_snapshot>/strategy-report.json`
+- `<REPORTS_DIR>/snapshots/<report_snapshot>/strategy-report.md`
+- `<REPORTS_DIR>/snapshots/<report_snapshot>/backtest-seed.jsonl`
+- `<REPORTS_DIR>/snapshots/<report_snapshot>/backtest-results-template.csv`
+- `<REPORTS_DIR>/snapshots/<report_snapshot>/backtest-readiness.json`
+- `<REPORTS_DIR>/snapshots/<report_snapshot>/brief-input.json`
+- `<REPORTS_DIR>/snapshots/<report_snapshot>/brief-pass1.json`
+- `<REPORTS_DIR>/snapshots/<report_snapshot>/strategy-brief.md` (only with `--write-markdown`)
+- `<REPORTS_DIR>/snapshots/<report_snapshot>/strategy-brief.tex`
+- `<REPORTS_DIR>/snapshots/<report_snapshot>/strategy-brief.pdf` (when PDF tooling is installed)
+- `<REPORTS_DIR>/snapshots/<report_snapshot>/strategy-brief.meta.json`
 
 Latest mirrors:
-- `data/odds_api/reports/latest/strategy-report.json`
-- `data/odds_api/reports/latest/strategy-brief.meta.json`
-- `data/odds_api/reports/latest/strategy-brief.pdf` (if generated)
-- `data/odds_api/reports/latest/latest.json`
+- `<REPORTS_DIR>/latest/strategy-report.json`
+- `<REPORTS_DIR>/latest/strategy-brief.meta.json`
+- `<REPORTS_DIR>/latest/strategy-brief.pdf` (if generated)
+- `<REPORTS_DIR>/latest/latest.json`
