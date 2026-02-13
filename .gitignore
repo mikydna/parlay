@@ -9,6 +9,7 @@ dist/
 
 # Local data snapshots
 data/
+reports/
 
 # Virtual env
 .venv/

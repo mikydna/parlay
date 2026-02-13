@@ -27,6 +27,7 @@ When `--bookmakers` is omitted, snapshot/playbook commands use this whitelist au
 
 ```bash
 uv run prop-ev --help
+uv run prop-ev --data-dir /Users/$USER/Documents/Code/parlay-data/odds_api snapshot ls
 uv run prop-ev snapshot slate --dry-run
 uv run prop-ev snapshot props --dry-run --max-events 10
 uv run prop-ev strategy health --offline
@@ -47,6 +48,8 @@ uv run nba-data discover --seasons 2023-24,2024-25,2025-26 --season-type "Regula
 uv run nba-data ingest --seasons 2023-24,2024-25,2025-26 --season-type "Regular Season"
 uv run nba-data clean --seasons 2023-24,2024-25,2025-26 --season-type "Regular Season"
 uv run nba-data verify --seasons 2023-24,2024-25,2025-26 --season-type "Regular Season"
+uv run nba-data export clean --data-dir data/nba_data --dst-data-dir ../parlay-data/nba_data
+uv run nba-data export raw-archive --data-dir data/nba_data --dst-data-dir ../parlay-data/nba_data
 ```
 
 Artifacts are written under `data/nba_data`. Ingest is resume-safe and skips already valid raw mirrors.
@@ -79,6 +82,14 @@ uv run prop-ev snapshot show --snapshot-id <SNAPSHOT_ID>
 uv run prop-ev snapshot props --snapshot-id <SNAPSHOT_ID> --offline
 uv run prop-ev strategy run --snapshot-id <SNAPSHOT_ID> --offline
 uv run prop-ev strategy compare --snapshot-id <SNAPSHOT_ID> --strategies v0,baseline_median_novig --offline
+```
+
+Bundle snapshots and convert JSONL -> Parquet:
+
+```bash
+uv run prop-ev snapshot lake --snapshot-id <SNAPSHOT_ID>
+uv run prop-ev snapshot pack --snapshot-id <SNAPSHOT_ID>
+uv run prop-ev snapshot unpack --bundle data/odds_api/bundles/snapshots/<SNAPSHOT_ID>.tar.zst
 ```
 
 Dev mode with free calls allowed but paid odds endpoints blocked:
@@ -162,6 +173,12 @@ Show monthly odds + LLM budget status:
 uv run prop-ev playbook budget --month 2026-02
 ```
 
+Publish compact user-facing outputs to daily/latest mirrors:
+
+```bash
+uv run prop-ev playbook publish --snapshot-id <SNAPSHOT_ID>
+```
+
 Playbook outputs per snapshot:
 - `data/odds_api/snapshots/<SNAPSHOT_ID>/reports/brief-input.json`
 - `data/odds_api/snapshots/<SNAPSHOT_ID>/reports/brief-pass1.json`
@@ -182,7 +199,8 @@ Strategy report health now includes:
 
 Latest mirrors:
 - `data/odds_api/reports/latest/strategy-brief.md`
-- `data/odds_api/reports/latest/strategy-brief.tex`
+- `data/odds_api/reports/latest/strategy-brief.meta.json`
+- `data/odds_api/reports/latest/strategy-report.json`
 - `data/odds_api/reports/latest/strategy-brief.pdf` (if generated)
 - `data/odds_api/reports/latest/latest.json`
 
