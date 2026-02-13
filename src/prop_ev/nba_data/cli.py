@@ -5,10 +5,12 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from pathlib import Path
 
 from prop_ev.nba_data.clean.build import build_clean
 from prop_ev.nba_data.config import load_config
 from prop_ev.nba_data.errors import CLIError, NBADataError
+from prop_ev.nba_data.export import export_clean_artifacts, export_raw_archives
 from prop_ev.nba_data.ingest.discover import discover_games
 from prop_ev.nba_data.ingest.fetch import ingest_resources, parse_resources
 from prop_ev.nba_data.io_utils import atomic_write_json
@@ -189,6 +191,61 @@ def _cmd_verify(args: argparse.Namespace) -> int:
     return int(code)
 
 
+def _cmd_export_clean(args: argparse.Namespace) -> int:
+    source_config = load_config(data_dir=getattr(args, "data_dir", None))
+    source_layout = build_layout(source_config.data_dir)
+    destination_layout = build_layout(Path(str(args.dst_data_dir)).expanduser())
+    summary = export_clean_artifacts(
+        src_layout=source_layout,
+        dst_layout=destination_layout,
+        seasons=_parse_seasons(args.seasons),
+        season_type=str(args.season_type),
+        schema_version=int(args.schema_version),
+        overwrite=bool(args.overwrite),
+    )
+    if args.json_output:
+        print(json.dumps(summary, sort_keys=True, indent=2))
+    else:
+        print(
+            (
+                "dst_data_dir={} season_type={} schema_version={} copied_files={} skipped_files={}"
+            ).format(
+                destination_layout.root,
+                summary["season_type"],
+                summary["schema_version"],
+                summary["copied_files"],
+                summary["skipped_files"],
+            )
+        )
+    return 0
+
+
+def _cmd_export_raw_archive(args: argparse.Namespace) -> int:
+    source_config = load_config(data_dir=getattr(args, "data_dir", None))
+    source_layout = build_layout(source_config.data_dir)
+    destination_layout = build_layout(Path(str(args.dst_data_dir)).expanduser())
+    summary = export_raw_archives(
+        src_layout=source_layout,
+        dst_layout=destination_layout,
+        seasons=_parse_seasons(args.seasons),
+        season_type=str(args.season_type),
+        compression_level=int(args.compression_level),
+        overwrite=bool(args.overwrite),
+    )
+    if args.json_output:
+        print(json.dumps(summary, sort_keys=True, indent=2))
+    else:
+        print(
+            ("dst_data_dir={} season_type={} archives={} manifest_path={}").format(
+                destination_layout.root,
+                summary["season_type"],
+                summary["archives"],
+                summary["manifest_path"],
+            )
+        )
+    return 0
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="nba-data")
     subparsers = parser.add_subparsers(dest="command")
@@ -238,6 +295,33 @@ def _build_parser() -> argparse.ArgumentParser:
     verify.add_argument("--season-type", default="Regular Season")
     verify.add_argument("--schema-version", type=int, default=SCHEMA_VERSION)
     verify.add_argument("--fail-on-warn", action="store_true")
+
+    export = subparsers.add_parser("export", help="Export datasets between data roots")
+    export_subparsers = export.add_subparsers(dest="export_command")
+
+    export_clean = export_subparsers.add_parser(
+        "clean", help="Export clean parquet + manifests + schedule + verify artifacts"
+    )
+    export_clean.set_defaults(func=_cmd_export_clean)
+    export_clean.add_argument("--data-dir", default="")
+    export_clean.add_argument("--dst-data-dir", required=True)
+    export_clean.add_argument("--seasons", default="2023-24,2024-25,2025-26")
+    export_clean.add_argument("--season-type", default="Regular Season")
+    export_clean.add_argument("--schema-version", type=int, default=SCHEMA_VERSION)
+    export_clean.add_argument("--overwrite", action="store_true")
+    export_clean.add_argument("--json", dest="json_output", action="store_true")
+
+    export_raw_archive = export_subparsers.add_parser(
+        "raw-archive", help="Build immutable season raw archives with checksum manifest"
+    )
+    export_raw_archive.set_defaults(func=_cmd_export_raw_archive)
+    export_raw_archive.add_argument("--data-dir", default="")
+    export_raw_archive.add_argument("--dst-data-dir", required=True)
+    export_raw_archive.add_argument("--seasons", default="2023-24,2024-25,2025-26")
+    export_raw_archive.add_argument("--season-type", default="Regular Season")
+    export_raw_archive.add_argument("--compression-level", type=int, default=19)
+    export_raw_archive.add_argument("--overwrite", action="store_true")
+    export_raw_archive.add_argument("--json", dest="json_output", action="store_true")
 
     return parser
 

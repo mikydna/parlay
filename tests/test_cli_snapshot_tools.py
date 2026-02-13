@@ -1,4 +1,5 @@
 import json
+import shutil
 from pathlib import Path
 
 import pytest
@@ -269,3 +270,136 @@ def test_run_strategy_for_playbook_passes_strategy_id(
     assert code == 0
     assert captured["strategy"] == "s002"
     assert captured["write_canonical"] is True
+
+
+def test_global_data_dir_override_from_subcommand_position(
+    local_data_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys
+) -> None:
+    monkeypatch.setenv("PROP_EV_DATA_DIR", str(tmp_path / "other" / "odds_api"))
+    store = SnapshotStore(local_data_dir)
+    snapshot_id = "2026-02-11T11-11-11Z"
+    store.ensure_snapshot(snapshot_id)
+
+    assert main(["snapshot", "ls", "--data-dir", str(local_data_dir)]) == 0
+    out = capsys.readouterr().out
+    assert snapshot_id in out
+
+
+@pytest.mark.skipif(shutil.which("zstd") is None, reason="zstd binary required")
+def test_snapshot_lake_pack_unpack_roundtrip(local_data_dir: Path) -> None:
+    store = SnapshotStore(local_data_dir)
+    snapshot_id = "2026-02-11T12-12-12Z"
+    snapshot_dir = store.ensure_snapshot(snapshot_id)
+    store.write_jsonl(
+        snapshot_dir / "derived" / "event_props.jsonl",
+        [
+            {
+                "provider": "odds_api",
+                "snapshot_id": snapshot_id,
+                "schema_version": 1,
+                "event_id": "event-1",
+                "market": "player_points",
+                "player": "Player A",
+                "side": "Over",
+                "price": -110,
+                "point": 20.5,
+                "book": "book_a",
+                "last_update": "2026-02-11T12:10:00Z",
+                "link": "",
+            }
+        ],
+    )
+    store.write_jsonl(
+        snapshot_dir / "derived" / "featured_odds.jsonl",
+        [
+            {
+                "provider": "odds_api",
+                "snapshot_id": snapshot_id,
+                "schema_version": 1,
+                "game_id": "event-1",
+                "market": "spreads",
+                "book": "book_a",
+                "price": -105,
+                "point": 3.5,
+                "side": "home",
+                "last_update": "2026-02-11T12:10:00Z",
+            }
+        ],
+    )
+
+    assert (
+        main(["--data-dir", str(local_data_dir), "snapshot", "lake", "--snapshot-id", snapshot_id])
+        == 0
+    )
+    assert (snapshot_dir / "derived" / "event_props.parquet").exists()
+    assert (snapshot_dir / "derived" / "featured_odds.parquet").exists()
+
+    bundle_path = local_data_dir / "bundles" / "test-roundtrip.tar.zst"
+    assert (
+        main(
+            [
+                "--data-dir",
+                str(local_data_dir),
+                "snapshot",
+                "pack",
+                "--snapshot-id",
+                snapshot_id,
+                "--out",
+                str(bundle_path),
+            ]
+        )
+        == 0
+    )
+    assert bundle_path.exists()
+    assert bundle_path.with_name("test-roundtrip.bundle.json").exists()
+
+    shutil.rmtree(snapshot_dir)
+    assert (
+        main(
+            [
+                "--data-dir",
+                str(local_data_dir),
+                "snapshot",
+                "unpack",
+                "--bundle",
+                str(bundle_path),
+            ]
+        )
+        == 0
+    )
+    assert (
+        main(
+            ["--data-dir", str(local_data_dir), "snapshot", "verify", "--snapshot-id", snapshot_id]
+        )
+        == 0
+    )
+
+
+def test_playbook_publish_copies_only_compact_outputs(local_data_dir: Path) -> None:
+    store = SnapshotStore(local_data_dir)
+    snapshot_id = "2026-02-11T13-13-13Z"
+    reports_dir = store.ensure_snapshot(snapshot_id) / "reports"
+    reports_dir.mkdir(parents=True, exist_ok=True)
+    (reports_dir / "strategy-report.json").write_text("{}\n", encoding="utf-8")
+    (reports_dir / "strategy-brief.md").write_text("# Brief\n", encoding="utf-8")
+    (reports_dir / "strategy-brief.meta.json").write_text("{}\n", encoding="utf-8")
+    (reports_dir / "brief-input.json").write_text("{}\n", encoding="utf-8")
+
+    assert (
+        main(
+            ["--data-dir", str(local_data_dir), "playbook", "publish", "--snapshot-id", snapshot_id]
+        )
+        == 0
+    )
+
+    daily_dir = local_data_dir / "reports" / "daily" / "2026-02-11" / f"snapshot={snapshot_id}"
+    latest_dir = local_data_dir / "reports" / "latest"
+    assert (daily_dir / "strategy-report.json").exists()
+    assert (daily_dir / "strategy-brief.md").exists()
+    assert (daily_dir / "strategy-brief.meta.json").exists()
+    assert (daily_dir / "publish.json").exists()
+    assert (latest_dir / "strategy-report.json").exists()
+    assert (latest_dir / "strategy-brief.md").exists()
+    assert (latest_dir / "strategy-brief.meta.json").exists()
+    assert (latest_dir / "latest.json").exists()
+    assert not (daily_dir / "brief-input.json").exists()

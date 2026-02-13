@@ -10,6 +10,7 @@ from collections import Counter
 from collections.abc import Callable
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
+from shutil import copy2
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -62,6 +63,7 @@ from prop_ev.odds_data.spec import DatasetSpec
 from prop_ev.playbook import budget_snapshot, compute_live_window, generate_brief_for_snapshot
 from prop_ev.settings import Settings
 from prop_ev.settlement import settle_snapshot
+from prop_ev.snapshot_artifacts import lake_snapshot_derived, pack_snapshot, unpack_snapshot
 from prop_ev.state_keys import (
     playbook_mode_key,
     strategy_health_state_key,
@@ -658,6 +660,44 @@ def _cmd_snapshot_verify(args: argparse.Namespace) -> int:
             )
     print(f"snapshot_id={args.snapshot_id} checked={len(requests)} missing={missing}")
     return 2 if missing else 0
+
+
+def _cmd_snapshot_lake(args: argparse.Namespace) -> int:
+    store = SnapshotStore(os.environ.get("PROP_EV_DATA_DIR", "data/odds_api"))
+    snapshot_dir = store.snapshot_dir(args.snapshot_id)
+    parquet_paths = lake_snapshot_derived(snapshot_dir)
+    print(f"snapshot_id={args.snapshot_id} parquet_files={len(parquet_paths)}")
+    for path in parquet_paths:
+        print(f"parquet={path}")
+    return 0
+
+
+def _cmd_snapshot_pack(args: argparse.Namespace) -> int:
+    store = SnapshotStore(os.environ.get("PROP_EV_DATA_DIR", "data/odds_api"))
+    out_path = Path(str(args.out)).expanduser() if str(args.out).strip() else None
+    bundle_path, sidecar_path = pack_snapshot(
+        data_root=store.root,
+        snapshot_id=args.snapshot_id,
+        out_path=out_path,
+    )
+    print(f"snapshot_id={args.snapshot_id}")
+    print(f"bundle={bundle_path}")
+    print(f"bundle_meta={sidecar_path}")
+    return 0
+
+
+def _cmd_snapshot_unpack(args: argparse.Namespace) -> int:
+    store = SnapshotStore(os.environ.get("PROP_EV_DATA_DIR", "data/odds_api"))
+    payload = unpack_snapshot(
+        data_root=store.root,
+        bundle_path=Path(str(args.bundle)).expanduser(),
+    )
+    snapshot_ids = payload.get("snapshot_ids", [])
+    snapshot_list = ",".join(snapshot_ids) if isinstance(snapshot_ids, list) else ""
+    print(f"bundle={payload.get('bundle_path', '')}")
+    print(f"files_extracted={payload.get('files_extracted', 0)}")
+    print(f"snapshot_ids={snapshot_list}")
+    return 0
 
 
 def _cmd_credits_report(args: argparse.Namespace) -> int:
@@ -2475,6 +2515,79 @@ def _cmd_playbook_render(args: argparse.Namespace) -> int:
     return 0
 
 
+_COMPACT_PLAYBOOK_REPORTS: tuple[str, ...] = (
+    "strategy-report.json",
+    "strategy-brief.md",
+    "strategy-brief.meta.json",
+    "strategy-brief.pdf",
+)
+
+
+def _snapshot_date(snapshot_id: str) -> str:
+    if len(snapshot_id) >= 10:
+        date_prefix = snapshot_id[:10]
+        try:
+            date.fromisoformat(date_prefix)
+            return date_prefix
+        except ValueError:
+            pass
+    return _utc_now().strftime("%Y-%m-%d")
+
+
+def _publish_compact_playbook_outputs(
+    *, store: SnapshotStore, snapshot_id: str
+) -> tuple[list[str], Path, Path, Path]:
+    reports_dir = store.snapshot_dir(snapshot_id) / "reports"
+    if not reports_dir.exists():
+        raise CLIError(f"missing reports directory: {reports_dir}")
+
+    snapshot_day = _snapshot_date(snapshot_id)
+    daily_dir = store.root / "reports" / "daily" / snapshot_day / f"snapshot={snapshot_id}"
+    latest_dir = store.root / "reports" / "latest"
+    daily_dir.mkdir(parents=True, exist_ok=True)
+    latest_dir.mkdir(parents=True, exist_ok=True)
+
+    published: list[str] = []
+    for filename in _COMPACT_PLAYBOOK_REPORTS:
+        src = reports_dir / filename
+        if not src.exists():
+            continue
+        copy2(src, daily_dir / filename)
+        copy2(src, latest_dir / filename)
+        published.append(filename)
+
+    if not published:
+        raise CLIError(
+            "no compact reports found; run `prop-ev playbook run` or "
+            "`prop-ev playbook render` first"
+        )
+
+    pointer = {
+        "snapshot_id": snapshot_id,
+        "updated_at_utc": _iso(_utc_now()),
+        "files": published,
+    }
+    latest_json = latest_dir / "latest.json"
+    latest_json.write_text(json.dumps(pointer, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+    publish_json = daily_dir / "publish.json"
+    publish_json.write_text(json.dumps(pointer, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+    return published, daily_dir, latest_dir, latest_json
+
+
+def _cmd_playbook_publish(args: argparse.Namespace) -> int:
+    store = SnapshotStore(os.environ.get("PROP_EV_DATA_DIR", "data/odds_api"))
+    published, daily_dir, latest_dir, latest_json = _publish_compact_playbook_outputs(
+        store=store,
+        snapshot_id=args.snapshot_id,
+    )
+    print(f"snapshot_id={args.snapshot_id}")
+    print(f"published_files={','.join(published)}")
+    print(f"daily_dir={daily_dir}")
+    print(f"latest_dir={latest_dir}")
+    print(f"latest_json={latest_json}")
+    return 0
+
+
 def _cmd_playbook_budget(args: argparse.Namespace) -> int:
     store = SnapshotStore(os.environ.get("PROP_EV_DATA_DIR", "data/odds_api"))
     settings = Settings.from_env()
@@ -2671,8 +2784,34 @@ def _cmd_playbook_discover_execute(args: argparse.Namespace) -> int:
     return 0
 
 
+def _extract_data_dir_override(argv: list[str]) -> tuple[list[str], str]:
+    cleaned: list[str] = []
+    data_dir = ""
+    idx = 0
+    while idx < len(argv):
+        token = argv[idx]
+        if token == "--data-dir":
+            if idx + 1 >= len(argv):
+                raise CLIError("--data-dir requires a value")
+            data_dir = str(argv[idx + 1]).strip()
+            idx += 2
+            continue
+        if token.startswith("--data-dir="):
+            data_dir = token.split("=", 1)[1].strip()
+            idx += 1
+            continue
+        cleaned.append(token)
+        idx += 1
+    return cleaned, data_dir
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="prop-ev")
+    parser.add_argument(
+        "--data-dir",
+        default="",
+        help="Override PROP_EV_DATA_DIR for this command invocation.",
+    )
     subparsers = parser.add_subparsers(dest="command")
 
     snapshot = subparsers.add_parser("snapshot", help="Create and inspect snapshots")
@@ -2730,6 +2869,25 @@ def _build_parser() -> argparse.ArgumentParser:
     snapshot_verify = snapshot_subparsers.add_parser("verify", help="Verify snapshot artifacts")
     snapshot_verify.set_defaults(func=_cmd_snapshot_verify)
     snapshot_verify.add_argument("--snapshot-id", required=True)
+
+    snapshot_lake = snapshot_subparsers.add_parser(
+        "lake", help="Convert derived JSONL artifacts to Parquet lake format"
+    )
+    snapshot_lake.set_defaults(func=_cmd_snapshot_lake)
+    snapshot_lake.add_argument("--snapshot-id", required=True)
+
+    snapshot_pack = snapshot_subparsers.add_parser(
+        "pack", help="Pack one snapshot into a compressed tar bundle"
+    )
+    snapshot_pack.set_defaults(func=_cmd_snapshot_pack)
+    snapshot_pack.add_argument("--snapshot-id", required=True)
+    snapshot_pack.add_argument("--out", default="")
+
+    snapshot_unpack = snapshot_subparsers.add_parser(
+        "unpack", help="Unpack a snapshot bundle into the data directory"
+    )
+    snapshot_unpack.set_defaults(func=_cmd_snapshot_unpack)
+    snapshot_unpack.add_argument("--bundle", required=True)
 
     data_cmd = subparsers.add_parser("data", help="Dataset status and backfill tools")
     data_subparsers = data_cmd.add_subparsers(dest="data_command")
@@ -2959,6 +3117,12 @@ def _build_parser() -> argparse.ArgumentParser:
     playbook_render.add_argument("--allow-tier-b", action="store_true")
     playbook_render.add_argument("--month", default="")
 
+    playbook_publish = playbook_subparsers.add_parser(
+        "publish", help="Publish compact reports for one snapshot"
+    )
+    playbook_publish.set_defaults(func=_cmd_playbook_publish)
+    playbook_publish.add_argument("--snapshot-id", required=True)
+
     playbook_budget = playbook_subparsers.add_parser(
         "budget", help="Show odds + LLM monthly budget status"
     )
@@ -3019,8 +3183,16 @@ def _build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     """Run the CLI."""
+    raw_argv = list(argv) if isinstance(argv, list) else sys.argv[1:]
+    parsed_argv, data_dir_override = _extract_data_dir_override(raw_argv)
+    if data_dir_override:
+        os.environ["PROP_EV_DATA_DIR"] = str(Path(data_dir_override).expanduser())
+
     parser = _build_parser()
-    args = parser.parse_args(argv)
+    args = parser.parse_args(parsed_argv)
+    explicit_data_dir = str(getattr(args, "data_dir", "")).strip()
+    if explicit_data_dir:
+        os.environ["PROP_EV_DATA_DIR"] = str(Path(explicit_data_dir).expanduser())
     func = getattr(args, "func", None)
     if func is None:
         parser.print_help()
