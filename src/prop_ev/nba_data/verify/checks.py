@@ -9,13 +9,27 @@ import polars as pl
 
 from prop_ev.nba_data.io_utils import atomic_write_json
 from prop_ev.nba_data.schema_version import SCHEMA_VERSION
-from prop_ev.nba_data.store.layout import NBADataLayout
+from prop_ev.nba_data.store.layout import NBADataLayout, slugify_season_type
 
 
 def _scan_dataset(path: Path) -> pl.DataFrame:
     if not path.exists():
         return pl.DataFrame()
     return pl.scan_parquet(str(path / "**/*.parquet")).collect()
+
+
+def _scan_table(*, base: Path, table: str, seasons: list[str], season_slug: str) -> pl.DataFrame:
+    frames: list[pl.DataFrame] = []
+    for season in seasons:
+        partition = base / table / f"season={season}" / f"season_type={season_slug}"
+        if not partition.exists():
+            continue
+        frames.append(_scan_dataset(partition))
+    if not frames:
+        return pl.DataFrame()
+    if len(frames) == 1:
+        return frames[0]
+    return pl.concat(frames, how="vertical")
 
 
 def run_verify(
@@ -28,11 +42,22 @@ def run_verify(
 ) -> tuple[int, dict[str, Any]]:
     schema = SCHEMA_VERSION if schema_version <= 0 else schema_version
     base = layout.clean_schema_dir(schema)
+    season_slug = slugify_season_type(season_type)
 
-    games = _scan_dataset(base / "games")
-    boxscore = _scan_dataset(base / "boxscore_players")
-    pbp = _scan_dataset(base / "pbp_events")
-    possessions = _scan_dataset(base / "possessions")
+    games = _scan_table(base=base, table="games", seasons=seasons, season_slug=season_slug)
+    boxscore = _scan_table(
+        base=base,
+        table="boxscore_players",
+        seasons=seasons,
+        season_slug=season_slug,
+    )
+    pbp = _scan_table(base=base, table="pbp_events", seasons=seasons, season_slug=season_slug)
+    possessions = _scan_table(
+        base=base,
+        table="possessions",
+        seasons=seasons,
+        season_slug=season_slug,
+    )
 
     failures: list[str] = []
     warnings: list[str] = []
@@ -54,6 +79,14 @@ def run_verify(
         dup = pbp.group_by(["game_id", "event_num"]).len().filter(pl.col("len") > 1)
         if dup.height > 0:
             failures.append(f"pbp_events duplicate (game_id,event_num) rows={dup.height}")
+
+    if {"home_team_id", "away_team_id"} <= set(games.columns):
+        missing_home = games.filter(pl.col("home_team_id").fill_null("").str.strip_chars() == "")
+        missing_away = games.filter(pl.col("away_team_id").fill_null("").str.strip_chars() == "")
+        if missing_home.height > 0:
+            failures.append(f"games missing home_team_id rows={missing_home.height}")
+        if missing_away.height > 0:
+            failures.append(f"games missing away_team_id rows={missing_away.height}")
 
     if {"game_id", "possession_id"} <= set(possessions.columns):
         dup = possessions.group_by(["game_id", "possession_id"]).len().filter(pl.col("len") > 1)

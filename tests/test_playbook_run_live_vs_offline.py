@@ -118,6 +118,9 @@ def test_playbook_run_live_mode_creates_snapshot(
         }
 
     monkeypatch.setattr(cli, "OddsAPIClient", FakeOddsClient)
+    monkeypatch.setattr(
+        cli, "_preflight_context_for_snapshot", lambda **kwargs: {"health_gates": []}
+    )
     monkeypatch.setattr(cli, "_run_snapshot_bundle_for_playbook", fake_snapshot)
     monkeypatch.setattr(cli, "_run_strategy_for_playbook", fake_strategy)
     monkeypatch.setattr(cli, "generate_brief_for_snapshot", fake_generate)
@@ -156,6 +159,9 @@ def test_playbook_run_fails_when_live_snapshot_fails(
             )
 
     monkeypatch.setattr(cli, "OddsAPIClient", FakeOddsClient)
+    monkeypatch.setattr(
+        cli, "_preflight_context_for_snapshot", lambda **kwargs: {"health_gates": []}
+    )
     monkeypatch.setattr(cli, "_run_snapshot_bundle_for_playbook", lambda args, snapshot_id: 2)
 
     code = main(["playbook", "run", "--month", "2026-02"])

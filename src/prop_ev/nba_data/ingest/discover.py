@@ -8,6 +8,41 @@ from prop_ev.nba_data.ingest.pbp_adapter import build_client, discover_final_gam
 from prop_ev.nba_data.store.layout import NBADataLayout
 
 
+def _extract_team_id(value: Any) -> str:
+    if isinstance(value, bool):
+        return ""
+    if isinstance(value, (int, float)):
+        return str(int(value))
+    if isinstance(value, str):
+        return value.strip()
+    if isinstance(value, dict):
+        for key in ("team_id", "id", "teamId"):
+            parsed = _extract_team_id(value.get(key))
+            if parsed:
+                return parsed
+    return ""
+
+
+def _team_id_from_row(row: dict[str, Any], *, side: str) -> str:
+    prefixes = ("home",) if side == "home" else ("away", "visitor")
+    keys: list[str] = []
+    for prefix in prefixes:
+        keys.extend(
+            [
+                f"{prefix}_team_id",
+                f"{prefix}_team",
+                f"{prefix}TeamId",
+                f"{prefix}Team",
+                f"{prefix}TeamID",
+            ]
+        )
+    for key in keys:
+        parsed = _extract_team_id(row.get(key))
+        if parsed:
+            return parsed
+    return ""
+
+
 def discover_games(
     *,
     layout: NBADataLayout,
@@ -31,8 +66,8 @@ def discover_games(
             {
                 "game_id": game_id,
                 "date": str(row.get("date", "")),
-                "home_team_id": str(row.get("home_team_id", "") or row.get("home_team", "")),
-                "away_team_id": str(row.get("away_team_id", "") or row.get("away_team", "")),
+                "home_team_id": _team_id_from_row(row, side="home"),
+                "away_team_id": _team_id_from_row(row, side="away"),
             }
         )
     normalized.sort(key=lambda row: row["game_id"])
