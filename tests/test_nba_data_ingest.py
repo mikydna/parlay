@@ -213,9 +213,7 @@ def test_load_via_source_web_uses_cdn_fallback_for_enhanced_pbp(
     assert payload[1]["event_type"] == "shot"
 
 
-def test_load_via_source_web_uses_cdn_fallback_for_boxscore(
-    tmp_path: Path, monkeypatch
-) -> None:
+def test_load_via_source_web_uses_cdn_fallback_for_boxscore(tmp_path: Path, monkeypatch) -> None:
     layout = build_layout(tmp_path / "nba_data")
 
     monkeypatch.setattr("prop_ev.nba_data.ingest.fetch.build_client", lambda **kwargs: object())
