@@ -49,6 +49,7 @@ STRATEGY_TITLE_KEY = {
     "s004": "Min-2 Book-Pair Gate",
     "s005": "Hold-Cap Gate",
     "s006": "Dispersion-IQR Gate",
+    "s007": "Quality Composite Gate",
 }
 
 STRATEGY_DESCRIPTION_KEY = {
@@ -62,6 +63,10 @@ STRATEGY_DESCRIPTION_KEY = {
     "s004": "Skips lines unless at least 2 books post both over and under at the same point.",
     "s005": "Skips lines when median per-book hold exceeds the configured cap.",
     "s006": "Skips lines when per-book no-vig probability IQR exceeds the configured cap.",
+    "s007": (
+        "Composes median no-vig baseline with min-2 book-pair and hold-cap gates "
+        "(s003 + s004 + s005)."
+    ),
 }
 
 PLAYBOOK_MODE_KEY = {

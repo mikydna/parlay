@@ -127,6 +127,10 @@ def test_gate_strategies_set_recipe_audit_fields() -> None:
     report_s004 = get_strategy("s004").run(inputs=_sample_inputs(), config=_sample_config()).report
     report_s005 = get_strategy("s005").run(inputs=_sample_inputs(), config=_sample_config()).report
     report_s006 = get_strategy("s006").run(inputs=_sample_inputs(), config=_sample_config()).report
+    report_s007 = get_strategy("s007").run(inputs=_sample_inputs(), config=_sample_config()).report
     assert report_s004["audit"]["min_book_pairs"] == 2
     assert report_s005["audit"]["hold_cap"] == 0.08
     assert report_s006["audit"]["p_over_iqr_cap"] == 0.08
+    assert report_s007["audit"]["market_baseline_method"] == "median_book"
+    assert report_s007["audit"]["min_book_pairs"] == 2
+    assert report_s007["audit"]["hold_cap"] == 0.08

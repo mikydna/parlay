@@ -98,6 +98,7 @@ Canonical strategy IDs:
 - `s004` — Min-2 Book-Pair Gate
 - `s005` — Hold-Cap Gate
 - `s006` — Dispersion-IQR Gate
+- `s007` — Quality Composite Gate
 
 Legacy strategy IDs are intentionally unsupported.
 

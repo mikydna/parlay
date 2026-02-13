@@ -30,8 +30,11 @@ def test_playbook_mode_key_has_live_and_offline_modes() -> None:
 def test_strategy_id_map_has_titles_and_descriptions() -> None:
     mapping = strategy_report_state_key()
     assert mapping["strategy_id"]["s001"] == "Baseline Core"
+    assert mapping["strategy_id"]["s007"] == "Quality Composite Gate"
     assert mapping["strategy_description"]["s006"]
+    assert mapping["strategy_description"]["s007"]
     assert strategy_title_for_id("s001") == "Baseline Core"
+    assert strategy_title_for_id("s007") == "Quality Composite Gate"
     assert strategy_description_for_id("s002")
 
 

@@ -30,3 +30,4 @@ def test_strategy_registry_has_titles_and_descriptions() -> None:
     assert by_id["s001"].name == "Baseline Core"
     assert by_id["s002"].name == "Baseline Core + Tier B"
     assert by_id["s003"].description
+    assert by_id["s007"].name == "Quality Composite Gate"

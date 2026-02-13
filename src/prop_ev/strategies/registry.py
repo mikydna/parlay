@@ -9,6 +9,7 @@ from prop_ev.strategies.s003_median_no_vig_baseline import S003MedianNoVigBaseli
 from prop_ev.strategies.s004_min2_book_pair_gate import S004Min2BookPairGateStrategy
 from prop_ev.strategies.s005_hold_cap_gate import S005HoldCapGateStrategy
 from prop_ev.strategies.s006_dispersion_iqr_gate import S006DispersionIQRGateStrategy
+from prop_ev.strategies.s007_quality_composite_gate import S007QualityCompositeGateStrategy
 
 
 def _registry() -> dict[str, StrategyPlugin]:
@@ -19,6 +20,7 @@ def _registry() -> dict[str, StrategyPlugin]:
         S004Min2BookPairGateStrategy(),
         S005HoldCapGateStrategy(),
         S006DispersionIQRGateStrategy(),
+        S007QualityCompositeGateStrategy(),
     ]
     out: dict[str, StrategyPlugin] = {}
     for plugin in plugins:
