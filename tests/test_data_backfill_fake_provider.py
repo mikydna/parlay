@@ -7,6 +7,7 @@ import pytest
 
 from prop_ev.cli import main
 from prop_ev.odds_client import OddsResponse
+from prop_ev.odds_data.backfill import _sanitize_error_message
 from prop_ev.odds_data.day_index import load_day_status, snapshot_id_for_day
 from prop_ev.odds_data.spec import DatasetSpec
 from prop_ev.storage import SnapshotStore
@@ -278,3 +279,14 @@ def test_data_backfill_historical_uses_pre_tip_dates(
     }
     assert "/historical/sports/basketball_nba/events" in request_paths
     assert "/historical/sports/basketball_nba/events/event-1/odds" in request_paths
+
+
+def test_backfill_sanitizes_api_key_in_errors() -> None:
+    raw = (
+        "request failed for url "
+        "'https://api.the-odds-api.com/v4/historical/sports/basketball_nba/events/"
+        "event-1/odds?markets=player_points&apiKey=super-secret-key&foo=bar'"
+    )
+    cleaned = _sanitize_error_message(raw)
+    assert "super-secret-key" not in cleaned
+    assert "apiKey=REDACTED" in cleaned

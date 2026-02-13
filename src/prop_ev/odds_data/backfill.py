@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from datetime import UTC, datetime, time, timedelta
 from pathlib import Path
 from typing import Any
@@ -35,6 +36,11 @@ HISTORICAL_ODDS_CREDIT_MULTIPLIER = 10
 
 def _iso_z(dt: datetime) -> str:
     return dt.astimezone(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def _sanitize_error_message(raw_message: str) -> str:
+    message = str(raw_message)
+    return re.sub(r"([?&](?:apiKey|api_key)=)[^&\s'\"]+", r"\1REDACTED", message)
 
 
 def _parse_iso_utc(raw_value: str) -> datetime | None:
@@ -225,7 +231,7 @@ def backfill_days(
                         policy=policy,
                     )
                 except (OfflineCacheMiss, SpendBlockedError, OddsAPIError, ValueError) as exc:
-                    day_error = str(exc)
+                    day_error = _sanitize_error_message(str(exc))
                     status = compute_day_status_from_cache(
                         data_root=data_root,
                         store=store,
@@ -315,7 +321,7 @@ def backfill_days(
                             f"remaining budget {remaining_credits} for day {day}"
                         )
                 except (SpendBlockedError, CreditBudgetExceeded) as exc:
-                    day_error = str(exc)
+                    day_error = _sanitize_error_message(str(exc))
                     status = compute_day_status_from_cache(
                         data_root=data_root,
                         store=store,
@@ -398,7 +404,7 @@ def backfill_days(
                             OddsAPIError,
                             ValueError,
                         ) as exc:
-                            day_error = str(exc)
+                            day_error = _sanitize_error_message(str(exc))
 
                     rows: list[dict[str, Any]] = []
                     for event_id in event_ids:
