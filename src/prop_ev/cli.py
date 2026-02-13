@@ -2631,8 +2631,22 @@ def _cmd_strategy_backtest_prep(args: argparse.Namespace) -> int:
     report_path = reports_dir / "strategy-report.json"
     if requested:
         strategy_id = normalize_strategy_id(requested)
-        report_path = reports_dir / f"strategy-report.{strategy_id}.json"
-        write_canonical = False
+        suffixed_path = reports_dir / f"strategy-report.{strategy_id}.json"
+        if suffixed_path.exists():
+            report_path = suffixed_path
+            write_canonical = False
+        elif report_path.exists():
+            canonical_payload = json.loads(report_path.read_text(encoding="utf-8"))
+            if not isinstance(canonical_payload, dict):
+                raise CLIError(f"invalid strategy report payload: {report_path}")
+            canonical_id = normalize_strategy_id(str(canonical_payload.get("strategy_id", "s001")))
+            if canonical_id != strategy_id:
+                raise CLIError(
+                    f"missing strategy report: {suffixed_path} (canonical is {canonical_id})"
+                )
+        else:
+            report_path = suffixed_path
+            write_canonical = False
     if not report_path.exists():
         raise CLIError(f"missing strategy report: {report_path}")
     report = json.loads(report_path.read_text(encoding="utf-8"))
@@ -3230,7 +3244,6 @@ def _cmd_playbook_render(args: argparse.Namespace) -> int:
 
 _COMPACT_PLAYBOOK_REPORTS: tuple[str, ...] = (
     "strategy-report.json",
-    "strategy-brief.md",
     "strategy-brief.meta.json",
     "strategy-brief.pdf",
 )
