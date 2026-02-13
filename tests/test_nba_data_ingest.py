@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
-from prop_ev.nba_data.ingest.fetch import ingest_resources
+from prop_ev.nba_data.ingest.fetch import _load_via_source, ingest_resources
 from prop_ev.nba_data.io_utils import atomic_write_json
 from prop_ev.nba_data.store.layout import build_layout
 from prop_ev.nba_data.store.lock import LockConfig
@@ -15,6 +16,17 @@ def _providers() -> dict[str, list[str]]:
         "enhanced_pbp": ["data_nba", "stats_nba"],
         "possessions": ["data_nba", "stats_nba"],
     }
+
+
+class _FakeResponse:
+    def __init__(self, payload: dict[str, Any]) -> None:
+        self._payload = payload
+
+    def raise_for_status(self) -> None:
+        return None
+
+    def json(self) -> dict[str, Any]:
+        return self._payload
 
 
 def test_ingest_skips_when_ok_and_valid(tmp_path: Path, monkeypatch) -> None:
@@ -142,3 +154,113 @@ def test_ingest_retry_errors_toggle(tmp_path: Path, monkeypatch) -> None:
     )
     assert summary_retry["ok"] == 1
     assert called["count"] > 0
+
+
+def test_load_via_source_web_uses_cdn_fallback_for_enhanced_pbp(
+    tmp_path: Path, monkeypatch
+) -> None:
+    layout = build_layout(tmp_path / "nba_data")
+
+    monkeypatch.setattr("prop_ev.nba_data.ingest.fetch.build_client", lambda **kwargs: object())
+    monkeypatch.setattr(
+        "prop_ev.nba_data.ingest.fetch.load_game_resource",
+        lambda **kwargs: (_ for _ in ()).throw(KeyError("resultSets")),
+    )
+
+    def _fake_get(url: str, **kwargs) -> _FakeResponse:
+        assert "cdn.nba.com" in url
+        return _FakeResponse(
+            {
+                "game": {
+                    "actions": [
+                        {
+                            "actionNumber": 1,
+                            "clock": "PT12M00.00S",
+                            "actionType": "period",
+                            "subType": "start",
+                            "teamId": 0,
+                            "personId": 0,
+                            "description": "start",
+                            "possession": 1610612745,
+                        },
+                        {
+                            "actionNumber": 2,
+                            "clock": "PT11M40.00S",
+                            "actionType": "shot",
+                            "subType": "2pt",
+                            "teamId": 1610612745,
+                            "personId": 123,
+                            "description": "made shot",
+                            "possession": 1610612745,
+                        },
+                    ]
+                }
+            }
+        )
+
+    monkeypatch.setattr("prop_ev.nba_data.ingest.fetch.requests.get", _fake_get)
+    payload = _load_via_source(
+        layout=layout,
+        source="web",
+        provider="stats_nba",
+        resource="enhanced_pbp",
+        season="2025-26",
+        season_type="Regular Season",
+        game_id="0022500001",
+    )
+    assert isinstance(payload, list)
+    assert payload[0]["event_num"] == 1
+    assert payload[1]["event_type"] == "shot"
+
+
+def test_load_via_source_web_uses_cdn_fallback_for_boxscore(
+    tmp_path: Path, monkeypatch
+) -> None:
+    layout = build_layout(tmp_path / "nba_data")
+
+    monkeypatch.setattr("prop_ev.nba_data.ingest.fetch.build_client", lambda **kwargs: object())
+    monkeypatch.setattr(
+        "prop_ev.nba_data.ingest.fetch.load_game_resource",
+        lambda **kwargs: (_ for _ in ()).throw(KeyError("resultSets")),
+    )
+
+    def _fake_get(url: str, **kwargs) -> _FakeResponse:
+        assert "cdn.nba.com" in url
+        return _FakeResponse(
+            {
+                "game": {
+                    "homeTeam": {
+                        "teamId": 1610612745,
+                        "players": [
+                            {
+                                "personId": 123,
+                                "statistics": {
+                                    "minutes": "PT30M30.00S",
+                                    "points": 20,
+                                    "reboundsTotal": 7,
+                                    "assists": 4,
+                                },
+                            }
+                        ],
+                    },
+                    "awayTeam": {"teamId": 1610612737, "players": []},
+                }
+            }
+        )
+
+    monkeypatch.setattr("prop_ev.nba_data.ingest.fetch.requests.get", _fake_get)
+    payload = _load_via_source(
+        layout=layout,
+        source="web",
+        provider="stats_nba",
+        resource="boxscore",
+        season="2025-26",
+        season_type="Regular Season",
+        game_id="0022500001",
+    )
+    assert isinstance(payload, dict)
+    players = payload.get("players")
+    assert isinstance(players, list)
+    assert players[0]["team_id"] == "1610612745"
+    assert players[0]["player_id"] == "123"
+    assert players[0]["minutes"] == 30.5

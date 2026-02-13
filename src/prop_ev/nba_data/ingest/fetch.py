@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any
+
+import requests
 
 from prop_ev.nba_data.errors import NBADataError
 from prop_ev.nba_data.ingest.pbp_adapter import build_client, load_game_resource
@@ -20,6 +23,8 @@ from prop_ev.nba_data.store.manifest import (
     set_resource_error,
     set_resource_ok,
 )
+
+_REQUEST_TIMEOUT_SECONDS = 30
 
 
 def _resource_key(resource: ResourceName) -> str:
@@ -90,6 +95,230 @@ def _is_valid_mirror(path: Path, *, resource: ResourceName) -> bool:
         return False
 
 
+def _as_float(value: object) -> float | None:
+    if isinstance(value, bool):
+        return float(value)
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        raw = value.strip()
+        if not raw:
+            return None
+        with_sign = raw[1:] if raw.startswith("-") else raw
+        if with_sign.replace(".", "", 1).isdigit():
+            return float(raw)
+    return None
+
+
+def _as_int(value: object, *, default: int = 0) -> int:
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value)
+    if isinstance(value, str):
+        raw = value.strip()
+        if raw.startswith("-"):
+            stripped = raw[1:]
+            if stripped.isdigit():
+                return int(raw)
+        elif raw.isdigit():
+            return int(raw)
+    return default
+
+
+def _parse_iso_duration_minutes(value: object) -> float | None:
+    if isinstance(value, (int, float)):
+        return float(value)
+    if not isinstance(value, str):
+        return None
+    raw = value.strip()
+    if not raw:
+        return None
+    if ":" in raw:
+        parts = raw.split(":")
+        if len(parts) == 2 and parts[0].isdigit():
+            sec = _as_float(parts[1])
+            if sec is None:
+                return None
+            return float(int(parts[0])) + sec / 60.0
+        return None
+    match = re.match(r"^PT(?:(\d+)M)?(?:(\d+(?:\.\d+)?)S)?$", raw)
+    if not match:
+        return _as_float(raw)
+    minutes = float(match.group(1) or 0.0)
+    seconds = float(match.group(2) or 0.0)
+    return minutes + seconds / 60.0
+
+
+def _request_json(*, url: str, headers: dict[str, str] | None = None) -> dict[str, Any]:
+    response = requests.get(
+        url,
+        headers=headers,
+        timeout=_REQUEST_TIMEOUT_SECONDS,
+    )
+    response.raise_for_status()
+    payload = response.json()
+    if not isinstance(payload, dict):
+        raise NBADataError(f"unexpected non-object JSON payload from {url}")
+    return payload
+
+
+def _load_cdn_playbyplay(*, game_id: str) -> dict[str, Any]:
+    return _request_json(
+        url=f"https://cdn.nba.com/static/json/liveData/playbyplay/playbyplay_{game_id}.json"
+    )
+
+
+def _load_cdn_boxscore(*, game_id: str) -> dict[str, Any]:
+    return _request_json(
+        url=f"https://cdn.nba.com/static/json/liveData/boxscore/boxscore_{game_id}.json"
+    )
+
+
+def _normalize_cdn_boxscore(payload: dict[str, Any]) -> dict[str, Any]:
+    game = payload.get("game", {})
+    if not isinstance(game, dict):
+        return {"players": []}
+
+    players_out: list[dict[str, Any]] = []
+    for side in ("homeTeam", "awayTeam"):
+        team_payload = game.get(side, {})
+        if not isinstance(team_payload, dict):
+            continue
+        team_id = str(team_payload.get("teamId", "")).strip()
+        team_players = team_payload.get("players", [])
+        if not isinstance(team_players, list):
+            continue
+        for player in team_players:
+            if not isinstance(player, dict):
+                continue
+            stats = player.get("statistics", {})
+            if not isinstance(stats, dict):
+                stats = {}
+            minutes = _parse_iso_duration_minutes(
+                stats.get("minutes", stats.get("minutesCalculated", ""))
+            )
+            players_out.append(
+                {
+                    "team_id": team_id,
+                    "player_id": str(player.get("personId", "")).strip(),
+                    "minutes": minutes,
+                    "points": _as_float(stats.get("points", 0)),
+                    "rebounds": _as_float(
+                        stats.get("reboundsTotal", stats.get("rebounds", 0))
+                    ),
+                    "assists": _as_float(stats.get("assists", 0)),
+                }
+            )
+    return {"players": players_out}
+
+
+def _extract_cdn_actions(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    game = payload.get("game", {})
+    if not isinstance(game, dict):
+        return []
+    actions = game.get("actions", [])
+    if not isinstance(actions, list):
+        return []
+    return [action for action in actions if isinstance(action, dict)]
+
+
+def _normalize_cdn_enhanced_pbp(*, actions: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for index, action in enumerate(actions, start=1):
+        event_num = _as_int(action.get("actionNumber"), default=0)
+        if event_num <= 0:
+            event_num = _as_int(action.get("actionId"), default=index)
+        team_id_int = _as_int(action.get("teamId"), default=0)
+        person_id_int = _as_int(action.get("personId"), default=0)
+        rows.append(
+            {
+                "event_num": event_num,
+                "clock": str(action.get("clock", "")),
+                "event_type": str(action.get("actionType", "")),
+                "event_type_name": str(action.get("subType", "")),
+                "team_id": str(team_id_int) if team_id_int > 0 else "",
+                "player_id": str(person_id_int) if person_id_int > 0 else "",
+                "description": str(action.get("description", "")),
+            }
+        )
+    return rows
+
+
+def _build_possessions_from_actions(*, actions: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    team_ids = {
+        _as_int(action.get("teamId"), default=0)
+        for action in actions
+        if _as_int(action.get("teamId"), default=0) > 0
+    }
+    possession_rows: list[dict[str, Any]] = []
+    current_team = 0
+    current_start = 0
+    current_end = 0
+
+    for index, action in enumerate(actions, start=1):
+        possession_team = _as_int(action.get("possession"), default=0)
+        if possession_team <= 0:
+            continue
+        event_num = _as_int(action.get("actionNumber"), default=0)
+        if event_num <= 0:
+            event_num = _as_int(action.get("actionId"), default=index)
+        if event_num <= 0:
+            event_num = index
+        if current_team == 0:
+            current_team = possession_team
+            current_start = event_num
+            current_end = event_num
+            continue
+        if possession_team != current_team:
+            other_team = ""
+            if len(team_ids) == 2:
+                other_team = str(next(team for team in team_ids if team != current_team))
+            possession_rows.append(
+                {
+                    "possession_id": len(possession_rows) + 1,
+                    "start_event_num": current_start,
+                    "end_event_num": current_end,
+                    "offense_team_id": str(current_team),
+                    "defense_team_id": other_team,
+                }
+            )
+            current_team = possession_team
+            current_start = event_num
+            current_end = event_num
+        else:
+            current_end = event_num
+
+    if current_team > 0:
+        other_team = ""
+        if len(team_ids) == 2:
+            other_team = str(next(team for team in team_ids if team != current_team))
+        possession_rows.append(
+            {
+                "possession_id": len(possession_rows) + 1,
+                "start_event_num": current_start,
+                "end_event_num": current_end,
+                "offense_team_id": str(current_team),
+                "defense_team_id": other_team,
+            }
+        )
+    return possession_rows
+
+
+def _load_via_cdn_fallback(*, resource: ResourceName, game_id: str) -> Any:
+    if resource == "boxscore":
+        return _normalize_cdn_boxscore(_load_cdn_boxscore(game_id=game_id))
+    payload = _load_cdn_playbyplay(game_id=game_id)
+    actions = _extract_cdn_actions(payload)
+    if resource == "enhanced_pbp":
+        return _normalize_cdn_enhanced_pbp(actions=actions)
+    if resource == "possessions":
+        return _build_possessions_from_actions(actions=actions)
+    raise NBADataError(f"unsupported resource for CDN fallback: {resource}")
+
+
 def _load_via_source(
     *,
     layout: NBADataLayout,
@@ -106,6 +335,20 @@ def _load_via_source(
         "EnhancedPbp": {"data_provider": provider},
         "Possessions": {"data_provider": provider},
     }
+    if source == "web":
+        try:
+            return _load_via_cdn_fallback(resource=resource, game_id=game_id)
+        except Exception as cdn_exc:
+            try:
+                client = build_client(
+                    response_dir=layout.pbpstats_response_dir,
+                    source=source,
+                    resource_settings=provider_settings,
+                )
+                return load_game_resource(client, game_id=game_id, resource=resource)
+            except Exception as primary_exc:
+                raise NBADataError(f"{cdn_exc}; pbpstats_web={primary_exc}") from primary_exc
+
     client = build_client(
         response_dir=layout.pbpstats_response_dir,
         source=source,
