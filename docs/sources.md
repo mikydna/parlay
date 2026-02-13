@@ -6,6 +6,19 @@
 - Do not switch to another odds provider in normal operation.
 - Do not introduce paid replacement providers.
 
+## Play-by-Play Source Policy (`nba-data`)
+
+- Historical game ingestion uses `pbpstats` as the interface layer.
+- Preferred provider order for game resources is:
+  - primary: `data_nba`
+  - fallback: `stats_nba`
+- `nba-data ingest` is file-cache-first:
+  - attempt `source=file` from local `response_data` cache,
+  - only fall back to `source=web` when cache misses.
+- Manifest + raw mirror checks are authoritative for resume/skip behavior:
+  - `status=ok` with a valid mirror is skipped,
+  - missing/invalid mirrors are retried through provider fallback.
+
 ## Injury Source Policy
 
 - Official NBA injury report pages and linked PDF files are authoritative for official injury source health.
