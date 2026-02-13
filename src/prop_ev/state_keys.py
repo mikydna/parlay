@@ -102,11 +102,11 @@ def playbook_mode_key() -> dict[str, str]:
     return dict(PLAYBOOK_MODE_KEY)
 
 
-def strategy_title_for_id(strategy_id: str) -> str:
+def strategy_title(strategy_id: str) -> str:
     return STRATEGY_TITLE_KEY.get(strategy_id, "")
 
 
-def strategy_description_for_id(strategy_id: str) -> str:
+def strategy_description(strategy_id: str) -> str:
     return STRATEGY_DESCRIPTION_KEY.get(strategy_id, "")
 
 
@@ -122,7 +122,7 @@ def strategy_meta(
     return payload
 
 
-def attach_strategy_id_key(
+def attach_strategy_title_key(
     state_key: dict[str, Any] | None, *, strategy_id: str, strategy_title: str
 ) -> dict[str, Any]:
     """Ensure state key includes a strategy-id title map."""

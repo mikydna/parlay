@@ -12,7 +12,7 @@ from prop_ev.strategies.base import (
 )
 
 
-class S003MedianNoVigBaselineStrategy:
+class S003:
     info = StrategyInfo(
         id="s003",
         name="Median No-Vig Baseline",
@@ -35,4 +35,4 @@ class S003MedianNoVigBaselineStrategy:
 
 
 def plugin() -> StrategyPlugin:
-    return S003MedianNoVigBaselineStrategy()
+    return S003()

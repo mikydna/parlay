@@ -12,7 +12,7 @@ from prop_ev.strategies.base import (
 )
 
 
-class S005HoldCapGateStrategy:
+class S005:
     info = StrategyInfo(
         id="s005",
         name="Hold-Cap Gate",
@@ -32,4 +32,4 @@ class S005HoldCapGateStrategy:
 
 
 def plugin() -> StrategyPlugin:
-    return S005HoldCapGateStrategy()
+    return S005()

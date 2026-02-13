@@ -12,7 +12,7 @@ from prop_ev.strategies.base import (
 )
 
 
-class S007QualityCompositeGateStrategy:
+class S007:
     info = StrategyInfo(
         id="s007",
         name="Quality Composite Gate",
@@ -40,4 +40,4 @@ class S007QualityCompositeGateStrategy:
 
 
 def plugin() -> StrategyPlugin:
-    return S007QualityCompositeGateStrategy()
+    return S007()

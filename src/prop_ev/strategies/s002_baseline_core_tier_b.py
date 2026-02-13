@@ -12,7 +12,7 @@ from prop_ev.strategies.base import (
 )
 
 
-class S002BaselineCoreTierBStrategy:
+class S002:
     info = StrategyInfo(
         id="s002",
         name="Baseline Core + Tier B",
@@ -34,4 +34,4 @@ class S002BaselineCoreTierBStrategy:
 
 
 def plugin() -> StrategyPlugin:
-    return S002BaselineCoreTierBStrategy()
+    return S002()

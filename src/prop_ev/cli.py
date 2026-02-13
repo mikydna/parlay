@@ -53,7 +53,7 @@ from prop_ev.settlement import settle_snapshot
 from prop_ev.state_keys import (
     playbook_mode_key,
     strategy_health_state_key,
-    strategy_title_for_id,
+    strategy_title,
 )
 from prop_ev.storage import SnapshotStore, make_snapshot_id, request_hash
 from prop_ev.strategies import get_strategy, list_strategies, resolve_strategy_id
@@ -1420,9 +1420,9 @@ def _cmd_strategy_run(args: argparse.Namespace) -> int:
         )
     )
     print(f"strategy_id={strategy_id}")
-    strategy_title = strategy_title_for_id(strategy_id)
-    if strategy_title:
-        print(f"strategy_title={strategy_title}")
+    title = strategy_title(strategy_id)
+    if title:
+        print(f"strategy_title={title}")
     print(f"health_gates={','.join(health_gates) if health_gates else 'none'}")
     print(f"report_json={json_path}")
     print(f"report_md={md_path}")
@@ -2268,9 +2268,9 @@ def _cmd_playbook_run(args: argparse.Namespace) -> int:
     if mode_desc:
         print(f"mode_desc={mode_desc}")
     print(f"strategy_id={strategy_id}")
-    strategy_title = strategy_title_for_id(strategy_id)
-    if strategy_title:
-        print(f"strategy_title={strategy_title}")
+    title = strategy_title(strategy_id)
+    if title:
+        print(f"strategy_title={title}")
     preflight_gates = (
         preflight_context.get("health_gates", [])
         if isinstance(preflight_context.get("health_gates"), list)
@@ -2351,9 +2351,9 @@ def _cmd_playbook_render(args: argparse.Namespace) -> int:
     )
     print(f"snapshot_id={snapshot_id}")
     print(f"strategy_id={strategy_id}")
-    strategy_title = strategy_title_for_id(strategy_id)
-    if strategy_title:
-        print(f"strategy_title={strategy_title}")
+    title = strategy_title(strategy_id)
+    if title:
+        print(f"strategy_title={title}")
     print(f"strategy_brief_md={brief['report_markdown']}")
     print(f"strategy_brief_tex={brief['report_tex']}")
     print(f"strategy_brief_pdf={brief['report_pdf']}")
@@ -2540,9 +2540,9 @@ def _cmd_playbook_discover_execute(args: argparse.Namespace) -> int:
     print(f"discovery_snapshot_id={discovery_snapshot_id}")
     print(f"execution_snapshot_id={execution_snapshot_id}")
     print(f"strategy_id={strategy_id}")
-    strategy_title = strategy_title_for_id(strategy_id)
-    if strategy_title:
-        print(f"strategy_title={strategy_title}")
+    title = strategy_title(strategy_id)
+    if title:
+        print(f"strategy_title={title}")
     print(
         "actionable_rows={} matched_rows={} discovery_eligible_rows={}".format(
             summary.get("actionable_rows", 0),

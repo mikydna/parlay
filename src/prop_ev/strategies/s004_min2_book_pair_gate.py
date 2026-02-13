@@ -12,7 +12,7 @@ from prop_ev.strategies.base import (
 )
 
 
-class S004Min2BookPairGateStrategy:
+class S004:
     info = StrategyInfo(
         id="s004",
         name="Min-2 Book-Pair Gate",
@@ -34,4 +34,4 @@ class S004Min2BookPairGateStrategy:
 
 
 def plugin() -> StrategyPlugin:
-    return S004Min2BookPairGateStrategy()
+    return S004()

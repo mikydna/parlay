@@ -1,9 +1,9 @@
 from prop_ev.state_keys import (
     playbook_mode_key,
-    strategy_description_for_id,
+    strategy_description,
     strategy_health_state_key,
     strategy_report_state_key,
-    strategy_title_for_id,
+    strategy_title,
 )
 from prop_ev.strategies.base import StrategyInfo, StrategyRunConfig, decorate_report
 
@@ -33,9 +33,9 @@ def test_strategy_id_map_has_titles_and_descriptions() -> None:
     assert mapping["strategy_id"]["s007"] == "Quality Composite Gate"
     assert mapping["strategy_description"]["s006"]
     assert mapping["strategy_description"]["s007"]
-    assert strategy_title_for_id("s001") == "Baseline Core"
-    assert strategy_title_for_id("s007") == "Quality Composite Gate"
-    assert strategy_description_for_id("s002")
+    assert strategy_title("s001") == "Baseline Core"
+    assert strategy_title("s007") == "Quality Composite Gate"
+    assert strategy_description("s002")
 
 
 def test_decorate_report_adds_strategy_id_map() -> None:

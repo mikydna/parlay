@@ -12,7 +12,7 @@ from prop_ev.strategies.base import (
 )
 
 
-class S006DispersionIQRGateStrategy:
+class S006:
     info = StrategyInfo(
         id="s006",
         name="Dispersion-IQR Gate",
@@ -32,4 +32,4 @@ class S006DispersionIQRGateStrategy:
 
 
 def plugin() -> StrategyPlugin:
-    return S006DispersionIQRGateStrategy()
+    return S006()

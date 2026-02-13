@@ -5,7 +5,7 @@ from typing import Any, Protocol
 
 from prop_ev.state_keys import (
     attach_strategy_description_key,
-    attach_strategy_id_key,
+    attach_strategy_title_key,
     strategy_meta,
 )
 
@@ -149,7 +149,7 @@ def decorate_report(
     )
     report["strategy_id"] = strategy_id
     report["strategy"] = strategy_payload
-    report["state_key"] = attach_strategy_id_key(
+    report["state_key"] = attach_strategy_title_key(
         report.get("state_key"),
         strategy_id=strategy_id,
         strategy_title=strategy.name,
