@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from datetime import UTC, datetime
 from pathlib import Path
 from statistics import median
@@ -2527,3 +2528,35 @@ def write_strategy_reports(
         _write(_suffix(canonical_json), _suffix(canonical_md), _suffix(canonical_card))
 
     return primary_json, primary_md
+
+
+def _sanitize_artifact_tag(tag: str) -> str:
+    cleaned = re.sub(r"[^A-Za-z0-9._-]+", "-", tag.strip())
+    cleaned = re.sub(r"-{2,}", "-", cleaned).strip("._-")
+    return cleaned
+
+
+def write_tagged_strategy_reports(
+    *,
+    snapshot_dir: Path,
+    report: dict[str, Any],
+    top_n: int,
+    tag: str,
+) -> tuple[Path, Path]:
+    """Write one tagged strategy report bundle without touching canonical files."""
+    safe_tag = _sanitize_artifact_tag(tag)
+    if not safe_tag:
+        raise ValueError("tag must contain at least one filename-safe character")
+
+    reports_dir = snapshot_dir / "reports"
+    reports_dir.mkdir(parents=True, exist_ok=True)
+    markdown = render_strategy_markdown(report, top_n=top_n)
+
+    json_path = reports_dir / f"strategy-report.{safe_tag}.json"
+    md_path = reports_dir / f"strategy-report.{safe_tag}.md"
+    card_path = reports_dir / f"strategy-card.{safe_tag}.md"
+
+    json_path.write_text(json.dumps(report, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+    md_path.write_text(markdown, encoding="utf-8")
+    card_path.write_text(markdown, encoding="utf-8")
+    return json_path, md_path

@@ -39,6 +39,7 @@ from prop_ev.discovery_execution import (
     build_discovery_execution_report,
     write_discovery_execution_reports,
 )
+from prop_ev.execution_projection import ExecutionProjectionConfig, project_execution_report
 from prop_ev.identity_map import load_identity_map, update_identity_map
 from prop_ev.normalize import normalize_event_odds, normalize_featured_odds
 from prop_ev.odds_client import (
@@ -63,7 +64,12 @@ from prop_ev.odds_data.policy import SpendPolicy
 from prop_ev.odds_data.repo import OddsRepository
 from prop_ev.odds_data.request import OddsRequest
 from prop_ev.odds_data.spec import DatasetSpec, dataset_id
-from prop_ev.playbook import budget_snapshot, compute_live_window, generate_brief_for_snapshot
+from prop_ev.playbook import (
+    budget_snapshot,
+    compute_live_window,
+    generate_brief_for_snapshot,
+    report_outputs_root,
+)
 from prop_ev.quote_table import EVENT_PROPS_TABLE
 from prop_ev.settings import Settings
 from prop_ev.settlement import settle_snapshot
@@ -86,7 +92,12 @@ from prop_ev.strategies.base import (
     decorate_report,
     normalize_strategy_id,
 )
-from prop_ev.strategy import build_strategy_report, load_jsonl, write_strategy_reports
+from prop_ev.strategy import (
+    build_strategy_report,
+    load_jsonl,
+    write_strategy_reports,
+    write_tagged_strategy_reports,
+)
 from prop_ev.time_utils import iso_z, utc_now
 
 
@@ -1670,6 +1681,28 @@ def _strategy_policy_from_env() -> dict[str, Any]:
     }
 
 
+def _resolve_strategy_runtime_policy(
+    *, mode: str, stale_quote_minutes: int, require_fresh_context: bool
+) -> tuple[str, int, bool]:
+    mode_key = str(mode).strip().lower() or "auto"
+    if mode_key not in {"auto", "live", "replay"}:
+        raise CLIError(f"invalid strategy run mode: {mode}")
+    resolved_stale = int(stale_quote_minutes)
+    resolved_fresh_context = bool(require_fresh_context)
+    if mode_key == "replay":
+        resolved_stale = max(resolved_stale, 1_000_000)
+        resolved_fresh_context = False
+    return mode_key, resolved_stale, resolved_fresh_context
+
+
+def _execution_projection_tag(bookmakers: tuple[str, ...]) -> str:
+    cleaned = [re.sub(r"[^a-z0-9._-]+", "-", book.strip().lower()) for book in bookmakers]
+    cleaned = [book.strip("._-") for book in cleaned if book.strip("._-")]
+    if not cleaned:
+        return "execution"
+    return f"execution-{'-'.join(cleaned)}"
+
+
 def _load_strategy_context(
     *,
     store: SnapshotStore,
@@ -2176,8 +2209,17 @@ def _cmd_strategy_run(args: argparse.Namespace) -> int:
     allow_secondary_injuries = _allow_secondary_injuries_override(
         cli_flag=bool(getattr(args, "allow_secondary_injuries", False))
     )
-    stale_quote_minutes = _env_int("PROP_EV_STRATEGY_STALE_QUOTE_MINUTES", 20)
-    require_fresh_context = _env_bool("PROP_EV_STRATEGY_REQUIRE_FRESH_CONTEXT", True)
+    stale_quote_minutes_env = _env_int("PROP_EV_STRATEGY_STALE_QUOTE_MINUTES", 20)
+    require_fresh_context_env = _env_bool("PROP_EV_STRATEGY_REQUIRE_FRESH_CONTEXT", True)
+    (
+        strategy_run_mode,
+        stale_quote_minutes,
+        require_fresh_context,
+    ) = _resolve_strategy_runtime_policy(
+        mode=str(getattr(args, "mode", "auto")),
+        stale_quote_minutes=stale_quote_minutes_env,
+        require_fresh_context=require_fresh_context_env,
+    )
     (
         snapshot_dir,
         manifest,
@@ -2275,6 +2317,9 @@ def _cmd_strategy_run(args: argparse.Namespace) -> int:
     title = strategy_title(strategy_id)
     if title:
         print(f"strategy_title={title}")
+    print(f"strategy_run_mode={strategy_run_mode}")
+    print(f"stale_quote_minutes={stale_quote_minutes}")
+    print(f"require_fresh_context={str(bool(require_fresh_context)).lower()}")
     print(f"health_gates={','.join(health_gates) if health_gates else 'none'}")
     print(f"report_json={json_path}")
     print(f"report_md={md_path}")
@@ -2294,6 +2339,46 @@ def _cmd_strategy_run(args: argparse.Namespace) -> int:
     print(f"identity_map={identity_map_path} entries={entries}")
     print(f"injuries_context={snapshot_dir / 'context' / 'injuries.json'}")
     print(f"roster_context={snapshot_dir / 'context' / 'roster.json'}")
+
+    execution_books = tuple(parse_csv(str(getattr(args, "execution_bookmakers", ""))))
+    if execution_books:
+        execution_top_n_raw = int(getattr(args, "execution_top_n", 0))
+        execution_top_n = execution_top_n_raw if execution_top_n_raw > 0 else int(args.top_n)
+        execution_config = ExecutionProjectionConfig(
+            bookmakers=execution_books,
+            top_n=max(0, execution_top_n),
+            requires_pre_bet_ready=bool(getattr(args, "execution_requires_pre_bet_ready", False)),
+            requires_meets_play_to=bool(getattr(args, "execution_requires_meets_play_to", False)),
+            tier_a_min_ev=float(getattr(args, "execution_tier_a_min_ev", 0.03)),
+            tier_b_min_ev=float(getattr(args, "execution_tier_b_min_ev", 0.05)),
+        )
+        projected_report = project_execution_report(
+            report=report,
+            event_prop_rows=rows,
+            config=execution_config,
+        )
+        execution_tag = _execution_projection_tag(execution_books)
+        execution_json, execution_md = write_tagged_strategy_reports(
+            snapshot_dir=snapshot_dir,
+            report=projected_report,
+            top_n=max(0, execution_top_n),
+            tag=execution_tag,
+        )
+        execution_summary = (
+            projected_report.get("summary", {})
+            if isinstance(projected_report.get("summary"), dict)
+            else {}
+        )
+        print(f"execution_bookmakers={','.join(execution_books)}")
+        print(f"execution_tag={execution_tag}")
+        print(
+            "execution_candidates={} execution_eligible={}".format(
+                execution_summary.get("candidate_lines", 0),
+                execution_summary.get("eligible_lines", 0),
+            )
+        )
+        print(f"execution_report_json={execution_json}")
+        print(f"execution_report_md={execution_md}")
     return 0
 
 
@@ -2904,6 +2989,7 @@ def _run_strategy_for_playbook(
     offline: bool,
     block_paid: bool,
     refresh_context: bool,
+    strategy_mode: str = "auto",
     allow_secondary_injuries: bool = False,
     write_canonical: bool = True,
 ) -> int:
@@ -2916,8 +3002,15 @@ def _run_strategy_for_playbook(
         offline=offline,
         block_paid=block_paid,
         refresh_context=refresh_context,
+        mode=strategy_mode,
         allow_secondary_injuries=allow_secondary_injuries,
         write_canonical=write_canonical,
+        execution_bookmakers="",
+        execution_top_n=0,
+        execution_requires_pre_bet_ready=False,
+        execution_requires_meets_play_to=False,
+        execution_tier_a_min_ev=0.03,
+        execution_tier_b_min_ev=0.05,
     )
     return _cmd_strategy_run(strategy_args)
 
@@ -3105,6 +3198,7 @@ def _cmd_playbook_run(args: argparse.Namespace) -> int:
         offline=strategy_offline,
         block_paid=bool(getattr(args, "block_paid", False)),
         refresh_context=refresh_context,
+        strategy_mode=str(getattr(args, "strategy_mode", "auto")),
         allow_secondary_injuries=allow_secondary_injuries,
         write_canonical=True,
     )
@@ -3172,39 +3266,58 @@ def _cmd_playbook_render(args: argparse.Namespace) -> int:
         args.per_game_top_n if args.per_game_top_n > 0 else settings.playbook_per_game_top_n
     )
     snapshot_id = args.snapshot_id
+    reports_dir = store.snapshot_dir(snapshot_id) / "reports"
+    strategy_report_file = (
+        str(getattr(args, "strategy_report_file", "strategy-report.json")).strip()
+        or "strategy-report.json"
+    )
+    candidate_report_path = Path(strategy_report_file).expanduser()
+    if candidate_report_path.is_absolute():
+        strategy_report_path = candidate_report_path
+    else:
+        strategy_report_path = reports_dir / candidate_report_path
+    canonical_strategy_path = reports_dir / "strategy-report.json"
+    is_canonical_strategy_report = strategy_report_path.resolve(
+        strict=False
+    ) == canonical_strategy_path.resolve(strict=False)
+    brief_tag = str(getattr(args, "brief_tag", "")).strip()
     refresh_context = bool(args.refresh_context and not args.offline)
     if bool(args.refresh_context) and bool(args.offline):
         print(f"note=refresh_context_ignored_in_offline_mode snapshot_id={snapshot_id}")
-    strategy_json = store.snapshot_dir(snapshot_id) / "reports" / "strategy-report.json"
-    strategy_needs_refresh = not strategy_json.exists()
-    if not strategy_needs_refresh:
-        try:
-            existing = json.loads(strategy_json.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            strategy_needs_refresh = True
-        else:
-            existing_id = ""
-            if isinstance(existing, dict):
-                existing_id = str(existing.get("strategy_id", "")).strip()
-            existing_id = normalize_strategy_id(existing_id) if existing_id else "s001"
-            strategy_needs_refresh = existing_id != strategy_id
-    if strategy_needs_refresh:
-        code = _run_strategy_for_playbook(
-            snapshot_id=snapshot_id,
-            strategy_id=strategy_id,
-            top_n=args.strategy_top_n,
-            min_ev=args.min_ev,
-            allow_tier_b=args.allow_tier_b,
-            offline=args.offline,
-            block_paid=bool(getattr(args, "block_paid", False)),
-            refresh_context=refresh_context,
-            allow_secondary_injuries=_allow_secondary_injuries_override(
-                cli_flag=bool(getattr(args, "allow_secondary_injuries", False))
-            ),
-            write_canonical=True,
-        )
-        if code != 0:
-            return code
+    if is_canonical_strategy_report:
+        strategy_needs_refresh = not canonical_strategy_path.exists()
+        if not strategy_needs_refresh:
+            try:
+                existing = json.loads(canonical_strategy_path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                strategy_needs_refresh = True
+            else:
+                existing_id = ""
+                if isinstance(existing, dict):
+                    existing_id = str(existing.get("strategy_id", "")).strip()
+                existing_id = normalize_strategy_id(existing_id) if existing_id else "s001"
+                strategy_needs_refresh = existing_id != strategy_id
+        if strategy_needs_refresh:
+            code = _run_strategy_for_playbook(
+                snapshot_id=snapshot_id,
+                strategy_id=strategy_id,
+                top_n=args.strategy_top_n,
+                min_ev=args.min_ev,
+                allow_tier_b=args.allow_tier_b,
+                offline=args.offline,
+                block_paid=bool(getattr(args, "block_paid", False)),
+                refresh_context=refresh_context,
+                strategy_mode=str(getattr(args, "strategy_mode", "auto")),
+                allow_secondary_injuries=_allow_secondary_injuries_override(
+                    cli_flag=bool(getattr(args, "allow_secondary_injuries", False))
+                ),
+                write_canonical=True,
+            )
+            if code != 0:
+                return code
+    elif not strategy_report_path.exists():
+        raise CLIError(f"missing strategy report file: {strategy_report_path}")
+
     brief = generate_brief_for_snapshot(
         store=store,
         settings=settings,
@@ -3215,12 +3328,17 @@ def _cmd_playbook_render(args: argparse.Namespace) -> int:
         per_game_top_n=per_game_top_n,
         game_card_min_ev=max(0.0, args.min_ev),
         month=month,
+        strategy_report_path=strategy_report_path,
+        artifact_tag=brief_tag,
     )
     print(f"snapshot_id={snapshot_id}")
     print(f"strategy_id={strategy_id}")
     title = strategy_title(strategy_id)
     if title:
         print(f"strategy_title={title}")
+    print(f"strategy_report_path={strategy_report_path}")
+    if brief_tag:
+        print(f"brief_tag={brief_tag}")
     print(f"strategy_brief_md={brief['report_markdown']}")
     print(f"strategy_brief_tex={brief['report_tex']}")
     print(f"strategy_brief_pdf={brief['report_pdf']}")
@@ -3264,8 +3382,9 @@ def _publish_compact_playbook_outputs(
         raise CLIError(f"missing reports directory: {reports_dir}")
 
     snapshot_day = _snapshot_date(snapshot_id)
-    daily_dir = store.root / "reports" / "daily" / snapshot_day / f"snapshot={snapshot_id}"
-    latest_dir = store.root / "reports" / "latest"
+    reports_root = report_outputs_root(store)
+    daily_dir = reports_root / "daily" / snapshot_day / f"snapshot={snapshot_id}"
+    latest_dir = reports_root / "latest"
     daily_dir.mkdir(parents=True, exist_ok=True)
     latest_dir.mkdir(parents=True, exist_ok=True)
 
@@ -3420,6 +3539,7 @@ def _cmd_playbook_discover_execute(args: argparse.Namespace) -> int:
             offline=False,
             block_paid=False,
             refresh_context=args.refresh_context,
+            strategy_mode=str(getattr(args, "strategy_mode", "auto")),
             allow_secondary_injuries=_allow_secondary_injuries_override(
                 cli_flag=bool(getattr(args, "allow_secondary_injuries", False))
             ),
@@ -3443,6 +3563,7 @@ def _cmd_playbook_discover_execute(args: argparse.Namespace) -> int:
             offline=False,
             block_paid=False,
             refresh_context=args.refresh_context,
+            strategy_mode=str(getattr(args, "strategy_mode", "auto")),
             allow_secondary_injuries=_allow_secondary_injuries_override(
                 cli_flag=bool(getattr(args, "allow_secondary_injuries", False))
             ),
@@ -3506,9 +3627,10 @@ def _cmd_playbook_discover_execute(args: argparse.Namespace) -> int:
     return 0
 
 
-def _extract_data_dir_override(argv: list[str]) -> tuple[list[str], str]:
+def _extract_global_overrides(argv: list[str]) -> tuple[list[str], str, str]:
     cleaned: list[str] = []
     data_dir = ""
+    reports_dir = ""
     idx = 0
     while idx < len(argv):
         token = argv[idx]
@@ -3522,9 +3644,19 @@ def _extract_data_dir_override(argv: list[str]) -> tuple[list[str], str]:
             data_dir = token.split("=", 1)[1].strip()
             idx += 1
             continue
+        if token == "--reports-dir":
+            if idx + 1 >= len(argv):
+                raise CLIError("--reports-dir requires a value")
+            reports_dir = str(argv[idx + 1]).strip()
+            idx += 2
+            continue
+        if token.startswith("--reports-dir="):
+            reports_dir = token.split("=", 1)[1].strip()
+            idx += 1
+            continue
         cleaned.append(token)
         idx += 1
-    return cleaned, data_dir
+    return cleaned, data_dir, reports_dir
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -3533,6 +3665,14 @@ def _build_parser() -> argparse.ArgumentParser:
         "--data-dir",
         default="",
         help="Override PROP_EV_DATA_DIR for this command invocation.",
+    )
+    parser.add_argument(
+        "--reports-dir",
+        default="",
+        help=(
+            "Override PROP_EV_REPORTS_DIR for report publishing/output. "
+            "Default is sibling reports dir of the odds-api data dir."
+        ),
     )
     subparsers = parser.add_subparsers(dest="command")
 
@@ -3766,6 +3906,12 @@ def _build_parser() -> argparse.ArgumentParser:
     strategy_run.add_argument("--strategy", default="s001")
     strategy_run.add_argument("--top-n", type=int, default=25)
     strategy_run.add_argument("--min-ev", type=float, default=0.01)
+    strategy_run.add_argument(
+        "--mode",
+        choices=("auto", "live", "replay"),
+        default="auto",
+        help="Strategy runtime mode (replay relaxes freshness gates for historical reruns).",
+    )
     strategy_run.add_argument("--allow-tier-b", action="store_true")
     strategy_run.add_argument("--offline", action="store_true")
     strategy_run.add_argument("--block-paid", action="store_true")
@@ -3775,6 +3921,29 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Allow secondary injury source when official report is unavailable.",
     )
+    strategy_run.add_argument(
+        "--execution-bookmakers",
+        default="",
+        help="Comma-separated execution books for projected strategy outputs.",
+    )
+    strategy_run.add_argument(
+        "--execution-top-n",
+        type=int,
+        default=0,
+        help="Projected execution report top-N (defaults to --top-n when omitted).",
+    )
+    strategy_run.add_argument(
+        "--execution-requires-pre-bet-ready",
+        action="store_true",
+        help="Require pre_bet_ready=true for execution eligibility.",
+    )
+    strategy_run.add_argument(
+        "--execution-requires-meets-play-to",
+        action="store_true",
+        help="Require selected execution price to meet play_to_american.",
+    )
+    strategy_run.add_argument("--execution-tier-a-min-ev", type=float, default=0.03)
+    strategy_run.add_argument("--execution-tier-b-min-ev", type=float, default=0.05)
 
     strategy_health = strategy_subparsers.add_parser(
         "health", help="Report injury/roster/mapping health for a snapshot"
@@ -3903,6 +4072,12 @@ def _build_parser() -> argparse.ArgumentParser:
     playbook_run.add_argument("--min-ev", type=float, default=0.01)
     playbook_run.add_argument("--allow-tier-b", action="store_true")
     playbook_run.add_argument(
+        "--strategy-mode",
+        choices=("auto", "live", "replay"),
+        default="auto",
+        help="Strategy runtime mode used for playbook strategy execution.",
+    )
+    playbook_run.add_argument(
         "--exit-on-no-games",
         action="store_true",
         help="Exit 0 early when events lookup returns no games in the selected window",
@@ -3929,6 +4104,22 @@ def _build_parser() -> argparse.ArgumentParser:
     playbook_render.add_argument("--strategy-top-n", type=int, default=25)
     playbook_render.add_argument("--min-ev", type=float, default=0.01)
     playbook_render.add_argument("--allow-tier-b", action="store_true")
+    playbook_render.add_argument(
+        "--strategy-report-file",
+        default="strategy-report.json",
+        help="Strategy report file name (relative to snapshot reports/) or absolute path.",
+    )
+    playbook_render.add_argument(
+        "--brief-tag",
+        default="",
+        help="Optional artifact tag for writing non-canonical brief outputs.",
+    )
+    playbook_render.add_argument(
+        "--strategy-mode",
+        choices=("auto", "live", "replay"),
+        default="auto",
+        help="Strategy runtime mode if render triggers canonical strategy refresh.",
+    )
     playbook_render.add_argument("--month", default="")
 
     playbook_publish = playbook_subparsers.add_parser(
@@ -3990,6 +4181,12 @@ def _build_parser() -> argparse.ArgumentParser:
     playbook_discover_execute.add_argument("--strategy-top-n", type=int, default=50)
     playbook_discover_execute.add_argument("--min-ev", type=float, default=0.01)
     playbook_discover_execute.add_argument("--allow-tier-b", action="store_true")
+    playbook_discover_execute.add_argument(
+        "--strategy-mode",
+        choices=("auto", "live", "replay"),
+        default="auto",
+        help="Strategy runtime mode used by both discovery and execution strategy runs.",
+    )
     playbook_discover_execute.add_argument("--month", default="")
 
     return parser
@@ -3998,32 +4195,50 @@ def _build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     """Run the CLI."""
     raw_argv = list(argv) if isinstance(argv, list) else sys.argv[1:]
-    parsed_argv, data_dir_override = _extract_data_dir_override(raw_argv)
-    if data_dir_override:
-        os.environ["PROP_EV_DATA_DIR"] = str(Path(data_dir_override).expanduser())
+    parsed_argv, data_dir_override, reports_dir_override = _extract_global_overrides(raw_argv)
+    prev_data_dir = os.environ.get("PROP_EV_DATA_DIR")
+    prev_reports_dir = os.environ.get("PROP_EV_REPORTS_DIR")
 
-    parser = _build_parser()
-    args = parser.parse_args(parsed_argv)
-    explicit_data_dir = str(getattr(args, "data_dir", "")).strip()
-    if explicit_data_dir:
-        os.environ["PROP_EV_DATA_DIR"] = str(Path(explicit_data_dir).expanduser())
-    func = getattr(args, "func", None)
-    if func is None:
-        parser.print_help()
-        return 0
     try:
-        return int(func(args))
-    except (
-        CLIError,
-        OddsAPIError,
-        CreditBudgetExceeded,
-        OfflineCacheMiss,
-        SpendBlockedError,
-        FileNotFoundError,
-        ValueError,
-    ) as exc:
-        print(str(exc), file=sys.stderr)
-        return 2
+        if data_dir_override:
+            os.environ["PROP_EV_DATA_DIR"] = str(Path(data_dir_override).expanduser())
+        if reports_dir_override:
+            os.environ["PROP_EV_REPORTS_DIR"] = str(Path(reports_dir_override).expanduser())
+
+        parser = _build_parser()
+        args = parser.parse_args(parsed_argv)
+        explicit_data_dir = str(getattr(args, "data_dir", "")).strip()
+        if explicit_data_dir:
+            os.environ["PROP_EV_DATA_DIR"] = str(Path(explicit_data_dir).expanduser())
+        explicit_reports_dir = str(getattr(args, "reports_dir", "")).strip()
+        if explicit_reports_dir:
+            os.environ["PROP_EV_REPORTS_DIR"] = str(Path(explicit_reports_dir).expanduser())
+        func = getattr(args, "func", None)
+        if func is None:
+            parser.print_help()
+            return 0
+        try:
+            return int(func(args))
+        except (
+            CLIError,
+            OddsAPIError,
+            CreditBudgetExceeded,
+            OfflineCacheMiss,
+            SpendBlockedError,
+            FileNotFoundError,
+            ValueError,
+        ) as exc:
+            print(str(exc), file=sys.stderr)
+            return 2
+    finally:
+        if prev_data_dir is None:
+            os.environ.pop("PROP_EV_DATA_DIR", None)
+        else:
+            os.environ["PROP_EV_DATA_DIR"] = prev_data_dir
+        if prev_reports_dir is None:
+            os.environ.pop("PROP_EV_REPORTS_DIR", None)
+        else:
+            os.environ["PROP_EV_REPORTS_DIR"] = prev_reports_dir
 
 
 if __name__ == "__main__":
