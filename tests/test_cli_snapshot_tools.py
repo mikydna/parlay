@@ -403,3 +403,25 @@ def test_playbook_publish_copies_only_compact_outputs(local_data_dir: Path) -> N
     assert (latest_dir / "strategy-brief.meta.json").exists()
     assert (latest_dir / "latest.json").exists()
     assert not (daily_dir / "brief-input.json").exists()
+
+
+def test_playbook_publish_derives_date_for_legacy_daily_snapshot_id(local_data_dir: Path) -> None:
+    store = SnapshotStore(local_data_dir)
+    snapshot_id = "daily-20260212T230052Z"
+    reports_dir = store.ensure_snapshot(snapshot_id) / "reports"
+    reports_dir.mkdir(parents=True, exist_ok=True)
+    (reports_dir / "strategy-report.json").write_text("{}\n", encoding="utf-8")
+    (reports_dir / "strategy-brief.md").write_text("# Brief\n", encoding="utf-8")
+    (reports_dir / "strategy-brief.meta.json").write_text("{}\n", encoding="utf-8")
+
+    assert (
+        main(
+            ["--data-dir", str(local_data_dir), "playbook", "publish", "--snapshot-id", snapshot_id]
+        )
+        == 0
+    )
+
+    expected_daily_dir = (
+        local_data_dir / "reports" / "daily" / "2026-02-12" / f"snapshot={snapshot_id}"
+    )
+    assert (expected_daily_dir / "strategy-report.json").exists()

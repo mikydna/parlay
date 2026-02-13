@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 from collections import Counter
 from collections.abc import Callable
@@ -2529,6 +2530,15 @@ def _snapshot_date(snapshot_id: str) -> str:
         try:
             date.fromisoformat(date_prefix)
             return date_prefix
+        except ValueError:
+            pass
+    daily_match = re.match(r"^daily-(\d{4})-?(\d{2})-?(\d{2})", snapshot_id)
+    if daily_match:
+        year, month, day = daily_match.groups()
+        candidate = f"{year}-{month}-{day}"
+        try:
+            date.fromisoformat(candidate)
+            return candidate
         except ValueError:
             pass
     return _utc_now().strftime("%Y-%m-%d")
