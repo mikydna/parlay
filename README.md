@@ -293,6 +293,8 @@ Source policy details and fallback rules are documented in `docs/sources.md`.
 
 ## Scheduled Runs
 
+- Docs guide (active vs archive): `docs/README.md`
+- Canonical roadmap/milestones: `docs/plan.md`
 - Operator runbook: `docs/runbook.md`
 - Schedule-specific command examples: `docs/scheduled-flow.md`
 - Artifact and gate contracts: `docs/contracts.md`
