@@ -24,6 +24,7 @@ from prop_ev.odds_math import (
     normalize_prob_pair,
 )
 from prop_ev.portfolio import PortfolioConstraints, PortfolioRanking, select_portfolio_candidates
+from prop_ev.pricing_reference import ReferencePoint, estimate_reference_probability
 from prop_ev.rolling_priors import calibration_feedback
 from prop_ev.state_keys import strategy_report_state_key
 from prop_ev.time_utils import parse_iso_z, utc_now_str
@@ -1369,6 +1370,33 @@ def build_strategy_report(
         key = _line_key(row)
         grouped.setdefault(key, []).append(row)
 
+    reference_points_by_line: dict[tuple[str, str, str], list[ReferencePoint]] = {}
+    for key, group_rows in grouped.items():
+        event_id, market, player, point = key
+        point_book_pairs = _per_book_prob_pairs(group_rows)
+        p_over_values = [
+            pair["p_over_fair"]
+            for pair in point_book_pairs
+            if isinstance(pair.get("p_over_fair"), float)
+        ]
+        if not p_over_values:
+            continue
+        p_over_median = _median(p_over_values)
+        if p_over_median is None:
+            continue
+        hold_values = [
+            pair["hold"] for pair in point_book_pairs if isinstance(pair.get("hold"), float)
+        ]
+        hold_median = _median(hold_values)
+        reference_points_by_line.setdefault((event_id, market, player), []).append(
+            ReferencePoint(
+                point=float(point),
+                p_over=float(p_over_median),
+                hold=hold_median,
+                weight=float(max(len(point_book_pairs), 1)),
+            )
+        )
+
     slate_rows = slate_rows or []
     slate_snapshot, event_lines = _event_line_index(slate_rows, event_context)
     teams_in_scope = {
@@ -1461,6 +1489,11 @@ def build_strategy_report(
         p_over_book_range: float | None = None
         if p_over_book:
             p_over_book_range = max(p_over_book) - min(p_over_book)
+        reference_estimate = estimate_reference_probability(
+            reference_points_by_line.get((event_id, market, player), []),
+            target_point=float(point),
+        )
+        reference_line_method = reference_estimate.method
 
         freshest_quote_utc = ""
         freshest_quote = max(
@@ -1527,6 +1560,12 @@ def build_strategy_report(
                 p_under_fair = 1.0 - p_over_fair
                 hold = hold_book_median
                 baseline_used = "median_book"
+                reference_line_method = "exact"
+            elif reference_estimate.p_over is not None:
+                p_over_fair = reference_estimate.p_over
+                p_under_fair = 1.0 - p_over_fair
+                hold = reference_estimate.hold
+                baseline_used = "median_book_interpolated"
             elif baseline_fallback == "best_sides":
                 baseline_used = "best_sides_fallback"
             else:
@@ -1819,6 +1858,8 @@ def build_strategy_report(
                 "p_over_fair": p_over_fair,
                 "p_under_fair": p_under_fair,
                 "baseline_used": baseline_used,
+                "reference_line_method": reference_line_method,
+                "reference_points_count": reference_estimate.points_used,
                 "book_pair_count": book_pair_count,
                 "p_over_book_median": p_over_book_median,
                 "hold_book_median": hold_book_median,
