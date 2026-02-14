@@ -14,7 +14,7 @@ from collections.abc import Callable, Sequence
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
-from shutil import copy2
+from shutil import copy2, rmtree
 from typing import Any, cast
 from zoneinfo import ZoneInfo
 
@@ -3397,12 +3397,12 @@ def _sha256_file(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def _abalation_build_input_hash(*, payload: dict[str, Any]) -> str:
+def _build_ablation_input_hash(*, payload: dict[str, Any]) -> str:
     normalized = json.dumps(payload, sort_keys=True, separators=(",", ":"))
     return _sha256_text(normalized)
 
 
-def _abalation_git_head() -> str:
+def _ablation_git_head() -> str:
     try:
         proc = subprocess.run(
             ["git", "rev-parse", "HEAD"],
@@ -3418,20 +3418,33 @@ def _abalation_git_head() -> str:
     return head or "unknown"
 
 
-def _abalation_state_dir(reports_root: Path) -> Path:
-    return reports_root / "_abalation_state"
+def _ablation_state_dir(reports_root: Path) -> Path:
+    return reports_root / "_ablation_state"
 
 
-def _abalation_load_state(path: Path) -> dict[str, Any] | None:
+def _ablation_load_state(path: Path) -> dict[str, Any] | None:
     return _load_json_object(path)
 
 
-def _abalation_write_state(path: Path, payload: dict[str, Any]) -> None:
+def _ablation_write_state(path: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, sort_keys=True, indent=2) + "\n", encoding="utf-8")
 
 
-def _abalation_count_seed_rows(path: Path) -> int:
+def _ablation_prune_cap_root(cap_root: Path) -> dict[str, int]:
+    removed_dirs = 0
+    removed_files = 0
+    for relative in ("by-snapshot", "_ablation_state"):
+        target = cap_root / relative
+        if not target.exists():
+            continue
+        removed_files += sum(1 for item in target.rglob("*") if item.is_file())
+        rmtree(target)
+        removed_dirs += 1
+    return {"removed_dirs": removed_dirs, "removed_files": removed_files}
+
+
+def _ablation_count_seed_rows(path: Path) -> int:
     if not path.exists():
         return 0
     count = 0
@@ -3442,7 +3455,17 @@ def _abalation_count_seed_rows(path: Path) -> int:
     return count
 
 
-def _abalation_strategy_artifacts_exist(
+def _build_ablation_analysis_run_id(*, analysis_prefix: str, run_id: str, cap: int) -> str:
+    run_id_clean = run_id.strip()
+    prefix_clean = analysis_prefix.strip()
+    if run_id_clean.startswith(f"{prefix_clean}-") or run_id_clean == prefix_clean:
+        base = run_id_clean
+    else:
+        base = f"{prefix_clean}-{run_id_clean}"
+    return f"{base}-max{cap}"
+
+
+def _ablation_strategy_artifacts_exist(
     *,
     reports_dir: Path,
     strategy_id: str,
@@ -3458,28 +3481,28 @@ def _abalation_strategy_artifacts_exist(
     return all(path.exists() for path in required)
 
 
-def _abalation_strategy_cache_valid(
+def _ablation_strategy_cache_valid(
     *,
     reports_dir: Path,
     state_path: Path,
     expected_hash: str,
     strategy_id: str,
 ) -> bool:
-    payload = _abalation_load_state(state_path)
+    payload = _ablation_load_state(state_path)
     if not isinstance(payload, dict):
         return False
     input_hash = str(payload.get("input_hash", "")).strip()
     if input_hash != expected_hash:
         return False
     seed_rows = int(payload.get("seed_rows", 1) or 0)
-    return _abalation_strategy_artifacts_exist(
+    return _ablation_strategy_artifacts_exist(
         reports_dir=reports_dir,
         strategy_id=strategy_id,
         seed_rows=seed_rows,
     )
 
 
-def _abalation_compare_artifacts_exist(*, reports_dir: Path, strategy_ids: Sequence[str]) -> bool:
+def _ablation_compare_artifacts_exist(*, reports_dir: Path, strategy_ids: Sequence[str]) -> bool:
     required = [
         reports_dir / "strategy-compare.json",
         reports_dir / "strategy-compare.md",
@@ -3490,20 +3513,20 @@ def _abalation_compare_artifacts_exist(*, reports_dir: Path, strategy_ids: Seque
     return all(path.exists() for path in required)
 
 
-def _abalation_compare_cache_valid(
+def _ablation_compare_cache_valid(
     *,
     reports_dir: Path,
     state_path: Path,
     expected_hash: str,
     strategy_ids: Sequence[str],
 ) -> bool:
-    payload = _abalation_load_state(state_path)
+    payload = _ablation_load_state(state_path)
     if not isinstance(payload, dict):
         return False
     input_hash = str(payload.get("input_hash", "")).strip()
     if input_hash != expected_hash:
         return False
-    return _abalation_compare_artifacts_exist(reports_dir=reports_dir, strategy_ids=strategy_ids)
+    return _ablation_compare_artifacts_exist(reports_dir=reports_dir, strategy_ids=strategy_ids)
 
 
 def _parse_cli_kv(stdout: str) -> dict[str, str]:
@@ -3546,7 +3569,7 @@ def _run_cli_subcommand(
     return proc.stdout
 
 
-def _cmd_strategy_abalation(args: argparse.Namespace) -> int:
+def _cmd_strategy_ablation(args: argparse.Namespace) -> int:
     store = SnapshotStore(os.environ.get("PROP_EV_DATA_DIR", "data/odds_api"))
     data_root = store.root
     dataset_id_value = _resolve_complete_day_dataset_id(
@@ -3558,9 +3581,9 @@ def _cmd_strategy_abalation(args: argparse.Namespace) -> int:
 
     strategy_ids = _parse_strategy_ids(str(getattr(args, "strategies", "")))
     if not strategy_ids:
-        raise CLIError("abalation requires --strategies")
+        raise CLIError("ablation requires --strategies")
     if len(strategy_ids) < 2:
-        raise CLIError("abalation requires at least 2 strategies")
+        raise CLIError("ablation requires at least 2 strategies")
     caps = _parse_positive_int_csv(
         str(getattr(args, "caps", "")),
         default=[1, 2, 5],
@@ -3590,18 +3613,16 @@ def _cmd_strategy_abalation(args: argparse.Namespace) -> int:
         if not run_id:
             raise CLIError("--run-id must contain letters, numbers, '_' '-' or '.'")
     else:
-        run_id = _sanitize_analysis_run_id(
-            f"abalation-{datetime.now(UTC).strftime('%Y%m%dT%H%M%SZ')}"
-        )
+        run_id = "latest"
     if not run_id:
         raise CLIError("failed to build run id")
-    run_root = base_reports_root / "abalation" / run_id
+    run_root = base_reports_root / "ablation" / run_id
     run_root.mkdir(parents=True, exist_ok=True)
 
     base_env = dict(os.environ)
     base_env["PROP_EV_DATA_DIR"] = str(store.root)
     cwd = Path.cwd()
-    code_revision = _abalation_git_head()
+    code_revision = _ablation_git_head()
     nba_data_dir = str(
         Path(os.environ.get("PROP_EV_NBA_DATA_DIR", "data/nba_data")).expanduser().resolve()
     )
@@ -3647,6 +3668,9 @@ def _cmd_strategy_abalation(args: argparse.Namespace) -> int:
     block_paid = bool(getattr(args, "block_paid", True))
     refresh_context = bool(getattr(args, "refresh_context", False))
     results_source = str(getattr(args, "results_source", "historical")).strip() or "historical"
+    prune_intermediate = bool(getattr(args, "prune_intermediate", True))
+    write_scoreboard_pdf = bool(getattr(args, "write_scoreboard_pdf", True))
+    keep_scoreboard_tex = bool(getattr(args, "keep_scoreboard_tex", False))
     max_workers = max(1, int(getattr(args, "max_workers", 6)))
     cap_workers = max(1, int(getattr(args, "cap_workers", 3)))
     cap_workers = min(cap_workers, len(caps))
@@ -3664,7 +3688,7 @@ def _cmd_strategy_abalation(args: argparse.Namespace) -> int:
         raise CLIError("--power-target-uplift-gate must be > 0")
     require_power_gate = bool(getattr(args, "require_power_gate", False))
     calibration_map_mode = str(getattr(args, "calibration_map_mode", "walk_forward")).strip()
-    analysis_prefix_raw = str(getattr(args, "analysis_run_prefix", "abalation")).strip()
+    analysis_prefix_raw = str(getattr(args, "analysis_run_prefix", "ablation")).strip()
     analysis_prefix = _sanitize_analysis_run_id(analysis_prefix_raw)
     if not analysis_prefix:
         raise CLIError("--analysis-run-prefix must contain letters, numbers, '_' '-' or '.'")
@@ -3687,7 +3711,7 @@ def _cmd_strategy_abalation(args: argparse.Namespace) -> int:
             "--runtime-dir",
             runtime_dir,
         ]
-        state_dir = _abalation_state_dir(cap_root)
+        state_dir = _ablation_state_dir(cap_root)
         state_dir.mkdir(parents=True, exist_ok=True)
 
         cap_summary: dict[str, Any] = {
@@ -3697,6 +3721,10 @@ def _cmd_strategy_abalation(args: argparse.Namespace) -> int:
             "settled": 0,
             "settle_skipped": 0,
             "no_seed_rows": 0,
+            "analysis_scoreboard_pdf": "",
+            "analysis_scoreboard_pdf_status": "",
+            "pruned_dirs": 0,
+            "pruned_files": 0,
         }
 
         def _snapshot_worker(day_snapshot: tuple[str, str]) -> dict[str, int]:
@@ -3720,12 +3748,12 @@ def _cmd_strategy_abalation(args: argparse.Namespace) -> int:
                 "manifest_hash": manifest_hash,
                 "code_revision": code_revision,
             }
-            compare_hash = _abalation_build_input_hash(payload=compare_payload)
+            compare_hash = _build_ablation_input_hash(payload=compare_payload)
             compare_state_path = state_dir / f"{snapshot_id}.compare.json"
             compare_cached = (
                 reuse_existing
                 and not forced_day
-                and _abalation_compare_cache_valid(
+                and _ablation_compare_cache_valid(
                     reports_dir=reports_dir,
                     state_path=compare_state_path,
                     expected_hash=compare_hash,
@@ -3752,14 +3780,14 @@ def _cmd_strategy_abalation(args: argparse.Namespace) -> int:
                     "manifest_hash": manifest_hash,
                     "code_revision": code_revision,
                 }
-                strategy_hash = _abalation_build_input_hash(payload=strategy_payload)
+                strategy_hash = _build_ablation_input_hash(payload=strategy_payload)
                 strategy_hash_by_id[strategy_id] = strategy_hash
                 strategy_state_path = state_dir / f"{snapshot_id}.{strategy_id}.json"
                 strategy_cached_by_id[strategy_id] = (
                     reuse_existing
                     and not forced_day
                     and strategy_id not in force_strategies
-                    and _abalation_strategy_cache_valid(
+                    and _ablation_strategy_cache_valid(
                         reports_dir=reports_dir,
                         state_path=strategy_state_path,
                         expected_hash=strategy_hash,
@@ -3818,7 +3846,7 @@ def _cmd_strategy_abalation(args: argparse.Namespace) -> int:
                     cwd=cwd,
                     global_cli_args=cap_global_cli_args,
                 )
-                _abalation_write_state(
+                _ablation_write_state(
                     compare_state_path,
                     {
                         "input_hash": compare_hash,
@@ -3840,7 +3868,7 @@ def _cmd_strategy_abalation(args: argparse.Namespace) -> int:
                 if (
                     reuse_existing
                     and not forced_strategy
-                    and _abalation_strategy_cache_valid(
+                    and _ablation_strategy_cache_valid(
                         reports_dir=reports_dir,
                         state_path=strategy_state_path,
                         expected_hash=strategy_hash,
@@ -3851,9 +3879,9 @@ def _cmd_strategy_abalation(args: argparse.Namespace) -> int:
                     continue
 
                 seed_path = reports_dir / f"backtest-seed.{strategy_id}.jsonl"
-                seed_rows = _abalation_count_seed_rows(seed_path)
+                seed_rows = _ablation_count_seed_rows(seed_path)
                 if seed_rows == 0:
-                    _abalation_write_state(
+                    _ablation_write_state(
                         strategy_state_path,
                         {
                             "input_hash": strategy_hash,
@@ -3889,7 +3917,7 @@ def _cmd_strategy_abalation(args: argparse.Namespace) -> int:
                     cwd=cwd,
                     global_cli_args=cap_global_cli_args,
                 )
-                _abalation_write_state(
+                _ablation_write_state(
                     strategy_state_path,
                     {
                         "input_hash": strategy_hash,
@@ -3910,12 +3938,27 @@ def _cmd_strategy_abalation(args: argparse.Namespace) -> int:
                 executor.submit(_snapshot_worker, day_snapshot): day_snapshot
                 for day_snapshot in complete_rows
             }
+            aggregate_keys = (
+                "compare_ran",
+                "compare_skipped",
+                "settled",
+                "settle_skipped",
+                "no_seed_rows",
+                "pruned_dirs",
+                "pruned_files",
+            )
             for future in as_completed(futures):
                 local = future.result()
-                for key in cap_summary:
+                for key in aggregate_keys:
                     cap_summary[key] += int(local.get(key, 0))
 
-        analysis_run_id = _sanitize_analysis_run_id(f"{analysis_prefix}-{run_id}-max{cap}")
+        analysis_run_id = _sanitize_analysis_run_id(
+            _build_ablation_analysis_run_id(
+                analysis_prefix=analysis_prefix,
+                run_id=run_id,
+                cap=cap,
+            )
+        )
         if not analysis_run_id:
             raise CLIError("failed to build analysis run id")
         summarize_cmd = [
@@ -3955,6 +3998,10 @@ def _cmd_strategy_abalation(args: argparse.Namespace) -> int:
             "--calibration-map-mode",
             calibration_map_mode,
         ]
+        if write_scoreboard_pdf:
+            summarize_cmd.append("--write-analysis-pdf")
+        if keep_scoreboard_tex:
+            summarize_cmd.append("--keep-analysis-tex")
         if require_power_gate:
             summarize_cmd.append("--require-power-gate")
         summarize_stdout = _run_cli_subcommand(
@@ -3966,19 +4013,31 @@ def _cmd_strategy_abalation(args: argparse.Namespace) -> int:
         kv = _parse_cli_kv(summarize_stdout)
         cap_summary["summary_json"] = kv.get("summary_json", "")
         cap_summary["analysis_scoreboard_json"] = kv.get("analysis_scoreboard_json", "")
+        cap_summary["analysis_scoreboard_pdf"] = kv.get("analysis_scoreboard_pdf", "")
+        cap_summary["analysis_scoreboard_pdf_status"] = kv.get("analysis_scoreboard_pdf_status", "")
         cap_summary["calibration_map_json"] = kv.get("calibration_map_json", "")
         cap_summary["winner_strategy_id"] = kv.get("winner_strategy_id", "")
         cap_summary["reports_root"] = str(cap_root)
+        if prune_intermediate:
+            prune_stats = _ablation_prune_cap_root(cap_root)
+            cap_summary["pruned_dirs"] = int(prune_stats.get("removed_dirs", 0))
+            cap_summary["pruned_files"] = int(prune_stats.get("removed_files", 0))
         print(
-            f"abalation_cap={cap} compare_ran={cap_summary['compare_ran']} "
+            f"ablation_cap={cap} compare_ran={cap_summary['compare_ran']} "
             f"settle_ran={cap_summary['settled']} "
             f"settle_skipped={cap_summary['settle_skipped']} "
-            f"no_seed_rows={cap_summary['no_seed_rows']}"
+            f"no_seed_rows={cap_summary['no_seed_rows']} "
+            f"pruned_files={cap_summary['pruned_files']}"
         )
-        print(f"abalation_cap_reports_root={cap_root}")
+        print(f"ablation_cap_reports_root={cap_root}")
         if cap_summary["analysis_scoreboard_json"]:
+            print(f"ablation_cap_scoreboard_json={cap_summary['analysis_scoreboard_json']}")
+        if cap_summary["analysis_scoreboard_pdf"]:
+            print(f"ablation_cap_scoreboard_pdf={cap_summary['analysis_scoreboard_pdf']}")
+        if cap_summary["analysis_scoreboard_pdf_status"]:
             print(
-                f"abalation_cap_analysis_scoreboard_json={cap_summary['analysis_scoreboard_json']}"
+                "ablation_cap_scoreboard_pdf_status="
+                f"{cap_summary['analysis_scoreboard_pdf_status']}"
             )
         return cap_summary
 
@@ -3990,7 +4049,7 @@ def _cmd_strategy_abalation(args: argparse.Namespace) -> int:
     cap_results.sort(key=lambda row: int(row.get("cap", 0)))
     run_summary = {
         "schema_version": 1,
-        "report_kind": "abalation_run",
+        "report_kind": "ablation_run",
         "generated_at_utc": _iso(_utc_now()),
         "run_id": run_id,
         "dataset_id": dataset_id_value,
@@ -4000,21 +4059,22 @@ def _cmd_strategy_abalation(args: argparse.Namespace) -> int:
         "probabilistic_profile": probabilistic_profile,
         "results_source": results_source,
         "reuse_existing": reuse_existing,
+        "prune_intermediate": prune_intermediate,
         "reports_root": str(run_root),
         "caps_summary": cap_results,
     }
-    summary_path = run_root / "abalation-run.json"
+    summary_path = run_root / "ablation-run.json"
     summary_path.write_text(
         json.dumps(run_summary, sort_keys=True, indent=2) + "\n", encoding="utf-8"
     )
-    print(f"abalation_run_id={run_id}")
-    print(f"abalation_summary_json={summary_path}")
+    print(f"ablation_run_id={run_id}")
+    print(f"ablation_summary_json={summary_path}")
     for row in cap_results:
         cap_value = int(row.get("cap", 0))
         winner = str(row.get("winner_strategy_id", ""))
         scoreboard = str(row.get("analysis_scoreboard_json", ""))
         print(
-            f"abalation_cap_result cap={cap_value} "
+            f"ablation_cap_result cap={cap_value} "
             f"winner_strategy_id={winner} "
             f"scoreboard={scoreboard}"
         )
@@ -4076,6 +4136,8 @@ def _cmd_strategy_backtest_summarize(args: argparse.Namespace) -> int:
         raise CLIError("--power-target-uplift-gate must be > 0")
     require_power_gate = bool(getattr(args, "require_power_gate", False))
     write_analysis_scoreboard = bool(getattr(args, "write_analysis_scoreboard", False))
+    write_analysis_pdf = bool(getattr(args, "write_analysis_pdf", False))
+    keep_analysis_tex = bool(getattr(args, "keep_analysis_tex", False))
     analysis_run_id_raw = str(getattr(args, "analysis_run_id", "")).strip()
     all_complete_days = bool(getattr(args, "all_complete_days", False))
     write_calibration_map = bool(getattr(args, "write_calibration_map", False))
@@ -4263,6 +4325,7 @@ def _cmd_strategy_backtest_summarize(args: argparse.Namespace) -> int:
             "brier_slack": brier_slack,
             "power_target_uplift_gate": power_target_uplift_gate,
             "require_power_gate": require_power_gate,
+            "power_picks_per_day": power_picks_per_day,
             **day_coverage,
         },
         "strategies": sorted(strategy_rows, key=lambda row: row.get("strategy_id", "")),
@@ -4290,6 +4353,10 @@ def _cmd_strategy_backtest_summarize(args: argparse.Namespace) -> int:
     calibration_map_path = reports_dir / "backtest-calibration-map.json"
     analysis_json_path: Path | None = None
     analysis_md_path: Path | None = None
+    analysis_pdf_path: Path | None = None
+    analysis_pdf_status = ""
+    analysis_tex_path: Path | None = None
+    analysis_pdf_message = ""
     json_path.write_text(json.dumps(report, sort_keys=True, indent=2) + "\n", encoding="utf-8")
     if calibration_map_payload is not None:
         calibration_map_path.write_text(
@@ -4329,6 +4396,26 @@ def _cmd_strategy_backtest_summarize(args: argparse.Namespace) -> int:
                 _render_backtest_summary_markdown(analysis_payload),
                 encoding="utf-8",
             )
+        else:
+            stale_md_path = analysis_dir / "aggregate-scoreboard.md"
+            if stale_md_path.exists():
+                stale_md_path.unlink()
+        if write_analysis_pdf:
+            from prop_ev.scoreboard_pdf import render_aggregate_scoreboard_pdf
+
+            analysis_pdf_path = analysis_dir / "aggregate-scoreboard.pdf"
+            analysis_tex_source = analysis_dir / "aggregate-scoreboard.tex"
+            pdf_result = render_aggregate_scoreboard_pdf(
+                analysis_payload=analysis_payload,
+                tex_path=analysis_tex_source,
+                pdf_path=analysis_pdf_path,
+                keep_tex=keep_analysis_tex,
+            )
+            analysis_pdf_status = str(pdf_result.get("status", "")).strip()
+            analysis_pdf_message = str(pdf_result.get("message", "")).strip()
+            tex_path_value = str(pdf_result.get("tex_path", "")).strip()
+            if tex_path_value:
+                analysis_tex_path = Path(tex_path_value)
 
     print(f"snapshot_id={snapshot_id}")
     print(f"summary_json={json_path}")
@@ -4340,6 +4427,13 @@ def _cmd_strategy_backtest_summarize(args: argparse.Namespace) -> int:
         print(f"analysis_scoreboard_json={analysis_json_path}")
     if analysis_md_path is not None:
         print(f"analysis_scoreboard_md={analysis_md_path}")
+    if analysis_pdf_path is not None:
+        print(f"analysis_scoreboard_pdf={analysis_pdf_path}")
+        print(f"analysis_scoreboard_pdf_status={analysis_pdf_status}")
+        if analysis_pdf_message:
+            print(f"analysis_scoreboard_pdf_message={analysis_pdf_message}")
+    if analysis_tex_path is not None:
+        print(f"analysis_scoreboard_tex={analysis_tex_path}")
     if winner is not None:
         print(
             "winner_strategy_id={} roi={} graded={}".format(
@@ -5980,109 +6074,137 @@ def _build_parser() -> argparse.ArgumentParser:
     strategy_compare.add_argument("--block-paid", action="store_true")
     strategy_compare.add_argument("--refresh-context", action="store_true")
 
-    strategy_abalation = strategy_subparsers.add_parser(
-        "abalation",
-        help="Run multi-cap strategy abalation with per-cap report roots and cache reuse",
+    strategy_ablation = strategy_subparsers.add_parser(
+        "ablation",
+        help="Run multi-cap strategy ablation with per-cap report roots and cache reuse",
     )
-    strategy_abalation.set_defaults(func=_cmd_strategy_abalation)
-    strategy_abalation.add_argument("--snapshot-id", default="")
-    strategy_abalation.add_argument("--dataset-id", default="")
-    strategy_abalation.add_argument("--strategies", required=True)
-    strategy_abalation.add_argument(
+    strategy_ablation.set_defaults(func=_cmd_strategy_ablation)
+    strategy_ablation.add_argument("--snapshot-id", default="")
+    strategy_ablation.add_argument("--dataset-id", default="")
+    strategy_ablation.add_argument("--strategies", required=True)
+    strategy_ablation.add_argument(
         "--caps",
         default="1,2,5",
         help="Comma-separated max-picks caps to evaluate (default: 1,2,5).",
     )
-    strategy_abalation.add_argument("--top-n", type=int, default=10)
-    strategy_abalation.add_argument("--min-ev", type=float, default=0.01)
-    strategy_abalation.add_argument(
+    strategy_ablation.add_argument("--top-n", type=int, default=10)
+    strategy_ablation.add_argument("--min-ev", type=float, default=0.01)
+    strategy_ablation.add_argument(
         "--mode",
         choices=("auto", "live", "replay"),
         default="replay",
     )
-    strategy_abalation.add_argument("--allow-tier-b", action="store_true")
-    strategy_abalation.add_argument(
+    strategy_ablation.add_argument("--allow-tier-b", action="store_true")
+    strategy_ablation.add_argument(
         "--probabilistic-profile",
         choices=("off", "minutes_v1"),
         default="",
     )
-    strategy_abalation.add_argument(
+    strategy_ablation.add_argument(
         "--offline",
         dest="offline",
         action=argparse.BooleanOptionalAction,
         default=True,
         help="Use offline mode for compare/settle sub-steps (default: true).",
     )
-    strategy_abalation.add_argument(
+    strategy_ablation.add_argument(
         "--block-paid",
         dest="block_paid",
         action=argparse.BooleanOptionalAction,
         default=True,
         help="Block paid cache misses in compare steps (default: true).",
     )
-    strategy_abalation.add_argument("--refresh-context", action="store_true")
-    strategy_abalation.add_argument(
+    strategy_ablation.add_argument("--refresh-context", action="store_true")
+    strategy_ablation.add_argument(
         "--results-source",
         choices=("auto", "historical", "live", "cache_only"),
         default="historical",
     )
-    strategy_abalation.add_argument(
+    strategy_ablation.add_argument(
         "--prebuild-minutes-cache",
         dest="prebuild_minutes_cache",
         action=argparse.BooleanOptionalAction,
         default=True,
         help="Prebuild per-day minutes cache before compare loops (default: true).",
     )
-    strategy_abalation.add_argument("--reports-root", default="")
-    strategy_abalation.add_argument("--run-id", default="")
-    strategy_abalation.add_argument("--analysis-run-prefix", default="abalation")
-    strategy_abalation.add_argument(
+    strategy_ablation.add_argument("--reports-root", default="")
+    strategy_ablation.add_argument(
+        "--run-id",
+        default="",
+        help="Run folder id under reports/odds/ablation (default: latest).",
+    )
+    strategy_ablation.add_argument(
+        "--prune-intermediate",
+        dest="prune_intermediate",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help=(
+            "Delete per-snapshot by-snapshot/state artifacts after summarize "
+            "and keep only run summary + analysis outputs (default: true)."
+        ),
+    )
+    strategy_ablation.add_argument(
+        "--write-scoreboard-pdf",
+        dest="write_scoreboard_pdf",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Write per-cap `aggregate-scoreboard.pdf` artifacts (default: true).",
+    )
+    strategy_ablation.add_argument(
+        "--keep-scoreboard-tex",
+        dest="keep_scoreboard_tex",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Keep per-cap `aggregate-scoreboard.tex` source files (default: false).",
+    )
+    strategy_ablation.add_argument("--analysis-run-prefix", default="ablation")
+    strategy_ablation.add_argument(
         "--reuse-existing",
         dest="reuse_existing",
         action=argparse.BooleanOptionalAction,
         default=True,
         help="Reuse unchanged compare/settle outputs when cache signatures match (default: true).",
     )
-    strategy_abalation.add_argument(
+    strategy_ablation.add_argument(
         "--force",
         action="store_true",
         help="Force recompute for all days/strategies/caps.",
     )
-    strategy_abalation.add_argument(
+    strategy_ablation.add_argument(
         "--force-days",
         default="",
         help="Comma-separated day values (YYYY-MM-DD) and/or snapshot ids to recompute.",
     )
-    strategy_abalation.add_argument(
+    strategy_ablation.add_argument(
         "--force-strategies",
         default="",
         help="Comma-separated strategy ids to recompute.",
     )
-    strategy_abalation.add_argument("--max-workers", type=int, default=6)
-    strategy_abalation.add_argument("--cap-workers", type=int, default=3)
-    strategy_abalation.add_argument("--min-graded", type=int, default=0)
-    strategy_abalation.add_argument("--bin-size", type=float, default=0.1)
-    strategy_abalation.add_argument("--require-scored-fraction", type=float, default=0.9)
-    strategy_abalation.add_argument("--ece-slack", type=float, default=0.01)
-    strategy_abalation.add_argument("--brier-slack", type=float, default=0.01)
-    strategy_abalation.add_argument("--power-alpha", type=float, default=0.05)
-    strategy_abalation.add_argument("--power-level", type=float, default=0.8)
-    strategy_abalation.add_argument(
+    strategy_ablation.add_argument("--max-workers", type=int, default=6)
+    strategy_ablation.add_argument("--cap-workers", type=int, default=3)
+    strategy_ablation.add_argument("--min-graded", type=int, default=0)
+    strategy_ablation.add_argument("--bin-size", type=float, default=0.1)
+    strategy_ablation.add_argument("--require-scored-fraction", type=float, default=0.9)
+    strategy_ablation.add_argument("--ece-slack", type=float, default=0.01)
+    strategy_ablation.add_argument("--brier-slack", type=float, default=0.01)
+    strategy_ablation.add_argument("--power-alpha", type=float, default=0.05)
+    strategy_ablation.add_argument("--power-level", type=float, default=0.8)
+    strategy_ablation.add_argument(
         "--power-target-uplifts",
         default="0.01,0.02,0.03,0.05",
     )
-    strategy_abalation.add_argument(
+    strategy_ablation.add_argument(
         "--power-target-uplift-gate",
         type=float,
         default=0.02,
         help="Target ROI uplift per bet used for per-strategy power gate status.",
     )
-    strategy_abalation.add_argument(
+    strategy_ablation.add_argument(
         "--require-power-gate",
         action="store_true",
         help="Fail promotion gate when the strategy is underpowered at the selected uplift.",
     )
-    strategy_abalation.add_argument(
+    strategy_ablation.add_argument(
         "--calibration-map-mode",
         choices=("walk_forward", "in_sample"),
         default="walk_forward",
@@ -6269,6 +6391,16 @@ def _build_parser() -> argparse.ArgumentParser:
             "Optional analysis run id used with --write-analysis-scoreboard. "
             "When omitted, a deterministic id is derived from dataset/snapshot."
         ),
+    )
+    strategy_backtest_summarize.add_argument(
+        "--write-analysis-pdf",
+        action="store_true",
+        help=("Write direct LaTeX/PDF aggregate scoreboard artifacts in the analysis directory."),
+    )
+    strategy_backtest_summarize.add_argument(
+        "--keep-analysis-tex",
+        action="store_true",
+        help="Keep generated aggregate-scoreboard.tex (otherwise removed on successful compile).",
     )
 
     playbook = subparsers.add_parser("playbook", help="Run playbook briefs")
