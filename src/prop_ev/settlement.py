@@ -59,6 +59,33 @@ def _safe_float(value: Any) -> float | None:
     return None
 
 
+def _safe_int(value: Any) -> int | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value)
+    if isinstance(value, str):
+        raw = value.strip()
+        if not raw:
+            return None
+        if raw.startswith("+"):
+            raw = raw[1:]
+        try:
+            return int(raw)
+        except ValueError:
+            try:
+                parsed = float(raw)
+            except ValueError:
+                return None
+            rounded = round(parsed)
+            if abs(parsed - rounded) > 1e-6:
+                return None
+            return int(rounded)
+    return None
+
+
 def _load_jsonl(path: Path) -> list[dict[str, Any]]:
     if not path.exists():
         raise FileNotFoundError(f"missing backtest seed file: {path}")
@@ -172,13 +199,26 @@ def _settle_row(
         "market": str(row.get("market", "")),
         "recommended_side": str(row.get("recommended_side", "")),
         "selected_book": str(row.get("selected_book", "")),
-        "selected_price_american": _safe_float(row.get("selected_price_american")),
+        "selected_price_american": _safe_int(row.get("selected_price_american")),
         "model_p_hit": _safe_float(row.get("model_p_hit")),
+        "p_hit_low": _safe_float(row.get("p_hit_low")),
+        "p_hit_high": _safe_float(row.get("p_hit_high")),
         "fair_p_hit": _safe_float(row.get("fair_p_hit")),
+        "best_ev": _safe_float(row.get("best_ev")),
         "edge_pct": _safe_float(row.get("edge_pct")),
         "ev_per_100": _safe_float(row.get("ev_per_100")),
+        "ev_low": _safe_float(row.get("ev_low")),
+        "ev_high": _safe_float(row.get("ev_high")),
+        "quality_score": _safe_float(row.get("quality_score")),
+        "depth_score": _safe_float(row.get("depth_score")),
+        "hold_score": _safe_float(row.get("hold_score")),
+        "dispersion_score": _safe_float(row.get("dispersion_score")),
+        "freshness_score": _safe_float(row.get("freshness_score")),
+        "uncertainty_band": _safe_float(row.get("uncertainty_band")),
         "play_to_american": _safe_float(row.get("play_to_american")),
         "quarter_kelly": _safe_float(row.get("quarter_kelly")),
+        "summary_candidate_lines": _safe_int(row.get("summary_candidate_lines")),
+        "summary_eligible_lines": _safe_int(row.get("summary_eligible_lines")),
         "point": point_value,
         "game_status": "unknown",
         "game_status_text": "",
@@ -521,11 +561,24 @@ def _write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
         "selected_book",
         "selected_price_american",
         "model_p_hit",
+        "p_hit_low",
+        "p_hit_high",
         "fair_p_hit",
+        "best_ev",
         "edge_pct",
         "ev_per_100",
+        "ev_low",
+        "ev_high",
+        "quality_score",
+        "depth_score",
+        "hold_score",
+        "dispersion_score",
+        "freshness_score",
+        "uncertainty_band",
         "play_to_american",
         "quarter_kelly",
+        "summary_candidate_lines",
+        "summary_eligible_lines",
         "point",
         "game_status",
         "game_status_text",

@@ -40,7 +40,14 @@ def _safe_int(value: Any) -> int | None:
         try:
             return int(raw)
         except ValueError:
-            return None
+            try:
+                parsed = float(raw)
+            except ValueError:
+                return None
+            rounded = round(parsed)
+            if abs(parsed - rounded) > 1e-6:
+                return None
+            return int(rounded)
     return None
 
 

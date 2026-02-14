@@ -69,7 +69,7 @@ def test_summarize_backtest_rows_roi_and_brier(tmp_path: Path) -> None:
         [
             {
                 "strategy_id": "s001",
-                "selected_price_american": "100",
+                "selected_price_american": "100.0",
                 "stake_units": "1",
                 "model_p_hit": "0.6",
                 "p_hit_low": "0.55",
@@ -82,7 +82,7 @@ def test_summarize_backtest_rows_roi_and_brier(tmp_path: Path) -> None:
             },
             {
                 "strategy_id": "s001",
-                "selected_price_american": "-110",
+                "selected_price_american": "-110.0",
                 "stake_units": "1",
                 "model_p_hit": "0.55",
                 "p_hit_low": "0.5",
@@ -95,7 +95,7 @@ def test_summarize_backtest_rows_roi_and_brier(tmp_path: Path) -> None:
             },
             {
                 "strategy_id": "s001",
-                "selected_price_american": "-110",
+                "selected_price_american": "-110.0",
                 "stake_units": "1",
                 "model_p_hit": "0.5",
                 "p_hit_low": "0.45",

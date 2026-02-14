@@ -1,3 +1,4 @@
+import csv
 import json
 from pathlib import Path
 
@@ -140,6 +141,52 @@ def test_grade_seed_rows_final_push_pending() -> None:
     assert by_key["t4"]["result_reason"] == "unsupported_market"
 
 
+def test_grade_seed_rows_preserves_pricing_quality_fields() -> None:
+    seed_row = _seed_row(
+        ticket_key="t1",
+        player="Player One",
+        market="player_points",
+        side="over",
+        point=20.5,
+    )
+    seed_row.update(
+        {
+            "selected_price_american": "-110.0",
+            "model_p_hit": 0.62,
+            "p_hit_low": 0.58,
+            "p_hit_high": 0.66,
+            "fair_p_hit": 0.57,
+            "best_ev": 0.08,
+            "ev_low": 0.03,
+            "ev_high": 0.12,
+            "quality_score": 0.71,
+            "depth_score": 0.65,
+            "hold_score": 0.74,
+            "dispersion_score": 0.68,
+            "freshness_score": 0.92,
+            "uncertainty_band": 0.06,
+            "summary_candidate_lines": 190,
+            "summary_eligible_lines": 104,
+        }
+    )
+    rows = grade_seed_rows(
+        seed_rows=[seed_row],
+        results_payload=_results_payload(),
+        source="nba_live_scoreboard_boxscore",
+    )
+    assert len(rows) == 1
+    row = rows[0]
+    assert row["selected_price_american"] == -110
+    assert row["p_hit_low"] == 0.58
+    assert row["p_hit_high"] == 0.66
+    assert row["best_ev"] == 0.08
+    assert row["ev_low"] == 0.03
+    assert row["quality_score"] == 0.71
+    assert row["uncertainty_band"] == 0.06
+    assert row["summary_candidate_lines"] == 190
+    assert row["summary_eligible_lines"] == 104
+
+
 def test_render_settlement_markdown_uses_compact_labels() -> None:
     report = {
         "snapshot_id": "snap-1",
@@ -253,6 +300,13 @@ def test_settle_snapshot_writes_artifacts(tmp_path: Path, monkeypatch: pytest.Mo
     assert Path(str(artifacts["csv"])).exists()
     assert report["source_details"]["results_source_mode"] == "live"
     assert report["pdf_status"] in {"ok", "missing_tool", "failed"}
+    with Path(str(artifacts["csv"])).open("r", encoding="utf-8", newline="") as handle:
+        reader = csv.DictReader(handle)
+        columns = reader.fieldnames or []
+    assert "p_hit_low" in columns
+    assert "ev_low" in columns
+    assert "quality_score" in columns
+    assert "summary_candidate_lines" in columns
 
 
 def test_settle_snapshot_writes_optional_markdown_and_tex(
