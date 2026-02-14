@@ -36,10 +36,20 @@ def _sample_report() -> dict:
                 "play_to_american": -115,
                 "play_to_decimal": 1.87,
                 "model_p_hit": 0.56,
+                "p_hit_low": 0.51,
+                "p_hit_high": 0.61,
                 "fair_p_hit": 0.51,
                 "best_ev": 0.04,
+                "ev_low": 0.015,
+                "ev_high": 0.065,
                 "edge_pct": 4.0,
                 "ev_per_100": 4.0,
+                "quality_score": 0.72,
+                "depth_score": 0.5,
+                "hold_score": 0.8,
+                "dispersion_score": 0.9,
+                "freshness_score": 0.85,
+                "uncertainty_band": 0.05,
                 "full_kelly": 0.02,
                 "quarter_kelly": 0.005,
                 "injury_status": "unknown",
@@ -93,6 +103,8 @@ def test_build_backtest_seed_rows_filters_by_selection() -> None:
     assert eligible_rows[0]["ticket_key"]
     assert eligible_rows[0]["result"] == ""
     assert eligible_rows[0]["actual_stat_value"] is None
+    assert eligible_rows[0]["quality_score"] == 0.72
+    assert eligible_rows[0]["ev_low"] == 0.015
 
     ranked_rows = build_backtest_seed_rows(report=report, selection="ranked", top_n=0)
     assert len(ranked_rows) == 1
@@ -159,3 +171,6 @@ def test_write_backtest_artifacts(tmp_path: Path) -> None:
     assert readiness["ready_for_backtest_seed"] is True
     assert readiness["counts"]["seed_rows"] == 1
     assert readiness["counts"]["event_props_rows"] == 1
+    columns = template_path.read_text(encoding="utf-8").splitlines()[0]
+    assert "quality_score" in columns
+    assert "ev_low" in columns

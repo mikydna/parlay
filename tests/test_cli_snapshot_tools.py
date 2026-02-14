@@ -355,6 +355,216 @@ def test_strategy_run_writes_backtest_artifacts_when_enabled(local_data_dir: Pat
     assert (reports_dir / "backtest-readiness.json").exists()
 
 
+def test_strategy_run_backtest_artifacts_use_ranked_picks(local_data_dir: Path) -> None:
+    store = SnapshotStore(local_data_dir)
+    snapshot_id = "2026-02-11T10-10-31Z"
+    snapshot_dir = store.ensure_snapshot(snapshot_id)
+    now_utc = datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+    context_dir = store.root.parent / "nba_data" / "context" / "snapshots" / snapshot_id
+    context_dir.mkdir(parents=True, exist_ok=True)
+    (context_dir / "injuries.json").write_text(
+        json.dumps(
+            {
+                "fetched_at_utc": now_utc,
+                "official": {
+                    "status": "ok",
+                    "parse_status": "ok",
+                    "rows_count": 2,
+                    "count": 2,
+                    "pdf_links": ["https://example.com/injury.pdf"],
+                    "rows": [
+                        {
+                            "player": "Player A",
+                            "player_norm": "playera",
+                            "team": "Boston Celtics",
+                            "team_norm": "boston celtics",
+                            "status": "available",
+                            "note": "",
+                            "source": "official_nba_pdf",
+                        },
+                        {
+                            "player": "Player B",
+                            "player_norm": "playerb",
+                            "team": "Boston Celtics",
+                            "team_norm": "boston celtics",
+                            "status": "available",
+                            "note": "",
+                            "source": "official_nba_pdf",
+                        },
+                    ],
+                },
+                "secondary": {"status": "ok", "rows": [], "count": 0},
+            },
+            sort_keys=True,
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (context_dir / "roster.json").write_text(
+        json.dumps(
+            {
+                "source": "test",
+                "url": "",
+                "status": "ok",
+                "fetched_at_utc": now_utc,
+                "count_teams": 2,
+                "missing_roster_teams": [],
+                "teams": {
+                    "boston celtics": {
+                        "active": ["playera", "playerb"],
+                        "inactive": [],
+                        "all": ["playera", "playerb"],
+                    },
+                    "miami heat": {"active": [], "inactive": [], "all": []},
+                },
+            },
+            sort_keys=True,
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    store.write_jsonl(
+        snapshot_dir / "derived" / "event_props.jsonl",
+        [
+            {
+                "event_id": "event-1",
+                "market": "player_points",
+                "player": "Player A",
+                "point": 22.5,
+                "side": "Over",
+                "price": 180,
+                "book": "draftkings",
+                "link": "https://example.com/dk-over-a",
+                "last_update": now_utc,
+            },
+            {
+                "event_id": "event-1",
+                "market": "player_points",
+                "player": "Player A",
+                "point": 22.5,
+                "side": "Under",
+                "price": -150,
+                "book": "draftkings",
+                "link": "https://example.com/dk-under-a",
+                "last_update": now_utc,
+            },
+            {
+                "event_id": "event-1",
+                "market": "player_points",
+                "player": "Player A",
+                "point": 22.5,
+                "side": "Over",
+                "price": 175,
+                "book": "fanduel",
+                "link": "https://example.com/fd-over-a",
+                "last_update": now_utc,
+            },
+            {
+                "event_id": "event-1",
+                "market": "player_points",
+                "player": "Player A",
+                "point": 22.5,
+                "side": "Under",
+                "price": -155,
+                "book": "fanduel",
+                "link": "https://example.com/fd-under-a",
+                "last_update": now_utc,
+            },
+            {
+                "event_id": "event-1",
+                "market": "player_points",
+                "player": "Player B",
+                "point": 18.5,
+                "side": "Over",
+                "price": 180,
+                "book": "draftkings",
+                "link": "https://example.com/dk-over-b",
+                "last_update": now_utc,
+            },
+            {
+                "event_id": "event-1",
+                "market": "player_points",
+                "player": "Player B",
+                "point": 18.5,
+                "side": "Under",
+                "price": -150,
+                "book": "draftkings",
+                "link": "https://example.com/dk-under-b",
+                "last_update": now_utc,
+            },
+            {
+                "event_id": "event-1",
+                "market": "player_points",
+                "player": "Player B",
+                "point": 18.5,
+                "side": "Over",
+                "price": 175,
+                "book": "fanduel",
+                "link": "https://example.com/fd-over-b",
+                "last_update": now_utc,
+            },
+            {
+                "event_id": "event-1",
+                "market": "player_points",
+                "player": "Player B",
+                "point": 18.5,
+                "side": "Under",
+                "price": -155,
+                "book": "fanduel",
+                "link": "https://example.com/fd-under-b",
+                "last_update": now_utc,
+            },
+        ],
+    )
+
+    store.write_response(
+        snapshot_id,
+        "req-events",
+        [
+            {
+                "id": "event-1",
+                "home_team": "Boston Celtics",
+                "away_team": "Miami Heat",
+                "commence_time": now_utc,
+            }
+        ],
+    )
+    store.mark_request(
+        snapshot_id,
+        "req-events",
+        label="events_list",
+        path="/v4/sports/basketball_nba/events",
+        params={},
+        status="ok",
+    )
+
+    assert (
+        main(
+            [
+                "strategy",
+                "run",
+                "--snapshot-id",
+                snapshot_id,
+                "--top-n",
+                "10",
+                "--max-picks",
+                "1",
+                "--offline",
+                "--write-backtest-artifacts",
+            ]
+        )
+        == 0
+    )
+    reports_dir = snapshot_reports_dir(store, snapshot_id)
+    readiness = json.loads((reports_dir / "backtest-readiness.json").read_text(encoding="utf-8"))
+    assert readiness["selection_mode"] == "ranked"
+    assert readiness["counts"]["seed_rows"] == 1
+
+
 def test_strategy_compare_writes_suffixed_outputs(local_data_dir: Path) -> None:
     store = SnapshotStore(local_data_dir)
     snapshot_id = "2026-02-11T10-11-00Z"

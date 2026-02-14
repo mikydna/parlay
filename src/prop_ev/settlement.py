@@ -59,6 +59,33 @@ def _safe_float(value: Any) -> float | None:
     return None
 
 
+def _safe_int(value: Any) -> int | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value)
+    if isinstance(value, str):
+        raw = value.strip()
+        if not raw:
+            return None
+        if raw.startswith("+"):
+            raw = raw[1:]
+        try:
+            return int(raw)
+        except ValueError:
+            try:
+                parsed = float(raw)
+            except ValueError:
+                return None
+            rounded = round(parsed)
+            if abs(parsed - rounded) > 1e-6:
+                return None
+            return int(rounded)
+    return None
+
+
 def _load_jsonl(path: Path) -> list[dict[str, Any]]:
     if not path.exists():
         raise FileNotFoundError(f"missing backtest seed file: {path}")
@@ -172,13 +199,26 @@ def _settle_row(
         "market": str(row.get("market", "")),
         "recommended_side": str(row.get("recommended_side", "")),
         "selected_book": str(row.get("selected_book", "")),
-        "selected_price_american": _safe_float(row.get("selected_price_american")),
+        "selected_price_american": _safe_int(row.get("selected_price_american")),
         "model_p_hit": _safe_float(row.get("model_p_hit")),
+        "p_hit_low": _safe_float(row.get("p_hit_low")),
+        "p_hit_high": _safe_float(row.get("p_hit_high")),
         "fair_p_hit": _safe_float(row.get("fair_p_hit")),
+        "best_ev": _safe_float(row.get("best_ev")),
         "edge_pct": _safe_float(row.get("edge_pct")),
         "ev_per_100": _safe_float(row.get("ev_per_100")),
+        "ev_low": _safe_float(row.get("ev_low")),
+        "ev_high": _safe_float(row.get("ev_high")),
+        "quality_score": _safe_float(row.get("quality_score")),
+        "depth_score": _safe_float(row.get("depth_score")),
+        "hold_score": _safe_float(row.get("hold_score")),
+        "dispersion_score": _safe_float(row.get("dispersion_score")),
+        "freshness_score": _safe_float(row.get("freshness_score")),
+        "uncertainty_band": _safe_float(row.get("uncertainty_band")),
         "play_to_american": _safe_float(row.get("play_to_american")),
         "quarter_kelly": _safe_float(row.get("quarter_kelly")),
+        "summary_candidate_lines": _safe_int(row.get("summary_candidate_lines")),
+        "summary_eligible_lines": _safe_int(row.get("summary_eligible_lines")),
         "point": point_value,
         "game_status": "unknown",
         "game_status_text": "",
@@ -521,11 +561,24 @@ def _write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
         "selected_book",
         "selected_price_american",
         "model_p_hit",
+        "p_hit_low",
+        "p_hit_high",
         "fair_p_hit",
+        "best_ev",
         "edge_pct",
         "ev_per_100",
+        "ev_low",
+        "ev_high",
+        "quality_score",
+        "depth_score",
+        "hold_score",
+        "dispersion_score",
+        "freshness_score",
+        "uncertainty_band",
         "play_to_american",
         "quarter_kelly",
+        "summary_candidate_lines",
+        "summary_eligible_lines",
         "point",
         "game_status",
         "game_status_text",
@@ -584,6 +637,8 @@ def settle_snapshot(
     results_source: str = "auto",
     write_markdown: bool = False,
     keep_tex: bool = False,
+    write_pdf: bool = True,
+    output_suffix: str = "",
     seed_rows_override: list[dict[str, Any]] | None = None,
     strategy_report_path: str = "",
 ) -> dict[str, Any]:
@@ -633,6 +688,14 @@ def settle_snapshot(
     pdf_path = reports_dir / "settlement.pdf"
     csv_path = reports_dir / "settlement.csv"
     meta_path = reports_dir / "settlement.meta.json"
+    suffix = output_suffix.strip()
+    if suffix:
+        json_path = json_path.with_name(f"{json_path.stem}.{suffix}{json_path.suffix}")
+        md_path = md_path.with_name(f"{md_path.stem}.{suffix}{md_path.suffix}")
+        tex_path = tex_path.with_name(f"{tex_path.stem}.{suffix}{tex_path.suffix}")
+        pdf_path = pdf_path.with_name(f"{pdf_path.stem}.{suffix}{pdf_path.suffix}")
+        csv_path = csv_path.with_name(f"{csv_path.stem}.{suffix}{csv_path.suffix}")
+        meta_path = meta_path.with_name(f"{meta_path.stem}.{suffix}{meta_path.suffix}")
 
     source_details: dict[str, Any] = {
         "source": resolved_source,
@@ -659,19 +722,26 @@ def settle_snapshot(
         "source_details": source_details,
         "rows": rows,
     }
-    markdown = render_settlement_markdown(report)
-    if write_markdown:
-        md_path.write_text(markdown, encoding="utf-8")
+    markdown = ""
+    if write_markdown or write_pdf:
+        markdown = render_settlement_markdown(report)
+        if write_markdown:
+            md_path.write_text(markdown, encoding="utf-8")
+        elif md_path.exists():
+            md_path.unlink()
     elif md_path.exists():
         md_path.unlink()
-    pdf_result = render_pdf_from_markdown(
-        markdown,
-        tex_path=tex_path,
-        pdf_path=pdf_path,
-        title="Settlement",
-        landscape=True,
-    )
-    cleanup_latex_artifacts(tex_path=tex_path, keep_tex=keep_tex)
+
+    pdf_result: dict[str, Any] = {"status": "skipped"}
+    if write_pdf:
+        pdf_result = render_pdf_from_markdown(
+            markdown,
+            tex_path=tex_path,
+            pdf_path=pdf_path,
+            title="Settlement",
+            landscape=True,
+        )
+        cleanup_latex_artifacts(tex_path=tex_path, keep_tex=keep_tex)
     if write_csv:
         _write_csv(csv_path, rows)
 
@@ -679,7 +749,7 @@ def settle_snapshot(
         "json": str(json_path),
         "md": str(md_path) if write_markdown else "",
         "tex": str(tex_path) if keep_tex else "",
-        "pdf": str(pdf_path),
+        "pdf": str(pdf_path) if write_pdf else "",
         "csv": str(csv_path) if write_csv else "",
         "meta": str(meta_path),
     }

@@ -22,6 +22,9 @@ def test_load_runtime_config_resolves_relative_paths(tmp_path: Path) -> None:
                 "",
                 "[openai]",
                 'key_files = ["OPENAI_KEY.ignore"]',
+                "",
+                "[strategy]",
+                "max_picks_default = 7",
             ]
         )
         + "\n",
@@ -35,6 +38,7 @@ def test_load_runtime_config_resolves_relative_paths(tmp_path: Path) -> None:
     assert config.reports_dir == (tmp_path / "reports" / "odds").resolve()
     assert config.runtime_dir == (tmp_path / "runtime").resolve()
     assert config.bookmakers_config_path == (tmp_path / "bookmakers.json").resolve()
+    assert config.strategy_max_picks_default == 7
 
 
 def test_runtime_env_overrides_projects_key_fields(tmp_path: Path) -> None:
@@ -53,6 +57,9 @@ def test_runtime_env_overrides_projects_key_fields(tmp_path: Path) -> None:
                 "",
                 "[openai]",
                 'key_files = ["OPENAI_KEY.ignore"]',
+                "",
+                "[strategy]",
+                "max_picks_default = 6",
             ]
         )
         + "\n",
@@ -66,6 +73,7 @@ def test_runtime_env_overrides_projects_key_fields(tmp_path: Path) -> None:
     assert projected["PROP_EV_REPORTS_DIR"] == str((tmp_path / "reports" / "odds").resolve())
     assert projected["PROP_EV_RUNTIME_DIR"] == str((tmp_path / "runtime").resolve())
     assert projected["PROP_EV_ODDS_API_KEY_FILE_CANDIDATES"] == "ODDS_API_KEY.ignore"
+    assert projected["PROP_EV_STRATEGY_MAX_PICKS_DEFAULT"] == "6"
 
 
 def test_default_runtime_config_bookmakers_path_is_repo_config() -> None:

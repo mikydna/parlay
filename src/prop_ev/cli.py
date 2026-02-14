@@ -37,6 +37,7 @@ from prop_ev.execution_projection import ExecutionProjectionConfig, project_exec
 from prop_ev.identity_map import load_identity_map, update_identity_map
 from prop_ev.lake_guardrails import build_guardrail_report
 from prop_ev.lake_migration import migrate_layout
+from prop_ev.nba_data.date_resolver import resolve_snapshot_date_str
 from prop_ev.nba_data.repo import NBARepository
 from prop_ev.normalize import normalize_event_odds, normalize_featured_odds
 from prop_ev.odds_client import (
@@ -68,6 +69,7 @@ from prop_ev.report_paths import (
     report_outputs_root,
     snapshot_reports_dir,
 )
+from prop_ev.rolling_priors import build_rolling_priors
 from prop_ev.runtime_config import (
     MANAGED_ENV_KEYS,
     load_runtime_config,
@@ -99,6 +101,7 @@ from prop_ev.strategies.base import (
 from prop_ev.strategy import (
     build_strategy_report,
     load_jsonl,
+    write_execution_plan,
     write_strategy_reports,
     write_tagged_strategy_reports,
 )
@@ -1971,6 +1974,22 @@ def _execution_projection_tag(bookmakers: tuple[str, ...]) -> str:
     return f"execution-{'-'.join(cleaned)}"
 
 
+def _load_rolling_priors_for_strategy(
+    *,
+    store: SnapshotStore,
+    strategy_id: str,
+    snapshot_id: str,
+) -> dict[str, Any]:
+    return build_rolling_priors(
+        reports_root=report_outputs_root(store),
+        strategy_id=strategy_id,
+        as_of_day=_snapshot_date(snapshot_id),
+        window_days=max(1, _env_int("PROP_EV_STRATEGY_ROLLING_PRIOR_WINDOW_DAYS", 21)),
+        min_samples=max(1, _env_int("PROP_EV_STRATEGY_ROLLING_PRIOR_MIN_SAMPLES", 25)),
+        max_abs_delta=max(0.0, _env_float("PROP_EV_STRATEGY_ROLLING_PRIOR_MAX_DELTA", 0.02)),
+    )
+
+
 def _load_strategy_context(
     *,
     store: SnapshotStore,
@@ -2473,8 +2492,23 @@ def _cmd_strategy_run(args: argparse.Namespace) -> int:
 
     strategy_requested = str(getattr(args, "strategy", "s001"))
     plugin = get_strategy(strategy_requested)
+    strategy_id = normalize_strategy_id(plugin.info.id)
+    max_picks_default = _env_int("PROP_EV_STRATEGY_MAX_PICKS_DEFAULT", 5)
+    requested_max_picks = int(getattr(args, "max_picks", 0))
+    resolved_max_picks = (
+        requested_max_picks if requested_max_picks > 0 else max(0, int(max_picks_default))
+    )
+    rolling_priors: dict[str, Any] = {}
+    strategy_recipe = getattr(plugin, "recipe", None)
+    if bool(getattr(strategy_recipe, "use_rolling_priors", False)):
+        rolling_priors = _load_rolling_priors_for_strategy(
+            store=store,
+            strategy_id=strategy_id,
+            snapshot_id=snapshot_id,
+        )
     config = StrategyRunConfig(
         top_n=int(args.top_n),
+        max_picks=resolved_max_picks,
         min_ev=float(args.min_ev),
         allow_tier_b=bool(args.allow_tier_b),
         require_official_injuries=bool(effective_require_official),
@@ -2490,10 +2524,10 @@ def _cmd_strategy_run(args: argparse.Namespace) -> int:
         event_context=event_context if isinstance(event_context, dict) else None,
         slate_rows=slate_rows,
         player_identity_map=player_identity_map if isinstance(player_identity_map, dict) else None,
+        rolling_priors=rolling_priors,
     )
     result = plugin.run(inputs=inputs, config=config)
     report = decorate_report(result.report, strategy=plugin.info, config=result.config)
-    strategy_id = normalize_strategy_id(plugin.info.id)
     reports_dir = snapshot_reports_dir(store, snapshot_id)
     write_markdown = bool(getattr(args, "write_markdown", False))
     write_canonical_raw = getattr(args, "write_canonical", None)
@@ -2510,6 +2544,12 @@ def _cmd_strategy_run(args: argparse.Namespace) -> int:
         write_canonical=write_canonical,
         write_markdown=write_markdown,
     )
+    execution_plan_path = write_execution_plan(
+        reports_dir=reports_dir,
+        report=report,
+        strategy_id=strategy_id,
+        write_canonical=write_canonical,
+    )
     write_backtest_artifacts_flag = bool(getattr(args, "write_backtest_artifacts", False))
     backtest: dict[str, Any] = {
         "seed_jsonl": "",
@@ -2523,7 +2563,7 @@ def _cmd_strategy_run(args: argparse.Namespace) -> int:
             snapshot_dir=snapshot_dir,
             reports_dir=reports_dir,
             report=report,
-            selection="eligible",
+            selection="ranked",
             top_n=0,
             strategy_id=strategy_id,
             write_canonical=write_canonical,
@@ -2555,10 +2595,18 @@ def _cmd_strategy_run(args: argparse.Namespace) -> int:
     if title:
         print(f"strategy_title={title}")
     print(f"strategy_run_mode={strategy_run_mode}")
+    print(f"strategy_max_picks={resolved_max_picks}")
+    print(
+        "rolling_priors_window_days={} rolling_priors_rows_used={}".format(
+            int(rolling_priors.get("window_days", 0)),
+            int(rolling_priors.get("rows_used", 0)),
+        )
+    )
     print(f"stale_quote_minutes={stale_quote_minutes}")
     print(f"require_fresh_context={str(bool(require_fresh_context)).lower()}")
     print(f"health_gates={','.join(health_gates) if health_gates else 'none'}")
     print(f"report_json={json_path}")
+    print(f"execution_plan_json={execution_plan_path}")
     if write_markdown:
         print(f"report_md={md_path}")
     card = reports_dir / "strategy-card.md"
@@ -2670,6 +2718,7 @@ def _render_strategy_compare_markdown(report: dict[str, Any]) -> str:
     lines.append(f"- snapshot_id: `{summary.get('snapshot_id', '')}`")
     lines.append(f"- strategies: `{summary.get('strategy_count', 0)}`")
     lines.append(f"- ranked_top_n: `{summary.get('top_n', 0)}`")
+    lines.append(f"- max_picks: `{summary.get('max_picks', 0)}`")
     lines.append("")
 
     if rows:
@@ -2710,8 +2759,13 @@ def _cmd_strategy_compare(args: argparse.Namespace) -> int:
         raise CLIError("compare requires --strategies with at least 2 unique ids")
 
     require_official_injuries = _env_bool("PROP_EV_STRATEGY_REQUIRE_OFFICIAL_INJURIES", True)
-    stale_quote_minutes = _env_int("PROP_EV_STRATEGY_STALE_QUOTE_MINUTES", 20)
-    require_fresh_context = _env_bool("PROP_EV_STRATEGY_REQUIRE_FRESH_CONTEXT", True)
+    stale_quote_minutes_env = _env_int("PROP_EV_STRATEGY_STALE_QUOTE_MINUTES", 20)
+    require_fresh_context_env = _env_bool("PROP_EV_STRATEGY_REQUIRE_FRESH_CONTEXT", True)
+    _, stale_quote_minutes, require_fresh_context = _resolve_strategy_runtime_policy(
+        mode=str(getattr(args, "mode", "auto")),
+        stale_quote_minutes=stale_quote_minutes_env,
+        require_fresh_context=require_fresh_context_env,
+    )
 
     (
         snapshot_dir,
@@ -2732,30 +2786,46 @@ def _cmd_strategy_compare(args: argparse.Namespace) -> int:
 
     base_config = StrategyRunConfig(
         top_n=int(args.top_n),
+        max_picks=(
+            int(args.max_picks)
+            if int(args.max_picks) > 0
+            else _env_int("PROP_EV_STRATEGY_MAX_PICKS_DEFAULT", 5)
+        ),
         min_ev=float(args.min_ev),
         allow_tier_b=bool(args.allow_tier_b),
         require_official_injuries=bool(require_official_injuries),
         stale_quote_minutes=int(stale_quote_minutes),
         require_fresh_context=bool(require_fresh_context),
     )
-    inputs = StrategyInputs(
-        snapshot_id=snapshot_id,
-        manifest=manifest,
-        rows=rows,
-        injuries=injuries if isinstance(injuries, dict) else None,
-        roster=roster if isinstance(roster, dict) else None,
-        event_context=event_context if isinstance(event_context, dict) else None,
-        slate_rows=slate_rows,
-        player_identity_map=player_identity_map if isinstance(player_identity_map, dict) else None,
-    )
-
     compare_rows: list[dict[str, Any]] = []
     ranked_sets: dict[str, set[tuple[str, str, str, float, str]]] = {}
     for requested in strategy_ids:
         plugin = get_strategy(requested)
+        strategy_id = normalize_strategy_id(plugin.info.id)
+        rolling_priors: dict[str, Any] = {}
+        strategy_recipe = getattr(plugin, "recipe", None)
+        if bool(getattr(strategy_recipe, "use_rolling_priors", False)):
+            rolling_priors = _load_rolling_priors_for_strategy(
+                store=store,
+                strategy_id=strategy_id,
+                snapshot_id=snapshot_id,
+            )
+        inputs = StrategyInputs(
+            snapshot_id=snapshot_id,
+            manifest=manifest,
+            rows=rows,
+            injuries=injuries if isinstance(injuries, dict) else None,
+            roster=roster if isinstance(roster, dict) else None,
+            event_context=event_context if isinstance(event_context, dict) else None,
+            slate_rows=slate_rows,
+            player_identity_map=(
+                player_identity_map if isinstance(player_identity_map, dict) else None
+            ),
+            rolling_priors=rolling_priors,
+        )
         result = plugin.run(inputs=inputs, config=base_config)
         report = decorate_report(result.report, strategy=plugin.info, config=result.config)
-        strategy_id = normalize_strategy_id(report.get("strategy_id", plugin.info.id))
+        strategy_id = normalize_strategy_id(report.get("strategy_id", strategy_id))
 
         write_strategy_reports(
             reports_dir=reports_dir,
@@ -2765,11 +2835,17 @@ def _cmd_strategy_compare(args: argparse.Namespace) -> int:
             write_canonical=False,
             write_markdown=write_markdown,
         )
+        write_execution_plan(
+            reports_dir=reports_dir,
+            report=report,
+            strategy_id=strategy_id,
+            write_canonical=False,
+        )
         write_backtest_artifacts(
             snapshot_dir=snapshot_dir,
             reports_dir=reports_dir,
             report=report,
-            selection="eligible",
+            selection="ranked",
             top_n=0,
             strategy_id=strategy_id,
             write_canonical=False,
@@ -2785,6 +2861,7 @@ def _cmd_strategy_compare(args: argparse.Namespace) -> int:
                 "tier_a_lines": int(summary.get("tier_a_lines", 0)),
                 "tier_b_lines": int(summary.get("tier_b_lines", 0)),
                 "health_gate_count": int(summary.get("health_gate_count", 0)),
+                "rolling_priors_rows_used": int(summary.get("rolling_priors_rows_used", 0)),
             }
         )
 
@@ -2810,6 +2887,7 @@ def _cmd_strategy_compare(args: argparse.Namespace) -> int:
             "snapshot_id": snapshot_id,
             "strategy_count": len(strategy_ids),
             "top_n": int(args.top_n),
+            "max_picks": int(base_config.max_picks),
         },
         "strategies": sorted(compare_rows, key=lambda row: row.get("strategy_id", "")),
         "ranked_overlap": {
@@ -2827,6 +2905,7 @@ def _cmd_strategy_compare(args: argparse.Namespace) -> int:
 
     print(f"snapshot_id={snapshot_id}")
     print(f"strategies={','.join(strategy_ids)}")
+    print(f"strategy_max_picks={int(base_config.max_picks)}")
     print(f"compare_json={json_path}")
     print(f"compare_md={md_path}")
     return 0
@@ -2855,16 +2934,23 @@ def _render_backtest_summary_markdown(report: dict[str, Any]) -> str:
 
     if rows:
         lines.append(
-            "| Strategy | Graded | Scored | ROI | W | L | P | Brier | LogLoss | ECE | MCE | Gate |"
+            "| Strategy | Graded | Scored | ROI | W | L | P | Brier | BrierLow | "
+            "LogLoss | ECE | MCE | AvgQ | AvgEVLow | Actionability | Gate |"
         )
-        lines.append("| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |")
+        lines.append(
+            "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |"
+            " --- | --- | --- | --- |"
+        )
         for row in rows:
             if not isinstance(row, dict):
                 continue
             gate = row.get("promotion_gate", {})
             gate_status = gate.get("status", "") if isinstance(gate, dict) else ""
             lines.append(
-                "| {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} |".format(
+                (
+                    "| {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} |"
+                    " {} |"
+                ).format(
                     row.get("strategy_id", ""),
                     row.get("rows_graded", 0),
                     row.get("rows_scored", 0),
@@ -2873,9 +2959,13 @@ def _render_backtest_summary_markdown(report: dict[str, Any]) -> str:
                     row.get("losses", 0),
                     row.get("pushes", 0),
                     row.get("brier", ""),
+                    row.get("brier_low", ""),
                     row.get("log_loss", ""),
                     row.get("ece", ""),
                     row.get("mce", ""),
+                    row.get("avg_quality_score", ""),
+                    row.get("avg_ev_low", ""),
+                    row.get("actionability_rate", ""),
                     gate_status,
                 )
             )
@@ -3010,7 +3100,6 @@ def _cmd_strategy_backtest_summarize(args: argparse.Namespace) -> int:
                 bin_size=bin_size,
             )
             computed.append(summary)
-
         day_coverage = {
             "all_complete_days": True,
             "dataset_id": dataset_id_value,
@@ -3229,9 +3318,13 @@ def _cmd_strategy_settle(args: argparse.Namespace) -> int:
         except (OSError, json.JSONDecodeError) as exc:
             raise CLIError(f"invalid strategy report: {strategy_report_path}") from exc
         if isinstance(payload, dict):
+            selection = "eligible"
+            ranked = payload.get("ranked_plays")
+            if isinstance(ranked, list) and ranked:
+                selection = "ranked"
             seed_rows_override = build_backtest_seed_rows(
                 report=payload,
-                selection="eligible",
+                selection=selection,
                 top_n=0,
             )
             strategy_report_for_settlement = str(strategy_report_path)
@@ -3241,6 +3334,39 @@ def _cmd_strategy_settle(args: argparse.Namespace) -> int:
         raise CLIError(
             f"could not derive settlement rows from strategy report: {strategy_report_path}"
         )
+
+    def _resolve_settlement_suffix(
+        *,
+        seed_rows: list[dict[str, Any]] | None,
+        seed_path: Path,
+        using_default_seed_path: bool,
+        strategy_report_path: Path | None,
+    ) -> str:
+        if using_default_seed_path and (
+            strategy_report_path is None or strategy_report_path.name == "strategy-report.json"
+        ):
+            return ""
+        resolved_rows = seed_rows
+        if resolved_rows is None and seed_path.exists():
+            try:
+                resolved_rows = load_jsonl(seed_path)
+            except OSError:
+                resolved_rows = None
+        if resolved_rows:
+            for row in resolved_rows:
+                if not isinstance(row, dict):
+                    continue
+                candidate = str(row.get("strategy_id", "")).strip()
+                if candidate:
+                    return normalize_strategy_id(candidate)
+        return ""
+
+    output_suffix = _resolve_settlement_suffix(
+        seed_rows=seed_rows_override,
+        seed_path=seed_path,
+        using_default_seed_path=using_default_seed_path,
+        strategy_report_path=strategy_report_path,
+    )
 
     report = settle_snapshot(
         snapshot_dir=snapshot_dir,
@@ -3253,6 +3379,8 @@ def _cmd_strategy_settle(args: argparse.Namespace) -> int:
         results_source=str(getattr(args, "results_source", "auto")),
         write_markdown=bool(getattr(args, "write_markdown", False)),
         keep_tex=bool(getattr(args, "keep_tex", False)),
+        write_pdf=not bool(getattr(args, "no_pdf", False)),
+        output_suffix=output_suffix,
         seed_rows_override=seed_rows_override,
         strategy_report_path=strategy_report_for_settlement,
     )
@@ -3493,6 +3621,7 @@ def _run_strategy_for_playbook(
         snapshot_id=snapshot_id,
         strategy=strategy_id,
         top_n=top_n,
+        max_picks=0,
         min_ev=min_ev,
         allow_tier_b=allow_tier_b,
         offline=offline,
@@ -3854,23 +3983,7 @@ _COMPACT_PLAYBOOK_REPORTS: tuple[str, ...] = (
 
 
 def _snapshot_date(snapshot_id: str) -> str:
-    if len(snapshot_id) >= 10:
-        date_prefix = snapshot_id[:10]
-        try:
-            date.fromisoformat(date_prefix)
-            return date_prefix
-        except ValueError:
-            pass
-    daily_match = re.match(r"^daily-(\d{4})-?(\d{2})-?(\d{2})", snapshot_id)
-    if daily_match:
-        year, month, day = daily_match.groups()
-        candidate = f"{year}-{month}-{day}"
-        try:
-            date.fromisoformat(candidate)
-            return candidate
-        except ValueError:
-            pass
-    return _utc_now().strftime("%Y-%m-%d")
+    return resolve_snapshot_date_str(snapshot_id)
 
 
 def _publish_compact_playbook_outputs(
@@ -4529,6 +4642,15 @@ def _build_parser() -> argparse.ArgumentParser:
     strategy_run.add_argument("--snapshot-id", default="")
     strategy_run.add_argument("--strategy", default="s001")
     strategy_run.add_argument("--top-n", type=int, default=25)
+    strategy_run.add_argument(
+        "--max-picks",
+        type=int,
+        default=0,
+        help=(
+            "Daily ranked pick cap (<=top-n). "
+            "When omitted, uses runtime config strategy.max_picks_default."
+        ),
+    )
     strategy_run.add_argument("--min-ev", type=float, default=0.01)
     strategy_run.add_argument(
         "--mode",
@@ -4612,7 +4734,22 @@ def _build_parser() -> argparse.ArgumentParser:
     strategy_compare.add_argument("--snapshot-id", default="")
     strategy_compare.add_argument("--strategies", required=True)
     strategy_compare.add_argument("--top-n", type=int, default=25)
+    strategy_compare.add_argument(
+        "--max-picks",
+        type=int,
+        default=0,
+        help=(
+            "Daily ranked pick cap per strategy (<=top-n). "
+            "When omitted, uses runtime config strategy.max_picks_default."
+        ),
+    )
     strategy_compare.add_argument("--min-ev", type=float, default=0.01)
+    strategy_compare.add_argument(
+        "--mode",
+        choices=("auto", "live", "replay"),
+        default="auto",
+        help="Strategy runtime mode (replay relaxes freshness gates for historical reruns).",
+    )
     strategy_compare.add_argument("--allow-tier-b", action="store_true")
     strategy_compare.add_argument(
         "--write-markdown",
@@ -4665,6 +4802,11 @@ def _build_parser() -> argparse.ArgumentParser:
         "--write-markdown",
         action="store_true",
         help="Write settlement markdown artifact (disabled by default).",
+    )
+    strategy_settle.add_argument(
+        "--no-pdf",
+        action="store_true",
+        help="Skip settlement PDF generation (useful for bulk backtests).",
     )
     strategy_settle.add_argument(
         "--keep-tex",

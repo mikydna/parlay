@@ -10,6 +10,13 @@ from prop_ev.strategies.s004_min2_book_pair_gate import S004
 from prop_ev.strategies.s005_hold_cap_gate import S005
 from prop_ev.strategies.s006_dispersion_iqr_gate import S006
 from prop_ev.strategies.s007_quality_composite_gate import S007
+from prop_ev.strategies.s008_conservative_quality_floor import S008
+from prop_ev.strategies.s009_conservative_quality_floor_rolling import S009
+from prop_ev.strategies.s010_tier_b_quality_floor import S010
+from prop_ev.strategies.s011_tier_b_quality_floor_rolling import S011
+from prop_ev.strategies.s012_tier_b_aggressive_best_ev import S012
+from prop_ev.strategies.s013_tier_b_quality_weighted import S013
+from prop_ev.strategies.s014_median_tier_b import S014
 
 
 def _registry() -> dict[str, StrategyPlugin]:
@@ -21,6 +28,13 @@ def _registry() -> dict[str, StrategyPlugin]:
         S005(),
         S006(),
         S007(),
+        S008(),
+        S009(),
+        S010(),
+        S011(),
+        S012(),
+        S013(),
+        S014(),
     ]
     out: dict[str, StrategyPlugin] = {}
     for plugin in plugins:

@@ -135,7 +135,7 @@ def test_historical_game_ids_for_day_reads_schedule_files(tmp_path: Path) -> Non
 def test_load_strategy_context_uses_repository_fetchers(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    repo = _make_repo(tmp_path, snapshot_id="daily-20260212T000000Z")
+    repo = _make_repo(tmp_path, snapshot_id="daily-29990101T000000Z")
 
     monkeypatch.setattr(
         "prop_ev.nba_data.repo.fetch_official_injury_links",
@@ -175,6 +175,178 @@ def test_load_strategy_context_uses_repository_fetchers(
     context_payload = json.loads(context_ref.read_text(encoding="utf-8"))
     assert "injuries" in context_payload.get("context", {})
     assert "roster" in context_payload.get("context", {})
+
+
+def test_load_strategy_context_uses_historical_context_for_past_snapshots(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = _make_repo(tmp_path, snapshot_id="daily-20000101T000000Z")
+
+    monkeypatch.setattr(
+        "prop_ev.nba_data.repo.fetch_official_injury_links",
+        lambda pdf_cache_dir=None: (_ for _ in ()).throw(
+            AssertionError("live fetch should not run")
+        ),
+    )
+    monkeypatch.setattr(
+        "prop_ev.nba_data.repo.fetch_secondary_injuries",
+        lambda: (_ for _ in ()).throw(AssertionError("live fetch should not run")),
+    )
+    monkeypatch.setattr(
+        "prop_ev.nba_data.repo.fetch_roster_context",
+        lambda teams_in_scope=None: (_ for _ in ()).throw(
+            AssertionError("live fetch should not run")
+        ),
+    )
+    monkeypatch.setattr(
+        repo,
+        "_fetch_historical_injuries_context",
+        lambda **kwargs: {
+            "status": "ok",
+            "source": "nba_data_historical_boxscore",
+            "official": {
+                "status": "ok",
+                "rows": [
+                    {
+                        "player": "Player One",
+                        "player_norm": "playerone",
+                        "team": "oklahoma city thunder",
+                        "team_norm": "oklahoma city thunder",
+                        "date_update": "2000-01-01",
+                        "status": "available",
+                        "note": "historical_boxscore_status",
+                    }
+                ],
+                "rows_count": 1,
+                "parse_status": "ok",
+            },
+            "secondary": {"status": "ok", "rows": [], "count": 0},
+        },
+    )
+    monkeypatch.setattr(
+        repo,
+        "_fetch_historical_roster_context",
+        lambda **kwargs: {
+            "status": "ok",
+            "source": "nba_data_historical_boxscore",
+            "teams": {
+                "oklahoma city thunder": {
+                    "all": ["playerone"],
+                    "active": ["playerone"],
+                    "inactive": [],
+                }
+            },
+            "games": [],
+            "count_teams": 1,
+        },
+    )
+
+    injuries, roster, _, _ = repo.load_strategy_context(
+        teams_in_scope=["oklahoma city thunder"],
+        offline=False,
+        refresh=True,
+        injuries_stale_hours=6.0,
+        roster_stale_hours=24.0,
+    )
+    assert injuries.get("source") == "nba_data_historical_boxscore"
+    assert roster.get("source") == "nba_data_historical_boxscore"
+
+
+def test_fetch_historical_roster_context_builds_team_rows(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = _make_repo(tmp_path, snapshot_id="daily-20000101T000000Z")
+
+    monkeypatch.setattr(
+        repo,
+        "_fetch_historical_results",
+        lambda **kwargs: {
+            "status": "ok",
+            "games": [
+                {
+                    "game_id": "g1",
+                    "home_team": "oklahoma city thunder",
+                    "away_team": "milwaukee bucks",
+                    "players": {
+                        "shai": {
+                            "name": "Shai Gilgeous-Alexander",
+                            "status": "ACTIVE",
+                            "team": "oklahoma city thunder",
+                        },
+                        "giannis": {
+                            "name": "Giannis Antetokounmpo",
+                            "status": "INACTIVE",
+                            "team": "milwaukee bucks",
+                        },
+                    },
+                }
+            ],
+            "errors": [],
+        },
+    )
+
+    payload = repo._fetch_historical_roster_context(
+        snapshot_day="2000-01-01",
+        teams_in_scope={"oklahoma city thunder", "milwaukee bucks"},
+        refresh=True,
+    )
+    teams = payload["teams"]
+    assert payload["status"] == "ok"
+    assert payload["count_games"] == 1
+    assert payload["count_teams"] == 2
+    assert "shaigilgeousalexander" in teams["oklahoma city thunder"]["active"]
+    assert "giannisantetokounmpo" in teams["milwaukee bucks"]["inactive"]
+
+
+def test_fetch_historical_injuries_context_builds_official_rows(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo = _make_repo(tmp_path, snapshot_id="daily-20000101T000000Z")
+
+    monkeypatch.setattr(
+        repo,
+        "_fetch_historical_results",
+        lambda **kwargs: {
+            "status": "ok",
+            "games": [
+                {
+                    "game_id": "g1",
+                    "home_team": "oklahoma city thunder",
+                    "away_team": "milwaukee bucks",
+                    "players": {
+                        "shai": {
+                            "name": "Shai Gilgeous-Alexander",
+                            "status": "ACTIVE",
+                            "team": "oklahoma city thunder",
+                        },
+                        "giannis": {
+                            "name": "Giannis Antetokounmpo",
+                            "status": "INACTIVE",
+                            "team": "milwaukee bucks",
+                        },
+                    },
+                }
+            ],
+            "errors": [],
+        },
+    )
+
+    payload = repo._fetch_historical_injuries_context(
+        snapshot_day="2000-01-01",
+        teams_in_scope={"oklahoma city thunder", "milwaukee bucks"},
+        refresh=True,
+    )
+    official = payload["official"]
+    by_player = {
+        str(row.get("player_norm", "")): str(row.get("status", ""))
+        for row in official.get("rows", [])
+        if isinstance(row, dict)
+    }
+    assert payload["status"] == "ok"
+    assert official["status"] == "ok"
+    assert official["rows_count"] == 2
+    assert by_player["shaigilgeousalexander"] == "available"
+    assert by_player["giannisantetokounmpo"] == "out"
 
 
 def test_context_paths_use_canonical_nba_root_only(tmp_path: Path) -> None:

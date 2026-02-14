@@ -5,7 +5,7 @@ This document defines stable artifact shapes and gate reason codes used by CLI f
 ## Strategy Report Contract
 
 Path:
-- `<REPORTS_DIR>/by-snapshot/<report_snapshot>/strategy-report.json`
+- `<REPORTS_DIR>/by-snapshot/<snapshot_id>/strategy-report.json`
 
 Required top-level keys:
 - `snapshot_id`
@@ -28,6 +28,24 @@ Expected audit fields:
 - `allow_tier_b`
 - `market_baseline_method`
 - `market_baseline_fallback`
+- `min_book_pairs`
+- `hold_cap`
+- `p_over_iqr_cap`
+- `min_quality_score`
+- `min_ev_low`
+- `max_uncertainty_band`
+
+Candidate pricing-quality fields:
+- `quality_score`
+- `depth_score`
+- `hold_score`
+- `dispersion_score`
+- `freshness_score`
+- `uncertainty_band`
+- `p_hit_low`
+- `p_hit_high`
+- `ev_low`
+- `ev_high`
 
 ## Brief Artifact Contract
 
@@ -54,7 +72,7 @@ Paths:
 ## Backtest Readiness Contract
 
 Path:
-- `<REPORTS_DIR>/by-snapshot/<report_snapshot>/backtest-readiness.json`
+- `<REPORTS_DIR>/by-snapshot/<snapshot_id>/backtest-readiness.json`
 
 Required keys:
 - `snapshot_id`
@@ -67,6 +85,7 @@ Required keys:
 ## Backtest Summary Contract
 
 Path:
+- `<REPORTS_DIR>/by-snapshot/<snapshot_id>/backtest-summary.json`
 - `<REPORTS_DIR>/by-snapshot/<report_snapshot>/backtest-summary.json`
 
 Summary-level required keys:
@@ -89,8 +108,13 @@ Per-strategy required fields:
 - `losses`
 - `pushes`
 - `roi`
-- `avg_best_ev`
 - `brier`
+- `brier_low`
+- `avg_best_ev`
+- `avg_ev_low`
+- `avg_quality_score`
+- `avg_p_hit_low`
+- `actionability_rate`
 - `log_loss`
 - `ece`
 - `mce`
@@ -100,7 +124,7 @@ Per-strategy required fields:
 ## Settlement Contract
 
 Path:
-- `<REPORTS_DIR>/by-snapshot/<report_snapshot>/settlement.json`
+- `<REPORTS_DIR>/by-snapshot/<snapshot_id>/settlement.json`
 
 Required top-level keys:
 - `snapshot_id`
@@ -231,6 +255,7 @@ Canonical strategy IDs:
 - `s005` — Hold-Cap Gate
 - `s006` — Dispersion-IQR Gate
 - `s007` — Quality Composite Gate
+- `s008` — Conservative Quality Floor
 
 Legacy strategy IDs are intentionally unsupported.
 

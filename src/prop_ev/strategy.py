@@ -23,10 +23,14 @@ from prop_ev.odds_math import (
     implied_prob_from_american,
     normalize_prob_pair,
 )
+from prop_ev.portfolio import PortfolioConstraints, PortfolioRanking, select_portfolio_candidates
 from prop_ev.state_keys import strategy_report_state_key
 from prop_ev.time_utils import parse_iso_z, utc_now_str
 
 ET_ZONE = ZoneInfo("America/New_York")
+PORTFOLIO_MAX_PER_PLAYER = 1
+PORTFOLIO_MAX_PER_GAME = 2
+HISTORICAL_PRIOR_SCORE_WEIGHT = 250.0
 MARKET_LABELS = {
     "player_points": "P",
     "player_rebounds": "R",
@@ -188,6 +192,65 @@ def _median(values: list[float]) -> float | None:
     if len(ordered) % 2:
         return ordered[mid]
     return (ordered[mid - 1] + ordered[mid]) / 2.0
+
+
+def _mean(values: list[float]) -> float | None:
+    if not values:
+        return None
+    return sum(values) / len(values)
+
+
+def _prior_key(*, market: str, side: str) -> str:
+    return f"{market.strip().lower()}::{side.strip().lower()}"
+
+
+def _prior_payload(
+    rolling_priors: dict[str, Any] | None, *, market: str, side: str
+) -> dict[str, Any]:
+    if not isinstance(rolling_priors, dict):
+        return {}
+    adjustments = rolling_priors.get("adjustments", {})
+    if not isinstance(adjustments, dict):
+        return {}
+    payload = adjustments.get(_prior_key(market=market, side=side))
+    return payload if isinstance(payload, dict) else {}
+
+
+def _execution_plan_row(row: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "event_id": str(row.get("event_id", "")),
+        "game": str(row.get("game", "")),
+        "tip_et": str(row.get("tip_et", "")),
+        "player": str(row.get("player", "")),
+        "market": str(row.get("market", "")),
+        "side": str(row.get("recommended_side", "")),
+        "point": _safe_float(row.get("point")),
+        "tier": str(row.get("tier", "")),
+        "selected_book": str(row.get("selected_book", "")),
+        "selected_price_american": _to_price(row.get("selected_price")),
+        "play_to_american": _to_price(row.get("play_to_american")),
+        "best_ev": _safe_float(row.get("best_ev")),
+        "ev_low": _safe_float(row.get("ev_low")),
+        "quality_score": _safe_float(row.get("quality_score")),
+        "historical_prior_delta": _safe_float(row.get("historical_prior_delta")) or 0.0,
+        "historical_prior_sample_size": int(row.get("historical_prior_sample_size", 0) or 0),
+        "portfolio_reason": str(row.get("portfolio_reason", "")),
+        "portfolio_rank": int(row.get("portfolio_rank", 0) or 0),
+    }
+
+
+def _resolve_max_picks(*, top_n: int, max_picks: int) -> int:
+    top_limit = max(0, int(top_n))
+    if top_limit <= 0:
+        return 0
+    configured = int(max_picks)
+    if configured <= 0:
+        return top_limit
+    return min(configured, top_limit)
+
+
+def _clamp(value: float, low: float, high: float) -> float:
+    return max(low, min(high, value))
 
 
 def _quantile(sorted_values: list[float], q: float) -> float | None:
@@ -754,6 +817,14 @@ def _parse_quote_time(value: str) -> datetime | None:
     return _parse_iso_utc(value)
 
 
+def _quote_age_minutes(*, quote_utc: str, now_utc: datetime) -> float | None:
+    parsed = _parse_quote_time(quote_utc)
+    if parsed is None:
+        return None
+    age = (now_utc - parsed).total_seconds() / 60.0
+    return round(max(0.0, age), 6)
+
+
 def _odds_health(candidates: list[dict[str, Any]], stale_after_min: int) -> dict[str, Any]:
     timestamps: list[datetime] = []
     for row in candidates:
@@ -1248,21 +1319,27 @@ def build_strategy_report(
     manifest: dict[str, Any],
     rows: list[dict[str, Any]],
     top_n: int,
+    max_picks: int = 0,
     injuries: dict[str, Any] | None = None,
     roster: dict[str, Any] | None = None,
     event_context: dict[str, dict[str, str]] | None = None,
     slate_rows: list[dict[str, Any]] | None = None,
     player_identity_map: dict[str, Any] | None = None,
+    rolling_priors: dict[str, Any] | None = None,
     min_ev: float = 0.01,
     allow_tier_b: bool = False,
     require_official_injuries: bool = True,
     stale_quote_minutes: int = 20,
     require_fresh_context: bool = True,
+    portfolio_ranking: PortfolioRanking = "default",
     market_baseline_method: str = "best_sides",
     market_baseline_fallback: str = "best_sides",
     min_book_pairs: int = 0,
     hold_cap: float | None = None,
     p_over_iqr_cap: float | None = None,
+    min_quality_score: float | None = None,
+    min_ev_low: float | None = None,
+    max_uncertainty_band: float | None = None,
 ) -> dict[str, Any]:
     """Create an audit-ready, deterministic NBA prop strategy report."""
     baseline_method = market_baseline_method.strip().lower()
@@ -1276,6 +1353,15 @@ def build_strategy_report(
         raise ValueError("hold_cap must be >= 0")
     if p_over_iqr_cap is not None and p_over_iqr_cap < 0:
         raise ValueError("p_over_iqr_cap must be >= 0")
+    if min_quality_score is not None and not (0.0 <= min_quality_score <= 1.0):
+        raise ValueError("min_quality_score must be in [0, 1]")
+    if max_uncertainty_band is not None and max_uncertainty_band < 0:
+        raise ValueError("max_uncertainty_band must be >= 0")
+    if int(max_picks) < 0:
+        raise ValueError("max_picks must be >= 0")
+
+    strategy_now_utc = datetime.now(UTC)
+    resolved_max_picks = _resolve_max_picks(top_n=top_n, max_picks=max_picks)
 
     grouped: dict[tuple[str, str, str, float], list[dict[str, Any]]] = {}
     for row in rows:
@@ -1374,6 +1460,61 @@ def build_strategy_report(
         p_over_book_range: float | None = None
         if p_over_book:
             p_over_book_range = max(p_over_book) - min(p_over_book)
+
+        freshest_quote_utc = ""
+        freshest_quote = max(
+            (
+                parsed
+                for row in group_rows
+                if isinstance(row, dict)
+                for parsed in [_parse_quote_time(str(row.get("last_update", "")))]
+                if parsed is not None
+            ),
+            default=None,
+        )
+        if freshest_quote is not None:
+            freshest_quote_utc = freshest_quote.isoformat().replace("+00:00", "Z")
+        quote_age_minutes = _quote_age_minutes(
+            quote_utc=freshest_quote_utc, now_utc=strategy_now_utc
+        )
+
+        depth_score = _clamp(book_pair_count / 4.0, 0.0, 1.0)
+        hold_for_quality = hold_book_median if hold_book_median is not None else hold_best
+        hold_score = (
+            _clamp(1.0 - (_clamp(hold_for_quality, 0.0, 1.0) / 0.12), 0.0, 1.0)
+            if hold_for_quality is not None
+            else 0.0
+        )
+        dispersion_source = p_over_book_iqr if p_over_book_iqr is not None else p_over_book_range
+        dispersion_score = (
+            _clamp(1.0 - (_clamp(dispersion_source, 0.0, 1.0) / 0.15), 0.0, 1.0)
+            if dispersion_source is not None
+            else 0.0
+        )
+        freshness_horizon_minutes = max(5.0, float(max(stale_quote_minutes, 1) * 2))
+        freshness_score = (
+            _clamp(1.0 - (quote_age_minutes / freshness_horizon_minutes), 0.0, 1.0)
+            if quote_age_minutes is not None
+            else 0.0
+        )
+        quality_score = round(
+            (depth_score * 0.30)
+            + (hold_score * 0.25)
+            + (dispersion_score * 0.25)
+            + (freshness_score * 0.20),
+            6,
+        )
+        uncertainty_band = (
+            0.01
+            + ((1.0 - depth_score) * 0.05)
+            + ((1.0 - hold_score) * 0.02)
+            + ((1.0 - dispersion_score) * 0.05)
+            + ((1.0 - freshness_score) * 0.03)
+        )
+        if p_over_book_iqr is not None:
+            uncertainty_band = max(uncertainty_band, p_over_book_iqr / 2.0)
+        uncertainty_band = round(_clamp(uncertainty_band, 0.01, 0.2), 6)
+
         p_over_fair: float | None = None
         p_under_fair: float | None = None
         hold: float | None = None
@@ -1476,6 +1617,16 @@ def build_strategy_report(
             elif p_over_book_iqr > p_over_iqr_cap:
                 eligible = False
                 reason = "dispersion_iqr"
+        if eligible and min_quality_score is not None and quality_score < min_quality_score:
+            eligible = False
+            reason = "quality_score_gate"
+        if (
+            eligible
+            and max_uncertainty_band is not None
+            and uncertainty_band > max_uncertainty_band
+        ):
+            eligible = False
+            reason = "uncertainty_band_gate"
 
         adjustment = _probability_adjustment(
             injury_status=injury_status,
@@ -1498,12 +1649,24 @@ def build_strategy_report(
         )
         p_over_model: float | None = None
         p_under_model: float | None = None
+        p_over_low: float | None = None
+        p_over_high: float | None = None
+        p_under_low: float | None = None
+        p_under_high: float | None = None
         if p_over_fair is not None and p_under_fair is not None:
-            p_over_model = min(0.99, max(0.01, p_over_fair + adjustment + market_delta))
+            p_over_model = _clamp(p_over_fair + adjustment + market_delta, 0.01, 0.99)
             p_under_model = 1.0 - p_over_model
+            p_over_low = round(_clamp(p_over_model - uncertainty_band, 0.01, 0.99), 6)
+            p_over_high = round(_clamp(p_over_model + uncertainty_band, 0.01, 0.99), 6)
+            p_under_low = round(_clamp(1.0 - p_over_high, 0.01, 0.99), 6)
+            p_under_high = round(_clamp(1.0 - p_over_low, 0.01, 0.99), 6)
 
         ev_over, kelly_over = _ev_and_kelly(p_over_model, _to_price(over["price"]))
         ev_under, kelly_under = _ev_and_kelly(p_under_model, _to_price(under["price"]))
+        ev_over_low, _ = _ev_and_kelly(p_over_low, _to_price(over["price"]))
+        ev_over_high, _ = _ev_and_kelly(p_over_high, _to_price(over["price"]))
+        ev_under_low, _ = _ev_and_kelly(p_under_low, _to_price(under["price"]))
+        ev_under_high, _ = _ev_and_kelly(p_under_high, _to_price(under["price"]))
         side = "none"
         best_ev: float | None = None
         best_kelly: float | None = None
@@ -1513,6 +1676,10 @@ def build_strategy_report(
         selected_last_update = ""
         model_p_hit: float | None = None
         fair_p_hit: float | None = None
+        p_hit_low: float | None = None
+        p_hit_high: float | None = None
+        ev_low: float | None = None
+        ev_high: float | None = None
         if ev_over is not None or ev_under is not None:
             over_value = ev_over if ev_over is not None else -999.0
             under_value = ev_under if ev_under is not None else -999.0
@@ -1526,6 +1693,10 @@ def build_strategy_report(
                 selected_last_update = str(over.get("last_update", ""))
                 model_p_hit = p_over_model
                 fair_p_hit = p_over_fair
+                p_hit_low = p_over_low
+                p_hit_high = p_over_high
+                ev_low = ev_over_low
+                ev_high = ev_over_high
             else:
                 side = "under"
                 best_ev = ev_under
@@ -1536,12 +1707,23 @@ def build_strategy_report(
                 selected_last_update = str(under.get("last_update", ""))
                 model_p_hit = p_under_model
                 fair_p_hit = p_under_fair
+                p_hit_low = p_under_low
+                p_hit_high = p_under_high
+                ev_low = ev_under_low
+                ev_high = ev_under_high
 
         min_ev_for_line = tier_a_min_ev if tier == "A" else tier_b_min_ev
         if best_ev is None or best_ev < min_ev_for_line:
             if eligible:
                 reason = "ev_below_threshold"
             eligible = False
+        if eligible and min_ev_low is not None:
+            if ev_low is None:
+                eligible = False
+                reason = "ev_low_missing"
+            elif ev_low < min_ev_low:
+                eligible = False
+                reason = "ev_low_below_threshold"
 
         if eligible:
             eligible_count += 1
@@ -1553,11 +1735,21 @@ def build_strategy_report(
         fair_decimal = round((1.0 / model_p_hit), 6) if model_p_hit else None
         fair_american = _decimal_to_american(fair_decimal)
 
+        prior_payload = (
+            _prior_payload(rolling_priors, market=market, side=side)
+            if side in {"over", "under"}
+            else {}
+        )
+        historical_prior_delta = _safe_float(prior_payload.get("delta")) or 0.0
+        historical_prior_sample_size = int(prior_payload.get("sample_size", 0) or 0)
+        historical_prior_hit_rate = _safe_float(prior_payload.get("hit_rate"))
+
         hold_penalty = 20.0 if hold is None else hold * 100.0
         shop_value = int(over["shop_delta"]) + int(under["shop_delta"])
-        score = (
+        score_base = (
             ((best_ev or -0.5) * 1000.0) + (book_count * 5.0) + (shop_value / 10.0) - hold_penalty
         )
+        score = score_base + (historical_prior_delta * HISTORICAL_PRIOR_SCORE_WEIGHT)
 
         rationale = _compose_rationale(
             player=player,
@@ -1614,8 +1806,16 @@ def build_strategy_report(
                 "p_over_book_range": p_over_book_range,
                 "p_over_model": p_over_model,
                 "p_under_model": p_under_model,
+                "p_over_low": p_over_low,
+                "p_over_high": p_over_high,
+                "p_under_low": p_under_low,
+                "p_under_high": p_under_high,
                 "ev_over": ev_over,
                 "ev_under": ev_under,
+                "ev_over_low": ev_over_low,
+                "ev_under_low": ev_under_low,
+                "ev_over_high": ev_over_high,
+                "ev_under_high": ev_under_high,
                 "kelly_over": kelly_over,
                 "kelly_under": kelly_under,
                 "recommended_side": side,
@@ -1624,11 +1824,15 @@ def build_strategy_report(
                 "selected_link": selected_link,
                 "selected_last_update": selected_last_update,
                 "model_p_hit": model_p_hit,
+                "p_hit_low": p_hit_low,
+                "p_hit_high": p_hit_high,
                 "fair_p_hit": fair_p_hit,
                 "fair_decimal": fair_decimal,
                 "fair_american": fair_american,
                 "edge_pct": round((best_ev or 0.0) * 100.0, 3) if best_ev is not None else None,
                 "ev_per_100": round((best_ev or 0.0) * 100.0, 3) if best_ev is not None else None,
+                "ev_low": ev_low,
+                "ev_high": ev_high,
                 "play_to_decimal": play_to_decimal,
                 "play_to_american": play_to_american,
                 "breakeven_decimal": breakeven_decimal,
@@ -1640,6 +1844,14 @@ def build_strategy_report(
                 "quarter_kelly": round((best_kelly / 4.0), 6) if best_kelly is not None else None,
                 "hold": hold,
                 "hold_best_sides": hold_best,
+                "quote_age_minutes": quote_age_minutes,
+                "freshest_quote_utc": freshest_quote_utc,
+                "depth_score": round(depth_score, 6),
+                "hold_score": round(hold_score, 6),
+                "dispersion_score": round(dispersion_score, 6),
+                "freshness_score": round(freshness_score, 6),
+                "quality_score": quality_score,
+                "uncertainty_band": uncertainty_band,
                 "injury_status": injury_status,
                 "injury_note": injury_note,
                 "roster_status": roster_status,
@@ -1667,7 +1879,15 @@ def build_strategy_report(
                 "total": total,
                 "eligible": eligible,
                 "reason": reason,
+                "score_base": round(score_base, 6),
                 "score": round(score, 6),
+                "historical_prior_delta": round(historical_prior_delta, 6),
+                "historical_prior_sample_size": historical_prior_sample_size,
+                "historical_prior_hit_rate": (
+                    round(historical_prior_hit_rate, 6)
+                    if historical_prior_hit_rate is not None
+                    else None
+                ),
                 "rationale": rationale,
                 "risk_notes": risk_notes,
                 "prop_label": _prop_label(player, side, point, market),
@@ -1736,10 +1956,20 @@ def build_strategy_report(
     )
     eligible_rows = [item for item in candidates if item.get("eligible")]
     eligible_count = len(eligible_rows)
-    ranked = eligible_rows[:top_n]
-    watchlist = [item for item in candidates if not item.get("eligible")][:top_n]
-    top_ev_plays = [item for item in eligible_rows if item.get("tier") == "A"][:top_n]
-    one_source_edges = [item for item in eligible_rows if item.get("tier") == "B"][:top_n]
+    portfolio_constraints = PortfolioConstraints(
+        max_picks=resolved_max_picks,
+        max_per_player=PORTFOLIO_MAX_PER_PLAYER,
+        max_per_game=PORTFOLIO_MAX_PER_GAME,
+    )
+    ranked, portfolio_exclusions = select_portfolio_candidates(
+        eligible_rows=eligible_rows,
+        constraints=portfolio_constraints,
+        ranking=portfolio_ranking,
+    )
+    watchlist = [item for item in candidates if not item.get("eligible")][: max(0, top_n)]
+    portfolio_watchlist = portfolio_exclusions[: max(0, top_n)]
+    top_ev_plays = [item for item in ranked if item.get("tier") == "A"][: max(0, top_n)]
+    one_source_edges = [item for item in ranked if item.get("tier") == "B"][: max(0, top_n)]
     sgp_candidates = _build_sgp_candidates(eligible_rows, top_n=min(10, max(top_n, 5)))
 
     qualified_unders = [item for item in eligible_rows if item.get("recommended_side") == "under"]
@@ -1801,7 +2031,7 @@ def build_strategy_report(
             "full_kelly": item.get("full_kelly"),
             "quarter_kelly": item.get("quarter_kelly"),
         }
-        for item in eligible_rows[: max(top_n, 10)]
+        for item in ranked[: max(top_n, 10)]
     ]
 
     verified_players: list[dict[str, Any]] = []
@@ -1927,9 +2157,56 @@ def build_strategy_report(
             else 0
         ),
     }
+    quality_scores_all = [
+        score
+        for score in (_safe_float(item.get("quality_score")) for item in candidates)
+        if score is not None
+    ]
+    quality_scores_eligible = [
+        score
+        for score in (_safe_float(item.get("quality_score")) for item in eligible_rows)
+        if score is not None
+    ]
+    ev_low_eligible = [
+        score
+        for score in (_safe_float(item.get("ev_low")) for item in eligible_rows)
+        if score is not None
+    ]
+    avg_quality_all = _mean(quality_scores_all)
+    avg_quality_eligible = _mean(quality_scores_eligible)
+    avg_ev_low = _mean(ev_low_eligible)
+    actionability_rate = round((eligible_count / len(candidates)), 6) if candidates else 0.0
+    rolling_priors_window_days = (
+        int(rolling_priors.get("window_days", 0)) if isinstance(rolling_priors, dict) else 0
+    )
+    rolling_priors_rows_used = (
+        int(rolling_priors.get("rows_used", 0)) if isinstance(rolling_priors, dict) else 0
+    )
+    rolling_priors_as_of_day = (
+        str(rolling_priors.get("as_of_day", "")) if isinstance(rolling_priors, dict) else ""
+    )
+    generated_at_utc = _now_utc()
+    execution_plan = {
+        "snapshot_id": snapshot_id,
+        "strategy_id": "",
+        "generated_at_utc": generated_at_utc,
+        "constraints": {
+            "max_picks": resolved_max_picks,
+            "max_per_player": PORTFOLIO_MAX_PER_PLAYER,
+            "max_per_game": PORTFOLIO_MAX_PER_GAME,
+        },
+        "counts": {
+            "candidate_lines": len(candidates),
+            "eligible_lines": eligible_count,
+            "selected_lines": len(ranked),
+            "excluded_lines": len(portfolio_exclusions),
+        },
+        "selected": [_execution_plan_row(row) for row in ranked],
+        "excluded": [_execution_plan_row(row) for row in portfolio_exclusions],
+    }
 
     return {
-        "generated_at_utc": _now_utc(),
+        "generated_at_utc": generated_at_utc,
         "modeled_date_et": _et_date_label(event_context),
         "timezone": "ET",
         "strategy_status": "modeled_with_gates",
@@ -1945,6 +2222,7 @@ def build_strategy_report(
         "top_ev_plays": top_ev_plays,
         "one_source_edges": one_source_edges,
         "under_sweep": under_sweep,
+        "execution_plan": execution_plan,
         "price_dependent_watchlist": price_dependent_watchlist,
         "kelly_summary": kelly_summary,
         "sgp_candidates": sgp_candidates,
@@ -1955,6 +2233,9 @@ def build_strategy_report(
             "tier_a_lines": tier_a_count,
             "tier_b_lines": tier_b_count,
             "eligible_lines": eligible_count,
+            "ranked_lines": len(ranked),
+            "max_picks": resolved_max_picks,
+            "portfolio_excluded_lines": len(portfolio_exclusions),
             "strategy_mode": strategy_mode,
             "watchlist_only": _bool(strategy_mode == "watchlist_only"),
             "health_gate_count": len(health_gates),
@@ -1974,23 +2255,44 @@ def build_strategy_report(
             "roster_team_rows": roster_count,
             "under_sweep_status": under_sweep.get("status", ""),
             "sgp_candidates": len(sgp_candidates),
+            "actionability_rate": actionability_rate,
+            "avg_quality_score_all": round(avg_quality_all, 6)
+            if avg_quality_all is not None
+            else None,
+            "avg_quality_score_eligible": (
+                round(avg_quality_eligible, 6) if avg_quality_eligible is not None else None
+            ),
+            "avg_ev_low_eligible": round(avg_ev_low, 6) if avg_ev_low is not None else None,
+            "rolling_priors_window_days": rolling_priors_window_days,
+            "rolling_priors_rows_used": rolling_priors_rows_used,
         },
         "candidates": candidates,
         "ranked_plays": ranked,
         "watchlist": watchlist,
+        "portfolio_watchlist": portfolio_watchlist,
         "audit": {
             "manifest_created_at_utc": manifest.get("created_at_utc", ""),
             "manifest_schema_version": manifest.get("schema_version", ""),
-            "report_schema_version": 3,
+            "report_schema_version": 5,
             "min_ev": min_ev,
+            "max_picks": resolved_max_picks,
+            "portfolio_max_per_player": PORTFOLIO_MAX_PER_PLAYER,
+            "portfolio_max_per_game": PORTFOLIO_MAX_PER_GAME,
             "tier_a_min_ev": tier_a_min_ev,
             "tier_b_min_ev": tier_b_min_ev,
             "allow_tier_b": allow_tier_b,
+            "portfolio_ranking": portfolio_ranking,
             "market_baseline_method": baseline_method,
             "market_baseline_fallback": baseline_fallback,
             "min_book_pairs": min_book_pairs,
             "hold_cap": hold_cap,
             "p_over_iqr_cap": p_over_iqr_cap,
+            "min_quality_score": min_quality_score,
+            "min_ev_low": min_ev_low,
+            "max_uncertainty_band": max_uncertainty_band,
+            "rolling_priors_window_days": rolling_priors_window_days,
+            "rolling_priors_rows_used": rolling_priors_rows_used,
+            "rolling_priors_as_of_day": rolling_priors_as_of_day,
             "timezone": "ET",
             "audit_trail": audit_trail,
         },
@@ -2479,6 +2781,12 @@ def render_strategy_markdown(report: dict[str, Any], top_n: int) -> str:
     lines.append(f"- tier_a_lines: `{summary.get('tier_a_lines', 0)}`")
     lines.append(f"- tier_b_lines: `{summary.get('tier_b_lines', 0)}`")
     lines.append(f"- eligible_lines: `{summary.get('eligible_lines', 0)}`")
+    lines.append(f"- ranked_lines: `{summary.get('ranked_lines', 0)}`")
+    lines.append(f"- max_picks: `{summary.get('max_picks', 0)}`")
+    lines.append(f"- portfolio_excluded_lines: `{summary.get('portfolio_excluded_lines', 0)}`")
+    lines.append(f"- actionability_rate: `{summary.get('actionability_rate', '')}`")
+    lines.append(f"- avg_quality_score_eligible: `{summary.get('avg_quality_score_eligible', '')}`")
+    lines.append(f"- avg_ev_low_eligible: `{summary.get('avg_ev_low_eligible', '')}`")
     lines.append(f"- qualified_unders: `{summary.get('qualified_unders', 0)}`")
     lines.append(f"- under_sweep_status: `{summary.get('under_sweep_status', '')}`")
     lines.append("")
@@ -2533,6 +2841,41 @@ def write_strategy_reports(
         _write(_suffix(canonical_json), _suffix(canonical_md), _suffix(canonical_card))
 
     return primary_json, primary_md
+
+
+def write_execution_plan(
+    *,
+    reports_dir: Path,
+    report: dict[str, Any],
+    strategy_id: str | None = None,
+    write_canonical: bool = True,
+) -> Path:
+    """Write execution-plan JSON artifact for one strategy report."""
+    from prop_ev.strategies.base import normalize_strategy_id
+
+    payload = report.get("execution_plan")
+    if not isinstance(payload, dict):
+        raise ValueError("strategy report missing execution_plan object")
+
+    reports_dir.mkdir(parents=True, exist_ok=True)
+    canonical_path = reports_dir / "execution-plan.json"
+    normalized = normalize_strategy_id(strategy_id) if strategy_id else ""
+
+    if write_canonical:
+        output_path = canonical_path
+    else:
+        if not normalized:
+            raise ValueError("strategy_id is required when write_canonical=false")
+        output_path = reports_dir / f"execution-plan.{normalized}.json"
+
+    write_payload = dict(payload)
+    if normalized:
+        write_payload["strategy_id"] = normalized
+    output_path.write_text(
+        json.dumps(write_payload, sort_keys=True, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    return output_path
 
 
 def _sanitize_artifact_tag(tag: str) -> str:

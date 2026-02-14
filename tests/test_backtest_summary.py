@@ -24,7 +24,12 @@ def test_summarize_backtest_rows_roi_and_brier(tmp_path: Path) -> None:
                 "selected_price_american": 100,
                 "stake_units": 1,
                 "model_p_hit": 0.6,
+                "p_hit_low": 0.55,
                 "best_ev": 0.05,
+                "ev_low": 0.03,
+                "quality_score": 0.7,
+                "summary_candidate_lines": 2,
+                "summary_eligible_lines": 1,
                 "result": "win",
             },
             {
@@ -32,7 +37,12 @@ def test_summarize_backtest_rows_roi_and_brier(tmp_path: Path) -> None:
                 "selected_price_american": -110,
                 "stake_units": 1,
                 "model_p_hit": 0.55,
+                "p_hit_low": 0.5,
                 "best_ev": 0.02,
+                "ev_low": 0.01,
+                "quality_score": 0.6,
+                "summary_candidate_lines": 2,
+                "summary_eligible_lines": 1,
                 "result": "loss",
             },
             {
@@ -40,7 +50,12 @@ def test_summarize_backtest_rows_roi_and_brier(tmp_path: Path) -> None:
                 "selected_price_american": -110,
                 "stake_units": 1,
                 "model_p_hit": 0.5,
+                "p_hit_low": 0.45,
                 "best_ev": 0.0,
+                "ev_low": 0.0,
+                "quality_score": 0.5,
+                "summary_candidate_lines": 2,
+                "summary_eligible_lines": 1,
                 "result": "push",
             },
         ],
@@ -48,32 +63,45 @@ def test_summarize_backtest_rows_roi_and_brier(tmp_path: Path) -> None:
     rows = csv_path.read_text(encoding="utf-8").splitlines()
     assert rows[0]
 
-    # Skip CSV parsing here: summarize_backtest_rows operates on DictReader rows in production,
-    # but the math is what matters for this unit test.
     summary = summarize_backtest_rows(
         [
             {
                 "strategy_id": "s001",
-                "selected_price_american": "100",
+                "selected_price_american": "100.0",
                 "stake_units": "1",
                 "model_p_hit": "0.6",
+                "p_hit_low": "0.55",
                 "best_ev": "0.05",
+                "ev_low": "0.03",
+                "quality_score": "0.7",
+                "summary_candidate_lines": "2",
+                "summary_eligible_lines": "1",
                 "result": "win",
             },
             {
                 "strategy_id": "s001",
-                "selected_price_american": "-110",
+                "selected_price_american": "-110.0",
                 "stake_units": "1",
                 "model_p_hit": "0.55",
+                "p_hit_low": "0.5",
                 "best_ev": "0.02",
+                "ev_low": "0.01",
+                "quality_score": "0.6",
+                "summary_candidate_lines": "2",
+                "summary_eligible_lines": "1",
                 "result": "loss",
             },
             {
                 "strategy_id": "s001",
-                "selected_price_american": "-110",
+                "selected_price_american": "-110.0",
                 "stake_units": "1",
                 "model_p_hit": "0.5",
+                "p_hit_low": "0.45",
                 "best_ev": "0.0",
+                "ev_low": "0.0",
+                "quality_score": "0.5",
+                "summary_candidate_lines": "2",
+                "summary_eligible_lines": "1",
                 "result": "push",
             },
         ],
@@ -85,15 +113,46 @@ def test_summarize_backtest_rows_roi_and_brier(tmp_path: Path) -> None:
     assert summary.wins == 1
     assert summary.losses == 1
     assert summary.pushes == 1
-    # +1 (win at +100) -1 (loss) +0 (push) => 0 pnl on 3 units stake.
     assert summary.total_pnl_units == 0.0
     assert summary.total_stake_units == 3.0
     assert summary.roi == 0.0
-    # Brier excludes pushes: mean((0.6-1)^2, (0.55-0)^2) = (0.16 + 0.3025) / 2
     assert summary.brier == 0.23125
+    assert summary.brier_low == 0.22625
     assert summary.log_loss == 0.654667
     assert summary.ece == 0.075
     assert summary.mce == 0.075
+    assert summary.avg_ev_low == 0.013333
+    assert summary.avg_quality_score == 0.6
+    assert summary.avg_p_hit_low == 0.525
+    assert summary.actionability_rate == 0.5
+
+
+def test_summarize_backtest_rows_accepts_decimal_price_strings() -> None:
+    summary = summarize_backtest_rows(
+        [
+            {
+                "selected_price_american": "-106.0",
+                "stake_units": "1",
+                "model_p_hit": "0.6",
+                "result": "win",
+            },
+            {
+                "selected_price_american": "112.0",
+                "stake_units": "1",
+                "model_p_hit": "0.5",
+                "result": "loss",
+            },
+        ],
+        strategy_id="s001",
+        bin_size=0.1,
+    )
+    assert summary.rows_graded == 2
+    assert summary.rows_scored == 2
+    assert summary.wins == 1
+    assert summary.losses == 1
+    assert summary.total_stake_units == 2.0
+    assert summary.brier is not None
+    assert summary.log_loss is not None
 
 
 def test_summarize_backtest_rows_log_loss_clamps_edges() -> None:

@@ -50,6 +50,13 @@ STRATEGY_TITLE_KEY = {
     "s005": "Hold-Cap Gate",
     "s006": "Dispersion-IQR Gate",
     "s007": "Quality Composite Gate",
+    "s008": "Conservative Quality Floor",
+    "s009": "Conservative Quality + Rolling Priors",
+    "s010": "Tier B + Quality Floor",
+    "s011": "Tier B + Quality + Rolling Priors",
+    "s012": "Tier B + Aggressive Best EV",
+    "s013": "Tier B + Quality-Weighted EV Low",
+    "s014": "Median No-Vig + Tier B",
 }
 
 STRATEGY_DESCRIPTION_KEY = {
@@ -66,6 +73,34 @@ STRATEGY_DESCRIPTION_KEY = {
     "s007": (
         "Composes median no-vig baseline with min-2 book-pair and hold-cap gates "
         "(s003 + s004 + s005)."
+    ),
+    "s008": (
+        "Extends quality composite gating with conservative uncertainty and EV-low floors "
+        "for more stable execution picks."
+    ),
+    "s009": (
+        "Extends s008 with rolling settled-outcome prior tilt for ranking while keeping "
+        "the same conservative gates."
+    ),
+    "s010": (
+        "Extends baseline with tier-B single-book edges while enforcing conservative "
+        "quality/uncertainty gates (best-sides baseline)."
+    ),
+    "s011": (
+        "Extends s010 with rolling settled-outcome prior tilt for ranking while keeping "
+        "the same conservative gates."
+    ),
+    "s012": (
+        "Extends s002 but ranks portfolio candidates primarily by best-EV "
+        "(more aggressive than conservative EV-low selection)."
+    ),
+    "s013": (
+        "Extends s002 but ranks portfolio candidates by EV-low weighted by quote quality, "
+        "favoring deeper/cleaner markets when edges are similar."
+    ),
+    "s014": (
+        "Extends s003 median no-vig baseline to include tier-B single-book edges "
+        "with the same stricter EV floor."
     ),
 }
 

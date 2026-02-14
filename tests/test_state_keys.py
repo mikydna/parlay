@@ -31,10 +31,16 @@ def test_strategy_id_map_has_titles_and_descriptions() -> None:
     mapping = strategy_report_state_key()
     assert mapping["strategy_id"]["s001"] == "Baseline Core"
     assert mapping["strategy_id"]["s007"] == "Quality Composite Gate"
+    assert mapping["strategy_id"]["s008"] == "Conservative Quality Floor"
+    assert mapping["strategy_id"]["s009"] == "Conservative Quality + Rolling Priors"
     assert mapping["strategy_description"]["s006"]
     assert mapping["strategy_description"]["s007"]
+    assert mapping["strategy_description"]["s008"]
+    assert mapping["strategy_description"]["s009"]
     assert strategy_title("s001") == "Baseline Core"
     assert strategy_title("s007") == "Quality Composite Gate"
+    assert strategy_title("s008") == "Conservative Quality Floor"
+    assert strategy_title("s009") == "Conservative Quality + Rolling Priors"
     assert strategy_description("s002")
 
 
@@ -51,6 +57,7 @@ def test_decorate_report_adds_strategy_id_map() -> None:
     )
     config = StrategyRunConfig(
         top_n=5,
+        max_picks=5,
         min_ev=0.01,
         allow_tier_b=False,
         require_official_injuries=True,

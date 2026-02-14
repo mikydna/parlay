@@ -132,6 +132,8 @@ Defaults:
 Current strategy enforces EV floors as:
 - Tier A floor: `max(--min-ev, 0.03)`
 - Tier B floor: `max(--min-ev, 0.05)`
+- portfolio cap default: `strategy.max_picks_default` (runtime config, default `5`)
+- per-run override: `uv run prop-ev strategy run --max-picks <N>`
 
 This is current behavior, not a pending proposal.
 
@@ -143,6 +145,13 @@ Strategy IDs:
 - `s005` — Hold-Cap Gate
 - `s006` — Dispersion-IQR Gate
 - `s007` — Quality Composite Gate (s003 + s004 + s005)
+- `s008` — Conservative Quality Floor (s007 + dispersion + quality/uncertainty/EV-low gates)
+- `s009` — Conservative Quality + Rolling Priors (s008 + rolling settled-outcome ranking tilt)
+- `s010` — Tier B + Quality Floor (s002 + conservative quality/uncertainty gates)
+- `s011` — Tier B + Quality + Rolling Priors (s010 + rolling settled-outcome ranking tilt)
+- `s012` — Tier B + Aggressive Best EV (s002 + best-EV portfolio ranking)
+- `s013` — Tier B + Quality-Weighted EV Low (s002 + quality-weighted conservative EV-low ranking)
+- `s014` — Median No-Vig + Tier B (s003 + tier-B edges)
 
 Legacy IDs are not accepted.
 
@@ -154,19 +163,29 @@ Implementation model:
 ## Key Artifacts
 
 Per snapshot:
-- `<REPORTS_DIR>/by-snapshot/<report_snapshot>/strategy-report.json`
-- `<REPORTS_DIR>/by-snapshot/<report_snapshot>/backtest-seed.jsonl`
-- `<REPORTS_DIR>/by-snapshot/<report_snapshot>/backtest-results-template.csv`
-- `<REPORTS_DIR>/by-snapshot/<report_snapshot>/backtest-readiness.json`
-- `<REPORTS_DIR>/by-snapshot/<report_snapshot>/brief-input.json`
-- `<REPORTS_DIR>/by-snapshot/<report_snapshot>/brief-pass1.json`
-- `<REPORTS_DIR>/by-snapshot/<report_snapshot>/strategy-brief.md` (only with `--write-markdown`)
-- `<REPORTS_DIR>/by-snapshot/<report_snapshot>/strategy-brief.tex`
-- `<REPORTS_DIR>/by-snapshot/<report_snapshot>/strategy-brief.pdf` (when PDF tooling is installed)
-- `<REPORTS_DIR>/by-snapshot/<report_snapshot>/strategy-brief.meta.json`
+- `<REPORTS_DIR>/by-snapshot/<snapshot_id>/strategy-report.json`
+- `<REPORTS_DIR>/by-snapshot/<snapshot_id>/execution-plan.json`
+- `<REPORTS_DIR>/by-snapshot/<snapshot_id>/backtest-seed.jsonl`
+- `<REPORTS_DIR>/by-snapshot/<snapshot_id>/backtest-results-template.csv`
+- `<REPORTS_DIR>/by-snapshot/<snapshot_id>/backtest-readiness.json`
+- `<REPORTS_DIR>/by-snapshot/<snapshot_id>/brief-input.json`
+- `<REPORTS_DIR>/by-snapshot/<snapshot_id>/brief-pass1.json`
+- `<REPORTS_DIR>/by-snapshot/<snapshot_id>/strategy-brief.md` (only with `--write-markdown`)
+- `<REPORTS_DIR>/by-snapshot/<snapshot_id>/strategy-brief.tex`
+- `<REPORTS_DIR>/by-snapshot/<snapshot_id>/strategy-brief.pdf` (when PDF tooling is installed)
+- `<REPORTS_DIR>/by-snapshot/<snapshot_id>/strategy-brief.meta.json`
 
 Latest mirrors:
 - `<REPORTS_DIR>/latest/strategy-report.json`
 - `<REPORTS_DIR>/latest/strategy-brief.meta.json`
 - `<REPORTS_DIR>/latest/strategy-brief.pdf` (if generated)
 - `<REPORTS_DIR>/latest/latest.json`
+
+Cross-day backtest summary:
+
+```bash
+uv run prop-ev strategy backtest-summarize \
+  --strategies s008 \
+  --all-complete-days \
+  --dataset-id <DATASET_ID>
+```
