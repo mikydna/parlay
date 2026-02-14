@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import json
+import math
 from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
@@ -98,6 +99,17 @@ def _brier(p: float, y: int) -> float:
     return (p - float(y)) ** 2
 
 
+def _clamp_probability(probability: float, *, eps: float = 1e-6) -> float:
+    return max(eps, min(1.0 - eps, probability))
+
+
+def _log_loss(probability: float, outcome: int) -> float:
+    clamped = _clamp_probability(probability)
+    if outcome == 1:
+        return -math.log(clamped)
+    return -math.log(1.0 - clamped)
+
+
 @dataclass(frozen=True)
 class CalibrationBucket:
     bucket_low: float
@@ -113,6 +125,7 @@ class BacktestSummary:
     strategy_id: str
     rows_total: int
     rows_graded: int
+    rows_scored: int
     wins: int
     losses: int
     pushes: int
@@ -121,6 +134,9 @@ class BacktestSummary:
     roi: float | None
     avg_best_ev: float | None
     brier: float | None
+    log_loss: float | None
+    ece: float | None
+    mce: float | None
     calibration: list[CalibrationBucket]
 
     def to_dict(self) -> dict[str, Any]:
@@ -155,6 +171,7 @@ def summarize_backtest_rows(
     best_evs: list[float] = []
 
     brier_terms: list[float] = []
+    log_loss_terms: list[float] = []
     cal_points: list[tuple[float, int]] = []
 
     for row in rows:
@@ -192,14 +209,19 @@ def summarize_backtest_rows(
             if p is not None and 0.0 <= p <= 1.0:
                 y = 1 if result == "win" else 0
                 brier_terms.append(_brier(p, y))
+                log_loss_terms.append(_log_loss(p, y))
                 cal_points.append((p, y))
 
     graded = wins + losses + pushes
     roi = (total_pnl / total_stake) if total_stake > 0 else None
     avg_best_ev = _mean(best_evs)
     brier_score = _mean(brier_terms)
+    log_loss_score = _mean(log_loss_terms)
 
     calibration: list[CalibrationBucket] = []
+    weighted_calibration_error = 0.0
+    weighted_calibration_count = 0
+    max_calibration_error: float | None = None
     if cal_points:
         buckets: dict[int, list[tuple[float, int]]] = {}
         for p, y in cal_points:
@@ -219,6 +241,14 @@ def summarize_backtest_rows(
             avg_p = _mean(ps)
             hit_rate = _mean(ys)
             brier_bucket = _mean([_brier(p, y) for p, y in items])
+            if avg_p is not None and hit_rate is not None:
+                calibration_error = abs(avg_p - hit_rate)
+                weighted_calibration_error += calibration_error * len(items)
+                weighted_calibration_count += len(items)
+                if max_calibration_error is None:
+                    max_calibration_error = calibration_error
+                else:
+                    max_calibration_error = max(max_calibration_error, calibration_error)
             calibration.append(
                 CalibrationBucket(
                     bucket_low=round(low, 6),
@@ -230,10 +260,15 @@ def summarize_backtest_rows(
                 )
             )
 
+    ece_score: float | None = None
+    if weighted_calibration_count > 0:
+        ece_score = weighted_calibration_error / weighted_calibration_count
+
     return BacktestSummary(
         strategy_id=strategy_id,
         rows_total=len(rows),
         rows_graded=graded,
+        rows_scored=len(cal_points),
         wins=wins,
         losses=losses,
         pushes=pushes,
@@ -242,6 +277,9 @@ def summarize_backtest_rows(
         roi=None if roi is None else round(roi, 6),
         avg_best_ev=None if avg_best_ev is None else round(avg_best_ev, 6),
         brier=None if brier_score is None else round(brier_score, 6),
+        log_loss=None if log_loss_score is None else round(log_loss_score, 6),
+        ece=None if ece_score is None else round(ece_score, 6),
+        mce=(None if max_calibration_error is None else round(max_calibration_error, 6)),
         calibration=calibration,
     )
 

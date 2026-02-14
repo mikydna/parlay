@@ -64,6 +64,39 @@ Required keys:
 - `eligible_lines`
 - `generated_at_utc`
 
+## Backtest Summary Contract
+
+Path:
+- `<REPORTS_DIR>/by-snapshot/<report_snapshot>/backtest-summary.json`
+
+Summary-level required keys:
+- `snapshot_id`
+- `strategy_count`
+- `min_graded`
+- `bin_size`
+- `baseline_strategy_id`
+- `baseline_found`
+- `require_scored_fraction`
+- `ece_slack`
+- `brier_slack`
+
+Per-strategy required fields:
+- `strategy_id`
+- `rows_total`
+- `rows_graded`
+- `rows_scored`
+- `wins`
+- `losses`
+- `pushes`
+- `roi`
+- `avg_best_ev`
+- `brier`
+- `log_loss`
+- `ece`
+- `mce`
+- `calibration` (bucket list with `bucket_low`, `bucket_high`, `count`, `avg_p`, `hit_rate`, `brier`)
+- `promotion_gate` (`status`, `reasons`, `rows_win_loss`, `rows_scored`, `scored_fraction`, `thresholds`)
+
 ## Settlement Contract
 
 Path:
