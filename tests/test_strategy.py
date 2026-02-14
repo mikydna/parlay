@@ -711,3 +711,147 @@ def test_build_strategy_report_applies_rolling_prior_adjustment_fields() -> None
     assert candidate["historical_prior_delta"] in {-0.01, 0.01}
     assert report["summary"]["rolling_priors_window_days"] == 21
     assert report["summary"]["rolling_priors_rows_used"] == 55
+
+
+def test_build_strategy_report_marks_baseline_insufficient_after_exclusion() -> None:
+    now_utc = datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    report = build_strategy_report(
+        snapshot_id="snap-exclusion-missing",
+        manifest={"requests": {}},
+        rows=[
+            {
+                "event_id": "event-1",
+                "market": "player_points",
+                "player": "Player A",
+                "point": 21.5,
+                "side": "Over",
+                "price": 110,
+                "book": "book_a",
+                "link": "",
+                "last_update": now_utc,
+            },
+            {
+                "event_id": "event-1",
+                "market": "player_points",
+                "player": "Player A",
+                "point": 21.5,
+                "side": "Under",
+                "price": -120,
+                "book": "book_a",
+                "link": "",
+                "last_update": now_utc,
+            },
+        ],
+        top_n=5,
+        allow_tier_b=True,
+        require_official_injuries=False,
+        exclude_selected_book_from_baseline=True,
+        event_context={
+            "event-1": {
+                "home_team": "Boston Celtics",
+                "away_team": "Miami Heat",
+                "commence_time": now_utc,
+            }
+        },
+        roster={
+            "status": "ok",
+            "count_teams": 2,
+            "teams": {
+                "boston celtics": {"active": ["playera"], "inactive": [], "all": ["playera"]},
+                "miami heat": {"active": [], "inactive": [], "all": []},
+            },
+        },
+        injuries={"official": {"status": "ok", "rows_count": 0, "rows": []}, "secondary": {}},
+    )
+
+    candidate = report["candidates"][0]
+    assert candidate["eligible"] is False
+    assert candidate["reason"] == "baseline_insufficient_coverage_after_exclusion"
+    assert candidate["baseline_excluded_books"] == ["book_a"]
+
+
+def test_build_strategy_report_applies_tier_b_baseline_independence_gate() -> None:
+    now_utc = datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    report = build_strategy_report(
+        snapshot_id="snap-tier-b-independence",
+        manifest={"requests": {}},
+        rows=[
+            {
+                "event_id": "event-1",
+                "market": "player_points",
+                "player": "Player A",
+                "point": 21.5,
+                "side": "Over",
+                "price": 110,
+                "book": "book_a",
+                "link": "",
+                "last_update": now_utc,
+            },
+            {
+                "event_id": "event-1",
+                "market": "player_points",
+                "player": "Player A",
+                "point": 21.5,
+                "side": "Under",
+                "price": -120,
+                "book": "book_a",
+                "link": "",
+                "last_update": now_utc,
+            },
+            {
+                "event_id": "event-1",
+                "market": "player_points",
+                "player": "Player A",
+                "point": 22.5,
+                "side": "Over",
+                "price": 105,
+                "book": "book_b",
+                "link": "",
+                "last_update": now_utc,
+            },
+            {
+                "event_id": "event-1",
+                "market": "player_points",
+                "player": "Player A",
+                "point": 22.5,
+                "side": "Under",
+                "price": -125,
+                "book": "book_b",
+                "link": "",
+                "last_update": now_utc,
+            },
+        ],
+        top_n=5,
+        allow_tier_b=True,
+        require_official_injuries=False,
+        market_baseline_method="median_book",
+        market_baseline_fallback="best_sides",
+        exclude_selected_book_from_baseline=True,
+        tier_b_min_other_books_for_baseline=2,
+        event_context={
+            "event-1": {
+                "home_team": "Boston Celtics",
+                "away_team": "Miami Heat",
+                "commence_time": now_utc,
+            }
+        },
+        roster={
+            "status": "ok",
+            "count_teams": 2,
+            "teams": {
+                "boston celtics": {"active": ["playera"], "inactive": [], "all": ["playera"]},
+                "miami heat": {"active": [], "inactive": [], "all": []},
+            },
+        },
+        injuries={"official": {"status": "ok", "rows_count": 0, "rows": []}, "secondary": {}},
+    )
+
+    target = next(
+        item
+        for item in report["candidates"]
+        if item["event_id"] == "event-1" and item["point"] == 21.5
+    )
+    assert target["tier"] == "B"
+    assert target["baseline_books_used_count"] == 1
+    assert target["eligible"] is False
+    assert target["reason"] == "tier_b_baseline_not_independent"

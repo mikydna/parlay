@@ -487,6 +487,30 @@ boundaries.
   - stable schema snapshots in tests,
   - existing default strategy behavior is unchanged unless explicitly toggled.
 
+### Track A/B integration slice — Strategy integrity + ablations (current)
+
+- **Scope**:
+  - E1 leave-one-out baseline exclusion (exclude candidate execution book from baseline build),
+  - E2 Tier-B baseline independence gate (`min_other_books`),
+  - additive candidate provenance fields for baseline contributors and exclusion state,
+  - new ablation strategies `s016`–`s019` (opt-in only; no default flips).
+- **Contract additions**:
+  - strategy config: `exclude_selected_book_from_baseline`,
+  - strategy config: `tier_b_min_other_books_for_baseline`,
+  - candidate fields:
+    - `baseline_excluded_books`,
+    - `baseline_books_used`,
+    - `baseline_books_used_count`,
+    - `baseline_method_effective`,
+    - `baseline_is_independent_of_selected_book`.
+- **Reason codes**:
+  - `baseline_insufficient_coverage_after_exclusion`,
+  - `tier_b_baseline_not_independent`.
+- **Done criteria**:
+  - existing strategy ids retain behavior unless new flags/ids are selected,
+  - new strategies run end-to-end with deterministic outputs,
+  - baseline circularity is explicitly auditable per candidate row.
+
 ### Track B — Minutes/usage modeling pipeline (start now, parallel with Track A)
 
 - **Owner worktree**: `wt-minutes-usage-model` (branch prefix: `codex/minutes-*`).

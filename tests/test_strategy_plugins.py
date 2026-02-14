@@ -109,6 +109,8 @@ def test_compose_strategy_recipes_combines_layers() -> None:
         StrategyRecipe(hold_cap=0.08, force_allow_tier_b=True),
         StrategyRecipe(min_quality_score=0.5),
         StrategyRecipe(portfolio_ranking="best_ev"),
+        StrategyRecipe(exclude_selected_book_from_baseline=True),
+        StrategyRecipe(tier_b_min_other_books_for_baseline=2),
         StrategyRecipe(rolling_priors_source_strategy_id="s010"),
     )
     assert combined.force_allow_tier_b is True
@@ -116,11 +118,13 @@ def test_compose_strategy_recipes_combines_layers() -> None:
     assert combined.hold_cap == 0.08
     assert combined.min_quality_score == 0.5
     assert combined.portfolio_ranking == "best_ev"
+    assert combined.exclude_selected_book_from_baseline is True
+    assert combined.tier_b_min_other_books_for_baseline == 2
     assert combined.rolling_priors_source_strategy_id == "s010"
 
 
 def test_strategies_force_allow_tier_b() -> None:
-    for strategy_id in ("s002", "s014", "s015", "s020"):
+    for strategy_id in ("s002", "s014", "s015", "s016", "s017", "s020"):
         result = get_strategy(strategy_id).run(inputs=_sample_inputs(), config=_sample_config())
         assert result.config.allow_tier_b is True
 
@@ -147,6 +151,10 @@ def test_gate_strategies_set_recipe_audit_fields() -> None:
     report_s012 = get_strategy("s012").run(inputs=_sample_inputs(), config=_sample_config()).report
     report_s013 = get_strategy("s013").run(inputs=_sample_inputs(), config=_sample_config()).report
     report_s015 = get_strategy("s015").run(inputs=_sample_inputs(), config=_sample_config()).report
+    report_s016 = get_strategy("s016").run(inputs=_sample_inputs(), config=_sample_config()).report
+    report_s017 = get_strategy("s017").run(inputs=_sample_inputs(), config=_sample_config()).report
+    report_s018 = get_strategy("s018").run(inputs=_sample_inputs(), config=_sample_config()).report
+    report_s019 = get_strategy("s019").run(inputs=_sample_inputs(), config=_sample_config()).report
     assert report_s004["audit"]["min_book_pairs"] == 2
     assert report_s005["audit"]["hold_cap"] == 0.08
     assert report_s006["audit"]["p_over_iqr_cap"] == 0.08
@@ -178,6 +186,14 @@ def test_gate_strategies_set_recipe_audit_fields() -> None:
     assert report_s015["audit"]["min_quality_score"] == 0.55
     assert report_s015["audit"]["min_ev_low"] == 0.01
     assert report_s015["audit"]["max_uncertainty_band"] == 0.08
+    assert report_s016["audit"]["portfolio_ranking"] == "ev_low_quality_weighted"
+    assert report_s016["audit"]["exclude_selected_book_from_baseline"] is True
+    assert report_s016["audit"]["tier_b_min_other_books_for_baseline"] == 2
+    assert report_s017["audit"]["market_baseline_method"] == "median_book"
+    assert report_s017["audit"]["exclude_selected_book_from_baseline"] is True
+    assert report_s017["audit"]["tier_b_min_other_books_for_baseline"] == 2
+    assert report_s018["audit"]["probabilistic_profile"] == "minutes_v1"
+    assert report_s019["audit"]["min_book_pairs"] == 2
 
 
 def test_s009_applies_rolling_priors_while_s008_ignores_them() -> None:
@@ -237,3 +253,12 @@ def test_s020_applies_minutes_prob_profile_and_outputs_fields() -> None:
     assert candidate["minutes_p50"] == 34.0
     assert candidate["p_active"] == 0.98
     assert candidate["confidence_score"] == 0.82
+
+
+def test_s016_emits_loo_baseline_provenance_fields() -> None:
+    report = get_strategy("s016").run(inputs=_sample_inputs(), config=_sample_config()).report
+    candidate = report["candidates"][0]
+    assert isinstance(candidate["baseline_excluded_books"], list)
+    assert isinstance(candidate["baseline_books_used"], list)
+    assert isinstance(candidate["baseline_books_used_count"], int)
+    assert candidate["baseline_method_effective"]

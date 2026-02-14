@@ -65,10 +65,12 @@ class StrategyResult:
 class StrategyRecipe:
     force_allow_tier_b: bool = False
     use_rolling_priors: bool = False
+    exclude_selected_book_from_baseline: bool = False
     rolling_priors_source_strategy_id: str | None = None
     portfolio_ranking: PortfolioRanking | None = None
     market_baseline_method: str | None = None
     market_baseline_fallback: str | None = None
+    tier_b_min_other_books_for_baseline: int | None = None
     min_book_pairs: int | None = None
     hold_cap: float | None = None
     p_over_iqr_cap: float | None = None
@@ -93,6 +95,10 @@ def compose_strategy_recipes(*recipes: StrategyRecipe) -> StrategyRecipe:
         merged = StrategyRecipe(
             force_allow_tier_b=merged.force_allow_tier_b or bool(recipe.force_allow_tier_b),
             use_rolling_priors=merged.use_rolling_priors or bool(recipe.use_rolling_priors),
+            exclude_selected_book_from_baseline=(
+                merged.exclude_selected_book_from_baseline
+                or bool(recipe.exclude_selected_book_from_baseline)
+            ),
             rolling_priors_source_strategy_id=(
                 recipe.rolling_priors_source_strategy_id
                 if recipe.rolling_priors_source_strategy_id is not None
@@ -112,6 +118,11 @@ def compose_strategy_recipes(*recipes: StrategyRecipe) -> StrategyRecipe:
                 recipe.market_baseline_fallback
                 if recipe.market_baseline_fallback is not None
                 else merged.market_baseline_fallback
+            ),
+            tier_b_min_other_books_for_baseline=(
+                recipe.tier_b_min_other_books_for_baseline
+                if recipe.tier_b_min_other_books_for_baseline is not None
+                else merged.tier_b_min_other_books_for_baseline
             ),
             min_book_pairs=(
                 recipe.min_book_pairs
@@ -188,6 +199,8 @@ def run_strategy_recipe(
         else "default",
         market_baseline_method=recipe.market_baseline_method or "best_sides",
         market_baseline_fallback=recipe.market_baseline_fallback or "best_sides",
+        exclude_selected_book_from_baseline=recipe.exclude_selected_book_from_baseline,
+        tier_b_min_other_books_for_baseline=recipe.tier_b_min_other_books_for_baseline,
         min_book_pairs=recipe.min_book_pairs if recipe.min_book_pairs is not None else 0,
         hold_cap=recipe.hold_cap,
         p_over_iqr_cap=recipe.p_over_iqr_cap,

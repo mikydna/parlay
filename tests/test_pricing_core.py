@@ -33,6 +33,19 @@ def test_extract_book_fair_pairs_picks_best_prices_per_side() -> None:
     assert pairs[0].hold == pytest.approx(0.011614, abs=1e-6)
 
 
+def test_extract_book_fair_pairs_respects_excluded_books() -> None:
+    rows = [
+        {"book": "book_a", "side": "Over", "price": -110},
+        {"book": "book_a", "side": "Under", "price": -110},
+        {"book": "book_b", "side": "Over", "price": -105},
+        {"book": "book_b", "side": "Under", "price": -115},
+    ]
+
+    pairs = extract_book_fair_pairs(rows, exclude_book_keys=frozenset({"book_a"}))
+
+    assert [pair.book for pair in pairs] == ["book_b"]
+
+
 def test_summarize_line_pricing_uses_hold_fallback_and_quote_age() -> None:
     now_utc = datetime(2026, 2, 14, 12, 0, tzinfo=UTC)
     rows = [
@@ -67,6 +80,47 @@ def test_summarize_line_pricing_uses_hold_fallback_and_quote_age() -> None:
     assert summary.freshness_score == 0.75
     assert summary.quality_score == 0.275
     assert summary.uncertainty_band == 0.1275
+
+
+def test_summarize_line_pricing_respects_excluded_books() -> None:
+    now_utc = datetime(2026, 2, 14, 12, 0, tzinfo=UTC)
+    rows = [
+        {
+            "book": "book_a",
+            "side": "Over",
+            "price": -110,
+            "last_update": "2026-02-14T11:50:00Z",
+        },
+        {
+            "book": "book_a",
+            "side": "Under",
+            "price": -110,
+            "last_update": "2026-02-14T11:50:00Z",
+        },
+        {
+            "book": "book_b",
+            "side": "Over",
+            "price": -105,
+            "last_update": "2026-02-14T11:49:00Z",
+        },
+        {
+            "book": "book_b",
+            "side": "Under",
+            "price": -115,
+            "last_update": "2026-02-14T11:49:00Z",
+        },
+    ]
+
+    summary = summarize_line_pricing(
+        group_rows=rows,
+        now_utc=now_utc,
+        stale_quote_minutes=20,
+        hold_fallback=None,
+        exclude_book_keys=frozenset({"book_b"}),
+    )
+
+    assert summary.books_used == ("book_a",)
+    assert summary.book_pair_count == 1
 
 
 def test_resolve_baseline_selection_provenance() -> None:
