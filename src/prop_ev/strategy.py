@@ -821,7 +821,9 @@ def _quote_age_minutes(*, quote_utc: str, now_utc: datetime) -> float | None:
     return round(max(0.0, age), 6)
 
 
-def _odds_health(candidates: list[dict[str, Any]], stale_after_min: int) -> dict[str, Any]:
+def _odds_health(
+    candidates: list[dict[str, Any]], stale_after_min: int, *, now_utc: datetime
+) -> dict[str, Any]:
     timestamps: list[datetime] = []
     for row in candidates:
         if not isinstance(row, dict):
@@ -831,7 +833,6 @@ def _odds_health(candidates: list[dict[str, Any]], stale_after_min: int) -> dict
         if parsed is not None:
             timestamps.append(parsed)
 
-    now = datetime.now(UTC)
     if not timestamps:
         return {
             "status": "missing_last_update",
@@ -845,8 +846,8 @@ def _odds_health(candidates: list[dict[str, Any]], stale_after_min: int) -> dict
 
     newest = max(timestamps)
     oldest = min(timestamps)
-    age_latest = (now - newest).total_seconds() / 60.0
-    age_oldest = (now - oldest).total_seconds() / 60.0
+    age_latest = (now_utc - newest).total_seconds() / 60.0
+    age_oldest = (now_utc - oldest).total_seconds() / 60.0
     odds_stale = age_latest > max(0, stale_after_min)
     return {
         "status": "ok" if not odds_stale else "stale",
@@ -1340,6 +1341,7 @@ def build_strategy_report(
     probabilistic_profile: str = "off",
     min_prob_confidence: float | None = None,
     max_minutes_band: float | None = None,
+    quote_now_utc: str | datetime | None = None,
 ) -> dict[str, Any]:
     """Create an audit-ready, deterministic NBA prop strategy report."""
     baseline_method = market_baseline_method.strip().lower()
@@ -1366,6 +1368,15 @@ def build_strategy_report(
     probabilistic_profile = probabilistic_profile.strip().lower() or "off"
 
     strategy_now_utc = datetime.now(UTC)
+    if isinstance(quote_now_utc, datetime):
+        if quote_now_utc.tzinfo is None:
+            strategy_now_utc = quote_now_utc.replace(tzinfo=UTC)
+        else:
+            strategy_now_utc = quote_now_utc.astimezone(UTC)
+    elif isinstance(quote_now_utc, str):
+        parsed_quote_now_utc = _parse_iso_utc(quote_now_utc)
+        if isinstance(parsed_quote_now_utc, datetime):
+            strategy_now_utc = parsed_quote_now_utc
     resolved_max_picks = _resolve_max_picks(top_n=top_n, max_picks=max_picks)
 
     grouped: dict[tuple[str, str, str, float], list[dict[str, Any]]] = {}
@@ -2021,7 +2032,11 @@ def build_strategy_report(
                 item["eligible"] = False
                 item["reason"] = "event_mapping_missing"
 
-    odds_health = _odds_health(candidates, stale_quote_minutes)
+    odds_health = _odds_health(
+        candidates,
+        stale_quote_minutes,
+        now_utc=strategy_now_utc,
+    )
     health_gates: list[str] = []
     if require_official_injuries and not official_ready:
         health_gates.append("official_injury_missing")

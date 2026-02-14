@@ -52,6 +52,7 @@ class StrategyRunConfig:
     stale_quote_minutes: int
     require_fresh_context: bool
     probabilistic_profile: str = "off"
+    quote_now_utc: str | None = None
 
 
 @dataclass(frozen=True)
@@ -198,6 +199,7 @@ def run_strategy_recipe(
         ),
         min_prob_confidence=recipe.min_prob_confidence,
         max_minutes_band=recipe.max_minutes_band,
+        quote_now_utc=effective_config.quote_now_utc,
     )
     return StrategyResult(report=report, config=effective_config)
 

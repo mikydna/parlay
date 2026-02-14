@@ -266,3 +266,91 @@ def test_strategy_run_writes_execution_plan_and_uses_default_max_picks(
     payload = json.loads(Path(execution_path).read_text(encoding="utf-8"))
     assert payload["counts"]["selected_lines"] <= 5
     assert payload["constraints"]["max_picks"] == 5
+
+
+def test_strategy_run_replay_uses_manifest_time_for_quote_age(
+    local_data_dir: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    store = SnapshotStore(local_data_dir)
+    snapshot_id = "day-test-2026-02-11"
+    now_utc = _iso(datetime.now(UTC))
+    _seed_strategy_snapshot(
+        store=store,
+        snapshot_id=snapshot_id,
+        injuries_payload={
+            "fetched_at_utc": now_utc,
+            "official": {
+                "status": "ok",
+                "parse_status": "ok",
+                "rows_count": 1,
+                "rows": [
+                    {
+                        "player": "Player A",
+                        "player_norm": "playera",
+                        "team": "Boston Celtics",
+                        "team_norm": "boston celtics",
+                        "status": "available",
+                        "note": "",
+                    }
+                ],
+            },
+            "secondary": {"status": "ok", "rows": []},
+        },
+    )
+
+    fixed_quote_utc = "2026-02-11T11:00:00Z"
+    fixed_manifest_utc = "2026-02-11T12:00:00Z"
+    snapshot_dir = store.snapshot_dir(snapshot_id)
+    store.write_jsonl(
+        snapshot_dir / "derived" / "event_props.jsonl",
+        [
+            {
+                "event_id": "event-1",
+                "market": "player_points",
+                "player": "Player A",
+                "point": 22.5,
+                "side": "Over",
+                "price": -105,
+                "book": "book_a",
+                "link": "",
+                "last_update": fixed_quote_utc,
+            },
+            {
+                "event_id": "event-1",
+                "market": "player_points",
+                "player": "Player A",
+                "point": 22.5,
+                "side": "Under",
+                "price": -115,
+                "book": "book_b",
+                "link": "",
+                "last_update": fixed_quote_utc,
+            },
+        ],
+    )
+    manifest = store.load_manifest(snapshot_id)
+    manifest["created_at_utc"] = fixed_manifest_utc
+    store.save_manifest(snapshot_id, manifest)
+
+    run_args = ["strategy", "run", "--snapshot-id", snapshot_id, "--offline", "--mode", "replay"]
+
+    code_a = main(run_args)
+    out_a = capsys.readouterr().out
+    assert code_a == 0
+    report_path = ""
+    for line in out_a.splitlines():
+        if line.startswith("report_json="):
+            report_path = line.split("=", 1)[1].strip()
+            break
+    assert report_path
+    report_a = json.loads(Path(report_path).read_text(encoding="utf-8"))
+    quote_age_a = float(report_a["candidates"][0]["quote_age_minutes"])
+
+    code_b = main(run_args)
+    capsys.readouterr()
+    assert code_b == 0
+    report_b = json.loads(Path(report_path).read_text(encoding="utf-8"))
+    quote_age_b = float(report_b["candidates"][0]["quote_age_minutes"])
+
+    assert quote_age_a == quote_age_b
+    assert quote_age_a == pytest.approx(60.0, abs=1e-6)

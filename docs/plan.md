@@ -443,10 +443,10 @@ Done when:
 | Milestone | Status | Evidence | Remaining to close |
 | --- | --- | --- | --- |
 | IM1 | Closed | `main` includes pricing/de-vig contract hardening through PR #31 (`feat(pricing): extract core de-vig and baseline provenance`) | none |
-| IM2 | In progress | probabilistic minutes engine + `s020` landed on `codex/track-b-prob-minutes-engine`; CLI/model refinement still pending merge to `main` | merge Track B completion packet, walk-forward evidence, default-off confirmation |
-| IM3 | Partial | interpolation + execution-plan invariants landed (`main` includes PR #26 and #28) | publish explicit IM3 closure packet with deterministic replay evidence and exclusion-reason coverage |
-| IM4 | Partial | aggregate scoreboard + calibration map/power guidance landed (`main` includes PR #23/#24/#25) | close with multi-cap evaluation packet and promotion-gate reproducibility evidence |
-| IM5 | Open | no default-on promotion PR merged yet | run evidence gate and either ship conservative default flip or explicitly defer with documented fail reasons |
+| IM2 | Closed | probabilistic minutes engine + `s020` merged on `main` (PR #32), minutes-prob artifacts seeded in `parlay-data` (PR #7), runtime default remains `probabilistic_profile=\"off\"` | none |
+| IM3 | Closed | deterministic replay proof + execution-plan exclusion reasons + pricing provenance evidence captured in `docs/integration-evidence-2026-02-14.md` | none |
+| IM4 | Closed | aggregate scoreboard + promotion-gate reproducibility packet captured in `docs/integration-evidence-2026-02-14.md` (`max_picks=1,2,5` deterministic reruns) | none |
+| IM5 | Deferred | no default-on promotion PR merged; evidence remains mixed for safe default flip | re-open only with explicit before/after gate pass + rollback PR |
 
 ## 8) Delivery Tracks (parallelizable, worktree-friendly)
 
