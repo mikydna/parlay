@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import ast
 import json
+import os
 import pickle
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
+from urllib.error import URLError
+from urllib.request import Request, urlopen
 
 import numpy as np
 import polars as pl
@@ -36,6 +40,10 @@ DEFAULT_MARKETS: tuple[str, ...] = (
     "player_blocks",
     "player_steals",
     "player_blocks_steals",
+)
+PLAYER_ID_NAME_MAP_FILE = "player_id_name_map.json"
+NBA_STATIC_PLAYERS_DATA_URL = (
+    "https://raw.githubusercontent.com/swar/nba_api/master/src/nba_api/stats/library/data.py"
 )
 
 
@@ -212,7 +220,71 @@ def _quality_confidence(
 
 
 def _load_player_id_name_map(layout: NBADataLayout) -> dict[str, str]:
+    reference_dir = layout.root / "reference"
+    cached_map_path = reference_dir / PLAYER_ID_NAME_MAP_FILE
+
+    merged: dict[str, str] = {}
+    cached = _load_cached_player_id_name_map(cached_map_path)
+    merged.update(cached)
+
     identity_map_path = layout.root / "reference" / "player_identity_map.json"
+    identity_map = _load_identity_map_player_ids(identity_map_path)
+    for player_id, canonical_name in identity_map.items():
+        merged[player_id] = canonical_name
+
+    if len(merged) < 100 and _allow_remote_player_id_name_map():
+        remote = _fetch_remote_player_id_name_map()
+        if remote:
+            for player_id, canonical_name in remote.items():
+                merged.setdefault(player_id, canonical_name)
+            _write_cached_player_id_name_map(cached_map_path, merged)
+    return merged
+
+
+def _allow_remote_player_id_name_map() -> bool:
+    raw = str(os.environ.get("PROP_EV_MINUTES_PROB_ALLOW_REMOTE_PLAYER_MAP", "")).strip().lower()
+    return raw in {"1", "true", "yes", "on"}
+
+
+def _load_cached_player_id_name_map(path: Path) -> dict[str, str]:
+    if not path.exists():
+        return {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+    rows_raw: Any = payload
+    if isinstance(payload, dict) and isinstance(payload.get("players"), dict):
+        rows_raw = payload.get("players")
+    if not isinstance(rows_raw, dict):
+        return {}
+
+    mapping: dict[str, str] = {}
+    for player_id_raw, name_raw in rows_raw.items():
+        player_id = str(player_id_raw).strip()
+        canonical_name = str(name_raw).strip()
+        if not player_id or not canonical_name:
+            continue
+        mapping[player_id] = canonical_name
+    return mapping
+
+
+def _write_cached_player_id_name_map(path: Path, mapping: dict[str, str]) -> None:
+    if not mapping:
+        return
+    payload = {
+        "schema_version": 1,
+        "source": "swar/nba_api static players data",
+        "source_url": NBA_STATIC_PLAYERS_DATA_URL,
+        "updated_at_utc": _iso_z_now(),
+        "players": dict(sorted(mapping.items())),
+    }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+
+
+def _load_identity_map_player_ids(identity_map_path: Path) -> dict[str, str]:
     if not identity_map_path.exists():
         return {}
     try:
@@ -230,11 +302,11 @@ def _load_player_id_name_map(layout: NBADataLayout) -> dict[str, str]:
         canonical_name = str(value.get("canonical_name", "")).strip() or str(key).strip()
         if not canonical_name:
             continue
-        candidate_ids: list[str] = []
+        candidate_ids: set[str] = set()
         for single_key in ("nba_player_id", "player_id", "id"):
             raw = str(value.get(single_key, "")).strip()
             if raw:
-                candidate_ids.append(raw)
+                candidate_ids.add(raw)
         for list_key in ("nba_player_ids", "player_ids", "ids"):
             raw_list = value.get(list_key, [])
             if not isinstance(raw_list, list):
@@ -242,9 +314,53 @@ def _load_player_id_name_map(layout: NBADataLayout) -> dict[str, str]:
             for item in raw_list:
                 raw = str(item).strip()
                 if raw:
-                    candidate_ids.append(raw)
-        for player_id in sorted(set(candidate_ids)):
+                    candidate_ids.add(raw)
+        for player_id in sorted(candidate_ids):
             mapping[player_id] = canonical_name
+    return mapping
+
+
+def _fetch_remote_player_id_name_map() -> dict[str, str]:
+    request = Request(
+        NBA_STATIC_PLAYERS_DATA_URL,
+        headers={
+            "User-Agent": "Mozilla/5.0",
+            "Accept": "text/plain, */*",
+        },
+    )
+    try:
+        with urlopen(request, timeout=12) as response:
+            source = response.read().decode("utf-8")
+    except (OSError, URLError, TimeoutError):
+        return {}
+    try:
+        module = ast.parse(source)
+    except SyntaxError:
+        return {}
+
+    players_literal: Any = None
+    for node in module.body:
+        if not isinstance(node, ast.Assign):
+            continue
+        if len(node.targets) != 1:
+            continue
+        target = node.targets[0]
+        if isinstance(target, ast.Name) and target.id == "players":
+            players_literal = ast.literal_eval(node.value)
+            break
+
+    if not isinstance(players_literal, list):
+        return {}
+
+    mapping: dict[str, str] = {}
+    for row in players_literal:
+        if not isinstance(row, list) or len(row) < 4:
+            continue
+        player_id = str(row[0]).strip()
+        full_name = str(row[3]).strip()
+        if not player_id or not full_name:
+            continue
+        mapping[player_id] = full_name
     return mapping
 
 

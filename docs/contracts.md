@@ -52,6 +52,18 @@ Candidate pricing-quality fields:
 - `reference_points_count`
 - `books_used` (discovery books contributing paired over/under no-vig baseline at the line)
 
+Probabilistic minutes extension fields (when `probabilistic_profile=minutes_v1`):
+- `probabilistic_profile`
+- `prob_source`
+- `minutes_p10`
+- `minutes_p50`
+- `minutes_p90`
+- `p_active`
+- `minutes_band`
+- `confidence_score`
+- `data_quality_flags`
+- `minutes_prob_delta_over`
+
 ## ExecutionPlan Contract
 
 Path:
@@ -258,6 +270,46 @@ Canonical derived paths:
 - `market`
 - `book`
 - `price`
+
+## NBA Minutes-Prob Contract
+
+Canonical outputs under NBA reports root:
+- `<nba_data_dir>/reports/analysis/minutes_prob/<model_version>/model.pkl`
+- `<nba_data_dir>/reports/analysis/minutes_prob/<model_version>/metadata.json`
+- `<nba_data_dir>/reports/analysis/minutes_prob/predictions/snapshot_date=<YYYY-MM-DD>/predictions.parquet`
+- `<nba_data_dir>/reports/analysis/minutes_prob/predictions/snapshot_date=<YYYY-MM-DD>/evaluation.json`
+
+`metadata.json` required keys:
+- `model_version`
+- `schema_version`
+- `feature_schema_version`
+- `train_window_start`
+- `train_window_end`
+- `eval_window_start`
+- `eval_window_end`
+- `history_games`
+- `min_history_games`
+- `random_seed`
+- `conformal_halfwidth`
+
+`predictions.parquet` required columns:
+- `snapshot_id`
+- `event_id`
+- `player_id`
+- `player_name`
+- `player_norm`
+- `market`
+- `minutes_p10`
+- `minutes_p50`
+- `minutes_p90`
+- `minutes_mu`
+- `minutes_sigma_proxy`
+- `p_active`
+- `games_on_team`
+- `days_on_team`
+- `new_team_phase`
+- `confidence_score`
+- `data_quality_flags`
 - `point`
 - `side`
 - `last_update`

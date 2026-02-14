@@ -2047,6 +2047,33 @@ def _resolve_probabilistic_profile(value: str) -> str:
     return profile
 
 
+def _strategy_recipe_probabilistic_profile(strategy_id: str) -> str:
+    plugin = get_strategy(strategy_id)
+    recipe = getattr(plugin, "recipe", None)
+    raw = str(getattr(recipe, "probabilistic_profile", "") or "").strip()
+    if not raw:
+        return "off"
+    return _resolve_probabilistic_profile(raw)
+
+
+def _resolve_input_probabilistic_profile(
+    *,
+    default_profile: str,
+    probabilistic_profile_arg: str,
+    strategy_ids: list[str],
+) -> str:
+    explicit = str(probabilistic_profile_arg).strip()
+    if explicit:
+        return _resolve_probabilistic_profile(explicit)
+    default_resolved = _resolve_probabilistic_profile(default_profile)
+    required: set[str] = {default_resolved}
+    for strategy_id in strategy_ids:
+        required.add(_strategy_recipe_probabilistic_profile(strategy_id))
+    if "minutes_v1" in required:
+        return "minutes_v1"
+    return "off"
+
+
 def _official_injury_hard_fail_message() -> str:
     return (
         "official injury report unavailable; refusing to continue without override. "
@@ -2654,19 +2681,20 @@ def _load_strategy_inputs(
 def _cmd_strategy_run(args: argparse.Namespace) -> int:
     store = SnapshotStore(os.environ.get("PROP_EV_DATA_DIR", "data/odds_api"))
     snapshot_id = args.snapshot_id or _latest_snapshot_id(store)
+    strategy_requested = str(getattr(args, "strategy", "s001"))
+    plugin = get_strategy(strategy_requested)
+    strategy_id = normalize_strategy_id(plugin.info.id)
     require_official_injuries = _env_bool("PROP_EV_STRATEGY_REQUIRE_OFFICIAL_INJURIES", True)
     allow_secondary_injuries = _allow_secondary_injuries_override(
         cli_flag=bool(getattr(args, "allow_secondary_injuries", False))
     )
     stale_quote_minutes_env = _env_int("PROP_EV_STRATEGY_STALE_QUOTE_MINUTES", 20)
     require_fresh_context_env = _env_bool("PROP_EV_STRATEGY_REQUIRE_FRESH_CONTEXT", True)
-    probabilistic_profile_raw = str(getattr(args, "probabilistic_profile", "")).strip()
-    if probabilistic_profile_raw:
-        probabilistic_profile = _resolve_probabilistic_profile(probabilistic_profile_raw)
-    else:
-        probabilistic_profile = _resolve_probabilistic_profile(
-            str(os.environ.get("PROP_EV_STRATEGY_PROBABILISTIC_PROFILE", "off"))
-        )
+    probabilistic_profile = _resolve_input_probabilistic_profile(
+        default_profile=str(os.environ.get("PROP_EV_STRATEGY_PROBABILISTIC_PROFILE", "off")),
+        probabilistic_profile_arg=str(getattr(args, "probabilistic_profile", "")),
+        strategy_ids=[strategy_id],
+    )
     (
         strategy_run_mode,
         stale_quote_minutes,
@@ -2705,9 +2733,6 @@ def _cmd_strategy_run(args: argparse.Namespace) -> int:
     if secondary_override_active:
         print("note=official_injury_missing_using_secondary_override")
 
-    strategy_requested = str(getattr(args, "strategy", "s001"))
-    plugin = get_strategy(strategy_requested)
-    strategy_id = normalize_strategy_id(plugin.info.id)
     max_picks_default = _env_int("PROP_EV_STRATEGY_MAX_PICKS_DEFAULT", 5)
     requested_max_picks = int(getattr(args, "max_picks", 0))
     resolved_max_picks = (
@@ -2985,13 +3010,11 @@ def _cmd_strategy_compare(args: argparse.Namespace) -> int:
     require_official_injuries = _env_bool("PROP_EV_STRATEGY_REQUIRE_OFFICIAL_INJURIES", True)
     stale_quote_minutes_env = _env_int("PROP_EV_STRATEGY_STALE_QUOTE_MINUTES", 20)
     require_fresh_context_env = _env_bool("PROP_EV_STRATEGY_REQUIRE_FRESH_CONTEXT", True)
-    probabilistic_profile_raw = str(getattr(args, "probabilistic_profile", "")).strip()
-    if probabilistic_profile_raw:
-        probabilistic_profile = _resolve_probabilistic_profile(probabilistic_profile_raw)
-    else:
-        probabilistic_profile = _resolve_probabilistic_profile(
-            str(os.environ.get("PROP_EV_STRATEGY_PROBABILISTIC_PROFILE", "off"))
-        )
+    probabilistic_profile = _resolve_input_probabilistic_profile(
+        default_profile=str(os.environ.get("PROP_EV_STRATEGY_PROBABILISTIC_PROFILE", "off")),
+        probabilistic_profile_arg=str(getattr(args, "probabilistic_profile", "")),
+        strategy_ids=strategy_ids,
+    )
     _, stale_quote_minutes, require_fresh_context = _resolve_strategy_runtime_policy(
         mode=str(getattr(args, "mode", "auto")),
         stale_quote_minutes=stale_quote_minutes_env,

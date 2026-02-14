@@ -231,7 +231,7 @@ def test_s020_applies_minutes_prob_profile_and_outputs_fields() -> None:
     report = result.report
     assert report["audit"]["probabilistic_profile"] == "minutes_v1"
     assert report["audit"]["min_prob_confidence"] == 0.5
-    assert report["audit"]["max_minutes_band"] == 18.0
+    assert report["audit"]["max_minutes_band"] == 22.0
     candidate = report["candidates"][0]
     assert candidate["prob_source"] == "minutes_v1_model"
     assert candidate["minutes_p50"] == 34.0

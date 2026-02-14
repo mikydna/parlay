@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import csv
 import json
+import re
 from pathlib import Path
 from typing import Any
 
 from prop_ev.brief_builder import TEAM_ABBREVIATIONS
+from prop_ev.identity_map import name_aliases
 from prop_ev.latex_renderer import cleanup_latex_artifacts, render_pdf_from_markdown
 from prop_ev.nba_data.context_cache import now_utc
 from prop_ev.nba_data.normalize import canonical_team_name, normalize_person_name
@@ -41,6 +43,7 @@ RESULT_REASON_LABELS = {
     "unsupported_market": "market_unsupported",
     "unsupported_side": "side_unsupported",
 }
+NAME_SUFFIXES = ("jr", "sr", "ii", "iii", "iv", "v")
 
 
 def _safe_float(value: Any) -> float | None:
@@ -138,6 +141,106 @@ def _ticket_label(row: dict[str, Any]) -> str:
     point = row.get("point")
     market = str(row.get("market", ""))
     return f"{player} {side} {point} {market}".strip()
+
+
+def _name_tokens(value: str) -> list[str]:
+    cleaned = re.sub(r"[^a-z0-9]+", " ", value.strip().lower())
+    return [token for token in cleaned.split() if token]
+
+
+def _name_last_token(value: str) -> str:
+    tokens = _name_tokens(value)
+    if not tokens:
+        return ""
+    if len(tokens) > 1 and tokens[-1] in NAME_SUFFIXES:
+        return tokens[-2]
+    return tokens[-1]
+
+
+def _name_first_initial(value: str) -> str:
+    tokens = _name_tokens(value)
+    if not tokens:
+        return ""
+    return tokens[0][0]
+
+
+def _strip_suffix_from_key(value: str) -> str:
+    raw = value.strip().lower()
+    for suffix in NAME_SUFFIXES:
+        if raw.endswith(suffix) and len(raw) > len(suffix) + 2:
+            return raw[: -len(suffix)]
+    return raw
+
+
+def _candidate_player_keys(player_name: str) -> set[str]:
+    direct = normalize_person_name(player_name)
+    keys = set(name_aliases(player_name))
+    if direct:
+        keys.add(direct)
+    expanded = set(keys)
+    for key in list(keys):
+        base = _strip_suffix_from_key(key)
+        if not base:
+            continue
+        expanded.add(base)
+        for suffix in NAME_SUFFIXES:
+            expanded.add(f"{base}{suffix}")
+    return {key for key in expanded if key}
+
+
+def _resolve_player_row(
+    *,
+    player_name: str,
+    players: dict[str, Any],
+) -> dict[str, Any] | None:
+    if not player_name:
+        return None
+    if not isinstance(players, dict) or not players:
+        return None
+
+    candidate_keys = _candidate_player_keys(player_name)
+    direct_matches = [
+        (key, value)
+        for key, value in players.items()
+        if key in candidate_keys and isinstance(value, dict)
+    ]
+    if len(direct_matches) == 1:
+        return direct_matches[0][1]
+    if len(direct_matches) > 1:
+        return None
+
+    base_candidates = {_strip_suffix_from_key(key) for key in candidate_keys if key}
+    suffix_matches = [
+        (key, value)
+        for key, value in players.items()
+        if isinstance(value, dict) and _strip_suffix_from_key(str(key)) in base_candidates
+    ]
+    if len(suffix_matches) == 1:
+        return suffix_matches[0][1]
+    if len(suffix_matches) > 1:
+        return None
+
+    wanted_last = _name_last_token(player_name)
+    if not wanted_last:
+        return None
+    last_name_matches = [
+        value
+        for value in players.values()
+        if isinstance(value, dict) and _name_last_token(str(value.get("name", ""))) == wanted_last
+    ]
+    if len(last_name_matches) == 1:
+        return last_name_matches[0]
+    if len(last_name_matches) > 1:
+        wanted_initial = _name_first_initial(player_name)
+        if wanted_initial:
+            initial_matches = [
+                value
+                for value in last_name_matches
+                if _name_first_initial(str(value.get("name", ""))) == wanted_initial
+            ]
+            if len(initial_matches) == 1:
+                return initial_matches[0]
+    return None
 
 
 def _market_actual_value(market: str, statistics: dict[str, Any]) -> tuple[float | None, str]:
@@ -239,8 +342,7 @@ def _settle_row(
     if not isinstance(players, dict):
         players = {}
 
-    player_key = normalize_person_name(base["player"])
-    player_row = players.get(player_key) if player_key else None
+    player_row = _resolve_player_row(player_name=base["player"], players=players)
     stats = {}
     if isinstance(player_row, dict):
         raw_stats = player_row.get("statistics", {})

@@ -438,6 +438,16 @@ Done when:
 - before/after delta is reviewed in one integration PR,
 - rollback path is explicit (flag/config) with no schema rollback required.
 
+### Integration Milestone Live Status (as of 2026-02-14)
+
+| Milestone | Status | Evidence | Remaining to close |
+| --- | --- | --- | --- |
+| IM1 | Closed | `main` includes pricing/de-vig contract hardening through PR #31 (`feat(pricing): extract core de-vig and baseline provenance`) | none |
+| IM2 | In progress | probabilistic minutes engine + `s020` landed on `codex/track-b-prob-minutes-engine`; CLI/model refinement still pending merge to `main` | merge Track B completion packet, walk-forward evidence, default-off confirmation |
+| IM3 | Partial | interpolation + execution-plan invariants landed (`main` includes PR #26 and #28) | publish explicit IM3 closure packet with deterministic replay evidence and exclusion-reason coverage |
+| IM4 | Partial | aggregate scoreboard + calibration map/power guidance landed (`main` includes PR #23/#24/#25) | close with multi-cap evaluation packet and promotion-gate reproducibility evidence |
+| IM5 | Open | no default-on promotion PR merged yet | run evidence gate and either ship conservative default flip or explicitly defer with documented fail reasons |
+
 ## 8) Delivery Tracks (parallelizable, worktree-friendly)
 
 These tracks are intended to be independently plannable by Codex with clear interfaces and merge

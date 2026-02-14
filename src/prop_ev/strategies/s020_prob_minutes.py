@@ -32,7 +32,7 @@ class S020:
         StrategyRecipe(
             probabilistic_profile="minutes_v1",
             min_prob_confidence=0.5,
-            max_minutes_band=18.0,
+            max_minutes_band=22.0,
         ),
         StrategyRecipe(portfolio_ranking="ev_low_quality_weighted"),
     )

@@ -4,8 +4,10 @@ import json
 from pathlib import Path
 
 import polars as pl
+import pytest
 
 from prop_ev.nba_data.cli import main
+from prop_ev.nba_data.minutes_prob import model as minutes_prob_model
 from prop_ev.nba_data.minutes_prob.features import (
     MinutesProbFeatureConfig,
     build_minutes_prob_feature_frame,
@@ -16,6 +18,7 @@ from prop_ev.nba_data.minutes_prob.model import (
     predict_minutes_probabilities,
     train_minutes_prob_model,
 )
+from prop_ev.nba_data.normalize import normalize_person_name
 from prop_ev.nba_data.store.layout import build_layout, slugify_season_type
 
 
@@ -127,6 +130,25 @@ def _seed_clean_minutes_prob_data(root: Path) -> None:
         frame=boxscore,
     )
 
+    player_map_path = root / "reference" / "player_id_name_map.json"
+    player_map_path.parent.mkdir(parents=True, exist_ok=True)
+    player_map_path.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "players": {
+                    "p1": "Player One",
+                    "p2": "Player Two",
+                    "p3": "Player Three",
+                },
+            },
+            sort_keys=True,
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
 
 def test_minutes_prob_feature_frame_has_tenure_columns(tmp_path: Path) -> None:
     data_root = tmp_path / "nba_data"
@@ -205,6 +227,10 @@ def test_train_predict_evaluate_minutes_prob(tmp_path: Path) -> None:
         "confidence_score",
         "data_quality_flags",
     }.issubset(set(predictions.columns))
+    assert predictions.filter(pl.col("player_name").str.len_chars() == 0).height == 0
+    assert (
+        predictions.filter(pl.col("player_norm") == normalize_person_name("Player One")).height > 0
+    )
     monotone = predictions.select(
         (
             (pl.col("minutes_p10") <= pl.col("minutes_p50"))
@@ -270,6 +296,46 @@ def test_minutes_prob_prediction_is_deterministic(tmp_path: Path) -> None:
     frame_a = pl.read_parquet(out_a).sort(["event_id", "player_id", "market"])
     frame_b = pl.read_parquet(out_b).sort(["event_id", "player_id", "market"])
     assert frame_a.equals(frame_b)
+
+
+def test_player_id_name_map_does_not_fetch_remote_by_default(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    data_root = tmp_path / "nba_data"
+    _seed_clean_minutes_prob_data(data_root)
+    layout = build_layout(data_root)
+    called = {"value": False}
+
+    def _fake_remote() -> dict[str, str]:
+        called["value"] = True
+        return {"remote-player": "Remote Player"}
+
+    monkeypatch.delenv("PROP_EV_MINUTES_PROB_ALLOW_REMOTE_PLAYER_MAP", raising=False)
+    monkeypatch.setattr(minutes_prob_model, "_fetch_remote_player_id_name_map", _fake_remote)
+
+    mapping = minutes_prob_model._load_player_id_name_map(layout)
+    assert called["value"] is False
+    assert mapping["p1"] == "Player One"
+
+
+def test_player_id_name_map_fetches_remote_when_explicitly_enabled(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    data_root = tmp_path / "nba_data"
+    _seed_clean_minutes_prob_data(data_root)
+    layout = build_layout(data_root)
+    called = {"value": False}
+
+    def _fake_remote() -> dict[str, str]:
+        called["value"] = True
+        return {"remote-player": "Remote Player"}
+
+    monkeypatch.setenv("PROP_EV_MINUTES_PROB_ALLOW_REMOTE_PLAYER_MAP", "1")
+    monkeypatch.setattr(minutes_prob_model, "_fetch_remote_player_id_name_map", _fake_remote)
+
+    mapping = minutes_prob_model._load_player_id_name_map(layout)
+    assert called["value"] is True
+    assert mapping["remote-player"] == "Remote Player"
 
 
 def test_cli_minutes_prob_train_predict_evaluate(tmp_path: Path) -> None:
