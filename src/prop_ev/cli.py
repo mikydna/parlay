@@ -2844,23 +2844,39 @@ def _render_backtest_summary_markdown(report: dict[str, Any]) -> str:
     lines.append(f"- strategies: `{summary.get('strategy_count', 0)}`")
     lines.append(f"- min_graded: `{summary.get('min_graded', 0)}`")
     lines.append(f"- bin_size: `{summary.get('bin_size', '')}`")
+    lines.append(f"- baseline_strategy_id: `{summary.get('baseline_strategy_id', '')}`")
+    lines.append(f"- baseline_found: `{summary.get('baseline_found', False)}`")
+    lines.append(f"- require_scored_fraction: `{summary.get('require_scored_fraction', '')}`")
+    if bool(summary.get("all_complete_days", False)):
+        lines.append(f"- dataset_id: `{summary.get('dataset_id', '')}`")
+        lines.append(f"- complete_days: `{summary.get('complete_days', 0)}`")
+        lines.append(f"- days_with_any_results: `{summary.get('days_with_any_results', 0)}`")
     lines.append("")
 
     if rows:
-        lines.append("| Strategy | Graded | ROI | W | L | P | Brier |")
-        lines.append("| --- | --- | --- | --- | --- | --- | --- |")
+        lines.append(
+            "| Strategy | Graded | Scored | ROI | W | L | P | Brier | LogLoss | ECE | MCE | Gate |"
+        )
+        lines.append("| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |")
         for row in rows:
             if not isinstance(row, dict):
                 continue
+            gate = row.get("promotion_gate", {})
+            gate_status = gate.get("status", "") if isinstance(gate, dict) else ""
             lines.append(
-                "| {} | {} | {} | {} | {} | {} | {} |".format(
+                "| {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} |".format(
                     row.get("strategy_id", ""),
                     row.get("rows_graded", 0),
+                    row.get("rows_scored", 0),
                     row.get("roi", ""),
                     row.get("wins", 0),
                     row.get("losses", 0),
                     row.get("pushes", 0),
                     row.get("brier", ""),
+                    row.get("log_loss", ""),
+                    row.get("ece", ""),
+                    row.get("mce", ""),
+                    gate_status,
                 )
             )
         lines.append("")
@@ -2876,62 +2892,208 @@ def _render_backtest_summary_markdown(report: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def _resolve_complete_day_dataset_id(data_root: Path, requested: str) -> str:
+    dataset_id_value = requested.strip()
+    if dataset_id_value:
+        _load_dataset_spec_or_error(data_root, dataset_id_value)
+        return dataset_id_value
+
+    discovered = _discover_dataset_ids(data_root)
+    if not discovered:
+        raise CLIError("no datasets found under data root; run data backfill first")
+    if len(discovered) == 1:
+        return discovered[0]
+    choices = ",".join(discovered[:6])
+    raise CLIError(
+        f"multiple datasets found; pass --dataset-id with --all-complete-days (examples: {choices})"
+    )
+
+
+def _complete_day_snapshots(data_root: Path, dataset_id_value: str) -> list[tuple[str, str]]:
+    complete_rows: list[tuple[str, str]] = []
+    for day in _dataset_day_names(data_root, dataset_id_value):
+        status = _load_day_status_for_dataset(data_root, dataset_id_value=dataset_id_value, day=day)
+        if not isinstance(status, dict):
+            continue
+        row = _day_row_from_status(day, status)
+        if not bool(row.get("complete", False)):
+            continue
+        snapshot_id = str(row.get("snapshot_id", "")).strip()
+        if not snapshot_id:
+            continue
+        complete_rows.append((day, snapshot_id))
+    complete_rows.sort(key=lambda item: item[0])
+    return complete_rows
+
+
 def _cmd_strategy_backtest_summarize(args: argparse.Namespace) -> int:
-    from prop_ev.backtest_summary import load_backtest_csv, pick_winner, summarize_backtest_rows
+    from prop_ev.backtest_summary import load_backtest_csv, summarize_backtest_rows
+    from prop_ev.eval_scoreboard import (
+        PromotionThresholds,
+        build_promotion_gate,
+        pick_promotion_winner,
+        resolve_baseline_strategy_id,
+    )
 
     store = SnapshotStore(os.environ.get("PROP_EV_DATA_DIR", "data/odds_api"))
     snapshot_id = args.snapshot_id or _latest_snapshot_id(store)
     reports_dir = snapshot_reports_dir(store, snapshot_id)
 
-    bin_size = float(getattr(args, "bin_size", 0.05))
-    min_graded = int(getattr(args, "min_graded", 0))
+    def _resolve_results_csv(reports_dir: Path, strategy_id: str) -> Path:
+        settlement_path = reports_dir / f"settlement.{strategy_id}.csv"
+        if settlement_path.exists():
+            return settlement_path
+        if strategy_id == "s001":
+            settlement_path = reports_dir / "settlement.csv"
+            if settlement_path.exists():
+                return settlement_path
+        template_path = reports_dir / f"backtest-results-template.{strategy_id}.csv"
+        if template_path.exists():
+            return template_path
+        if strategy_id == "s001":
+            template_path = reports_dir / "backtest-results-template.csv"
+        return template_path
 
-    paths: list[tuple[str, Path]] = []
+    bin_size = float(getattr(args, "bin_size", 0.05))
+    min_graded = max(0, int(getattr(args, "min_graded", 0)))
+    require_scored_fraction = float(getattr(args, "require_scored_fraction", 0.9))
+    if require_scored_fraction < 0.0 or require_scored_fraction > 1.0:
+        raise CLIError("--require-scored-fraction must be between 0 and 1")
+    ece_slack = max(0.0, float(getattr(args, "ece_slack", 0.01)))
+    brier_slack = max(0.0, float(getattr(args, "brier_slack", 0.01)))
+    all_complete_days = bool(getattr(args, "all_complete_days", False))
     explicit_results = getattr(args, "results", None)
-    if isinstance(explicit_results, list) and explicit_results:
-        for raw in explicit_results:
-            path = Path(str(raw))
-            rows = load_backtest_csv(path)
-            strategy = ""
-            for row in rows:
-                candidate = str(row.get("strategy_id", "")).strip()
-                if candidate:
-                    strategy = normalize_strategy_id(candidate)
-                    break
-            if not strategy:
-                strategy = normalize_strategy_id(path.stem.replace(".", "_"))
-            paths.append((strategy, path))
-    else:
+    computed = []
+    day_coverage: dict[str, Any] = {}
+    if all_complete_days:
+        if isinstance(explicit_results, list) and explicit_results:
+            raise CLIError("--all-complete-days cannot be combined with --results")
         strategy_ids = _parse_strategy_ids(getattr(args, "strategies", ""))
         if not strategy_ids:
-            raise CLIError("backtest-summarize requires --strategies or --results")
+            raise CLIError("--all-complete-days requires --strategies")
+
+        data_root = store.root
+        dataset_id_value = _resolve_complete_day_dataset_id(
+            data_root,
+            str(getattr(args, "dataset_id", "")),
+        )
+        complete_days = _complete_day_snapshots(data_root, dataset_id_value)
+        if not complete_days:
+            raise CLIError(f"dataset has no complete indexed days: {dataset_id_value}")
+
+        rows_by_strategy: dict[str, list[dict[str, str]]] = {sid: [] for sid in strategy_ids}
+        skipped_days: list[dict[str, str]] = []
+        days_with_any_results: set[str] = set()
+        for day, day_snapshot_id in complete_days:
+            day_reports_dir = snapshot_reports_dir(store, day_snapshot_id)
+            for strategy_id in strategy_ids:
+                path = _resolve_results_csv(day_reports_dir, strategy_id)
+                if not path.exists():
+                    skipped_days.append(
+                        {
+                            "day": day,
+                            "snapshot_id": day_snapshot_id,
+                            "strategy_id": strategy_id,
+                            "reason": "missing_backtest_csv",
+                        }
+                    )
+                    continue
+                rows = load_backtest_csv(path)
+                if rows:
+                    rows_by_strategy[strategy_id].extend(rows)
+                    days_with_any_results.add(day)
+
         for strategy_id in strategy_ids:
-            path = reports_dir / f"backtest-results-template.{strategy_id}.csv"
-            if strategy_id == "s001" and not path.exists():
-                path = reports_dir / "backtest-results-template.csv"
-            paths.append((strategy_id, path))
+            summary = summarize_backtest_rows(
+                rows_by_strategy[strategy_id],
+                strategy_id=strategy_id,
+                bin_size=bin_size,
+            )
+            computed.append(summary)
 
-    summaries: list[dict[str, Any]] = []
-    computed = []
-    for strategy_id, path in paths:
-        if not path.exists():
-            raise CLIError(f"missing backtest CSV: {path}")
-        rows = load_backtest_csv(path)
-        summary = summarize_backtest_rows(rows, strategy_id=strategy_id, bin_size=bin_size)
-        computed.append(summary)
-        summaries.append(summary.to_dict())
+        day_coverage = {
+            "all_complete_days": True,
+            "dataset_id": dataset_id_value,
+            "complete_days": len(complete_days),
+            "days_with_any_results": len(days_with_any_results),
+            "skipped_rows": len(skipped_days),
+            "skipped": skipped_days[:200],
+        }
+    else:
+        paths: list[tuple[str, Path]] = []
+        if isinstance(explicit_results, list) and explicit_results:
+            for raw in explicit_results:
+                path = Path(str(raw))
+                rows = load_backtest_csv(path)
+                strategy = ""
+                for row in rows:
+                    candidate = str(row.get("strategy_id", "")).strip()
+                    if candidate:
+                        strategy = normalize_strategy_id(candidate)
+                        break
+                if not strategy:
+                    strategy = normalize_strategy_id(path.stem.replace(".", "_"))
+                paths.append((strategy, path))
+        else:
+            strategy_ids = _parse_strategy_ids(getattr(args, "strategies", ""))
+            if not strategy_ids:
+                raise CLIError("backtest-summarize requires --strategies or --results")
+            for strategy_id in strategy_ids:
+                paths.append((strategy_id, _resolve_results_csv(reports_dir, strategy_id)))
 
-    winner = pick_winner(computed, min_graded=min_graded)
+        for strategy_id, path in paths:
+            if not path.exists():
+                raise CLIError(f"missing backtest CSV: {path}")
+            rows = load_backtest_csv(path)
+            summary = summarize_backtest_rows(rows, strategy_id=strategy_id, bin_size=bin_size)
+            computed.append(summary)
+
+    requested_baseline = str(getattr(args, "baseline_strategy", "")).strip()
+    if requested_baseline:
+        requested_baseline = normalize_strategy_id(requested_baseline)
+    baseline_strategy_id = resolve_baseline_strategy_id(
+        requested=requested_baseline,
+        available_strategy_ids=[item.strategy_id for item in computed],
+    )
+    baseline_summary = next(
+        (item for item in computed if item.strategy_id == baseline_strategy_id),
+        None,
+    )
+    thresholds = PromotionThresholds(
+        min_graded=min_graded,
+        min_scored_fraction=require_scored_fraction,
+        ece_slack=ece_slack,
+        brier_slack=brier_slack,
+    )
+
+    strategy_rows: list[dict[str, Any]] = []
+    for summary in computed:
+        row = summary.to_dict()
+        row["promotion_gate"] = build_promotion_gate(
+            summary=summary,
+            baseline_summary=baseline_summary,
+            baseline_required=bool(baseline_strategy_id),
+            thresholds=thresholds,
+        )
+        strategy_rows.append(row)
+
+    winner = pick_promotion_winner(strategy_rows)
     report = {
         "generated_at_utc": _iso(_utc_now()),
         "summary": {
             "snapshot_id": snapshot_id,
-            "strategy_count": len(summaries),
+            "strategy_count": len(strategy_rows),
             "min_graded": min_graded,
             "bin_size": bin_size,
+            "baseline_strategy_id": baseline_strategy_id,
+            "baseline_found": baseline_summary is not None,
+            "require_scored_fraction": require_scored_fraction,
+            "ece_slack": ece_slack,
+            "brier_slack": brier_slack,
+            **day_coverage,
         },
-        "strategies": sorted(summaries, key=lambda row: row.get("strategy_id", "")),
-        "winner": winner.to_dict() if winner is not None else {},
+        "strategies": sorted(strategy_rows, key=lambda row: row.get("strategy_id", "")),
+        "winner": winner if winner is not None else {},
     }
 
     reports_dir.mkdir(parents=True, exist_ok=True)
@@ -2950,7 +3112,11 @@ def _cmd_strategy_backtest_summarize(args: argparse.Namespace) -> int:
         print(f"summary_md={md_path}")
     if winner is not None:
         print(
-            f"winner_strategy_id={winner.strategy_id} roi={winner.roi} graded={winner.rows_graded}"
+            "winner_strategy_id={} roi={} graded={}".format(
+                winner.get("strategy_id", ""),
+                winner.get("roi", ""),
+                winner.get("rows_graded", 0),
+            )
         )
     return 0
 
@@ -4525,6 +4691,42 @@ def _build_parser() -> argparse.ArgumentParser:
     strategy_backtest_summarize.add_argument("--snapshot-id", default="")
     strategy_backtest_summarize.add_argument("--strategies", default="")
     strategy_backtest_summarize.add_argument("--results", action="append", default=[])
+    strategy_backtest_summarize.add_argument(
+        "--all-complete-days",
+        action="store_true",
+        help="Aggregate each strategy across complete dataset days and summarize once.",
+    )
+    strategy_backtest_summarize.add_argument(
+        "--dataset-id",
+        default="",
+        help="Dataset id used with --all-complete-days (required when multiple datasets exist).",
+    )
+    strategy_backtest_summarize.add_argument(
+        "--baseline-strategy",
+        default="",
+        help=(
+            "Baseline strategy for calibration-regression promotion checks "
+            "(default: s007 if present)."
+        ),
+    )
+    strategy_backtest_summarize.add_argument(
+        "--require-scored-fraction",
+        type=float,
+        default=0.9,
+        help="Minimum fraction of win/loss rows with valid model probabilities.",
+    )
+    strategy_backtest_summarize.add_argument(
+        "--ece-slack",
+        type=float,
+        default=0.01,
+        help="Allowed ECE regression vs baseline before failing promotion gate.",
+    )
+    strategy_backtest_summarize.add_argument(
+        "--brier-slack",
+        type=float,
+        default=0.01,
+        help="Allowed Brier regression vs baseline before failing promotion gate.",
+    )
     strategy_backtest_summarize.add_argument("--min-graded", type=int, default=200)
     strategy_backtest_summarize.add_argument("--bin-size", type=float, default=0.05)
     strategy_backtest_summarize.add_argument(
