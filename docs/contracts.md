@@ -5,7 +5,7 @@ This document defines stable artifact shapes and gate reason codes used by CLI f
 ## Strategy Report Contract
 
 Path:
-- `<REPORTS_DIR>/by-snapshot/<report_snapshot>/strategy-report.json`
+- `<REPORTS_DIR>/by-snapshot/<snapshot_id>/strategy-report.json`
 
 Required top-level keys:
 - `snapshot_id`
@@ -72,7 +72,7 @@ Paths:
 ## Backtest Readiness Contract
 
 Path:
-- `<REPORTS_DIR>/by-snapshot/<report_snapshot>/backtest-readiness.json`
+- `<REPORTS_DIR>/by-snapshot/<snapshot_id>/backtest-readiness.json`
 
 Required keys:
 - `snapshot_id`
@@ -85,7 +85,7 @@ Required keys:
 ## Backtest Summary Contract
 
 Path:
-- `<REPORTS_DIR>/by-snapshot/<report_snapshot>/backtest-summary.json`
+- `<REPORTS_DIR>/by-snapshot/<snapshot_id>/backtest-summary.json`
 
 Per-strategy metric fields include:
 - `strategy_id`
@@ -106,7 +106,7 @@ Per-strategy metric fields include:
 ## Settlement Contract
 
 Path:
-- `<REPORTS_DIR>/by-snapshot/<report_snapshot>/settlement.json`
+- `<REPORTS_DIR>/by-snapshot/<snapshot_id>/settlement.json`
 
 Required top-level keys:
 - `snapshot_id`

@@ -160,17 +160,17 @@ Implementation model:
 ## Key Artifacts
 
 Per snapshot:
-- `<REPORTS_DIR>/by-snapshot/<report_snapshot>/strategy-report.json`
-- `<REPORTS_DIR>/by-snapshot/<report_snapshot>/execution-plan.json`
-- `<REPORTS_DIR>/by-snapshot/<report_snapshot>/backtest-seed.jsonl`
-- `<REPORTS_DIR>/by-snapshot/<report_snapshot>/backtest-results-template.csv`
-- `<REPORTS_DIR>/by-snapshot/<report_snapshot>/backtest-readiness.json`
-- `<REPORTS_DIR>/by-snapshot/<report_snapshot>/brief-input.json`
-- `<REPORTS_DIR>/by-snapshot/<report_snapshot>/brief-pass1.json`
-- `<REPORTS_DIR>/by-snapshot/<report_snapshot>/strategy-brief.md` (only with `--write-markdown`)
-- `<REPORTS_DIR>/by-snapshot/<report_snapshot>/strategy-brief.tex`
-- `<REPORTS_DIR>/by-snapshot/<report_snapshot>/strategy-brief.pdf` (when PDF tooling is installed)
-- `<REPORTS_DIR>/by-snapshot/<report_snapshot>/strategy-brief.meta.json`
+- `<REPORTS_DIR>/by-snapshot/<snapshot_id>/strategy-report.json`
+- `<REPORTS_DIR>/by-snapshot/<snapshot_id>/execution-plan.json`
+- `<REPORTS_DIR>/by-snapshot/<snapshot_id>/backtest-seed.jsonl`
+- `<REPORTS_DIR>/by-snapshot/<snapshot_id>/backtest-results-template.csv`
+- `<REPORTS_DIR>/by-snapshot/<snapshot_id>/backtest-readiness.json`
+- `<REPORTS_DIR>/by-snapshot/<snapshot_id>/brief-input.json`
+- `<REPORTS_DIR>/by-snapshot/<snapshot_id>/brief-pass1.json`
+- `<REPORTS_DIR>/by-snapshot/<snapshot_id>/strategy-brief.md` (only with `--write-markdown`)
+- `<REPORTS_DIR>/by-snapshot/<snapshot_id>/strategy-brief.tex`
+- `<REPORTS_DIR>/by-snapshot/<snapshot_id>/strategy-brief.pdf` (when PDF tooling is installed)
+- `<REPORTS_DIR>/by-snapshot/<snapshot_id>/strategy-brief.meta.json`
 
 Latest mirrors:
 - `<REPORTS_DIR>/latest/strategy-report.json`
