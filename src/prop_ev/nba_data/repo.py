@@ -81,6 +81,9 @@ def _extract_players(game_payload: dict[str, Any]) -> dict[str, dict[str, Any]]:
         team_payload = game_payload.get(side, {})
         if not isinstance(team_payload, dict):
             continue
+        team_name = canonical_team_name(
+            f"{team_payload.get('teamCity', '')} {team_payload.get('teamName', '')}".strip()
+        )
         team_players = team_payload.get("players", [])
         if not isinstance(team_players, list):
             continue
@@ -98,6 +101,7 @@ def _extract_players(game_payload: dict[str, Any]) -> dict[str, dict[str, Any]]:
                 "name": name,
                 "statistics": stats if isinstance(stats, dict) else {},
                 "status": str(item.get("status", "")),
+                "team": team_name,
             }
     return players
 
@@ -241,39 +245,273 @@ class NBARepository:
         injuries_stale_hours: float,
         roster_stale_hours: float,
     ) -> tuple[dict[str, Any], dict[str, Any], Path, Path]:
-        reference_injuries = self.reference_dir / "injuries" / "latest.json"
-        today_key = datetime.now(UTC).strftime("%Y-%m-%d")
-        reference_roster_daily = self.reference_dir / "rosters" / f"roster-{today_key}.json"
-        reference_roster_latest = self.reference_dir / "rosters" / "latest.json"
-
         injuries_path = self._context_json_path("injuries")
         roster_path = self._context_json_path("roster")
-        official_pdf_dir = self.official_injury_pdf_dir()
-
-        injuries = load_or_fetch_context(
-            cache_path=injuries_path,
-            offline=offline,
-            refresh=refresh,
-            fetcher=lambda: {
-                "fetched_at_utc": _now_utc(),
-                "official": fetch_official_injury_links(pdf_cache_dir=official_pdf_dir),
-                "secondary": fetch_secondary_injuries(),
-            },
-            fallback_paths=[reference_injuries],
-            write_through_paths=[reference_injuries],
-            stale_after_hours=injuries_stale_hours,
-        )
-        roster = load_or_fetch_context(
-            cache_path=roster_path,
-            offline=offline,
-            refresh=refresh,
-            fetcher=lambda: fetch_roster_context(teams_in_scope=teams_in_scope),
-            fallback_paths=[reference_roster_daily, reference_roster_latest],
-            write_through_paths=[reference_roster_daily, reference_roster_latest],
-            stale_after_hours=roster_stale_hours,
-        )
+        snapshot_day = resolve_snapshot_date_str(self.snapshot_id)
+        target_day = resolve_snapshot_date(self.snapshot_id)
+        today = datetime.now(UTC).date()
+        teams_scope = {
+            canonical_team_name(str(team)) for team in teams_in_scope if str(team).strip()
+        }
+        historical = target_day < today
+        if historical:
+            injuries = load_or_fetch_context(
+                cache_path=injuries_path,
+                offline=offline,
+                refresh=refresh,
+                fetcher=lambda: self._fetch_historical_injuries_context(
+                    snapshot_day=snapshot_day,
+                    teams_in_scope=teams_scope,
+                    refresh=refresh,
+                ),
+                fallback_paths=[],
+                write_through_paths=[],
+                stale_after_hours=injuries_stale_hours,
+            )
+            roster = load_or_fetch_context(
+                cache_path=roster_path,
+                offline=offline,
+                refresh=refresh,
+                fetcher=lambda: self._fetch_historical_roster_context(
+                    snapshot_day=snapshot_day,
+                    teams_in_scope=teams_scope,
+                    refresh=refresh,
+                ),
+                fallback_paths=[],
+                write_through_paths=[],
+                stale_after_hours=roster_stale_hours,
+            )
+        else:
+            reference_injuries = self.reference_dir / "injuries" / "latest.json"
+            today_key = datetime.now(UTC).strftime("%Y-%m-%d")
+            reference_roster_daily = self.reference_dir / "rosters" / f"roster-{today_key}.json"
+            reference_roster_latest = self.reference_dir / "rosters" / "latest.json"
+            official_pdf_dir = self.official_injury_pdf_dir()
+            injuries = load_or_fetch_context(
+                cache_path=injuries_path,
+                offline=offline,
+                refresh=refresh,
+                fetcher=lambda: {
+                    "fetched_at_utc": _now_utc(),
+                    "official": fetch_official_injury_links(pdf_cache_dir=official_pdf_dir),
+                    "secondary": fetch_secondary_injuries(),
+                },
+                fallback_paths=[reference_injuries],
+                write_through_paths=[reference_injuries],
+                stale_after_hours=injuries_stale_hours,
+            )
+            roster = load_or_fetch_context(
+                cache_path=roster_path,
+                offline=offline,
+                refresh=refresh,
+                fetcher=lambda: fetch_roster_context(teams_in_scope=teams_in_scope),
+                fallback_paths=[reference_roster_daily, reference_roster_latest],
+                write_through_paths=[reference_roster_daily, reference_roster_latest],
+                stale_after_hours=roster_stale_hours,
+            )
         self._write_context_ref(updates={"injuries": injuries_path, "roster": roster_path})
         return injuries, roster, injuries_path, roster_path
+
+    def _fetch_historical_roster_context(
+        self,
+        *,
+        snapshot_day: str,
+        teams_in_scope: set[str],
+        refresh: bool,
+    ) -> dict[str, Any]:
+        results = self._fetch_historical_results(
+            snapshot_day=snapshot_day,
+            teams_in_scope=teams_in_scope,
+            refresh=refresh,
+        )
+        games = results.get("games", [])
+        game_rows = games if isinstance(games, list) else []
+
+        teams: dict[str, dict[str, Any]] = {}
+        for game in game_rows:
+            if not isinstance(game, dict):
+                continue
+            game_id = str(game.get("game_id", "")).strip()
+            home_team = canonical_team_name(str(game.get("home_team", "")))
+            away_team = canonical_team_name(str(game.get("away_team", "")))
+            if (
+                teams_in_scope
+                and home_team not in teams_in_scope
+                and away_team not in teams_in_scope
+            ):
+                continue
+            for team_name in (home_team, away_team):
+                if not team_name:
+                    continue
+                team_row = teams.setdefault(
+                    team_name,
+                    {
+                        "active": set(),
+                        "inactive": set(),
+                        "all": set(),
+                        "game_ids": set(),
+                        "source": "historical_boxscore",
+                    },
+                )
+                if game_id:
+                    game_ids = team_row.get("game_ids")
+                    if isinstance(game_ids, set):
+                        game_ids.add(game_id)
+            players = game.get("players", {})
+            if not isinstance(players, dict):
+                continue
+            for row in players.values():
+                if not isinstance(row, dict):
+                    continue
+                player_name = str(row.get("name", "")).strip()
+                player_norm = normalize_person_name(player_name)
+                team_name = canonical_team_name(str(row.get("team", "")))
+                if not player_norm or not team_name:
+                    continue
+                team_row = teams.setdefault(
+                    team_name,
+                    {
+                        "active": set(),
+                        "inactive": set(),
+                        "all": set(),
+                        "game_ids": set(),
+                        "source": "historical_boxscore",
+                    },
+                )
+                all_names = team_row.get("all")
+                if isinstance(all_names, set):
+                    all_names.add(player_norm)
+                status = str(row.get("status", "")).strip().upper()
+                if status == "INACTIVE":
+                    inactive = team_row.get("inactive")
+                    if isinstance(inactive, set):
+                        inactive.add(player_norm)
+                else:
+                    active = team_row.get("active")
+                    if isinstance(active, set):
+                        active.add(player_norm)
+
+        normalized_teams: dict[str, dict[str, Any]] = {}
+        for team_name, row in teams.items():
+            if not isinstance(row, dict):
+                continue
+            active = row.get("active")
+            inactive = row.get("inactive")
+            all_names = row.get("all")
+            game_ids = row.get("game_ids")
+            normalized_teams[team_name] = {
+                "active": sorted(active) if isinstance(active, set) else [],
+                "inactive": sorted(inactive) if isinstance(inactive, set) else [],
+                "all": sorted(all_names) if isinstance(all_names, set) else [],
+                "game_ids": sorted(game_ids) if isinstance(game_ids, set) else [],
+                "source": "historical_boxscore",
+            }
+
+        missing_roster_teams = sorted(
+            team for team in teams_in_scope if team not in normalized_teams
+        )
+        errors = results.get("errors", [])
+        return {
+            "source": "nba_data_historical_boxscore",
+            "fetched_at_utc": _now_utc(),
+            "ttl_minutes": 525600,
+            "status": "ok" if normalized_teams else "partial",
+            "games": [
+                {
+                    "game_id": str(game.get("game_id", "")),
+                    "home_team": canonical_team_name(str(game.get("home_team", ""))),
+                    "away_team": canonical_team_name(str(game.get("away_team", ""))),
+                    "game_status": str(game.get("game_status", "")),
+                    "game_status_text": str(game.get("game_status_text", "")),
+                }
+                for game in game_rows
+                if isinstance(game, dict)
+            ],
+            "teams": normalized_teams,
+            "count_games": len(game_rows),
+            "count_teams": len(normalized_teams),
+            "missing_roster_teams": missing_roster_teams,
+            "errors": errors if isinstance(errors, list) else [],
+            "snapshot_date": snapshot_day,
+        }
+
+    def _fetch_historical_injuries_context(
+        self,
+        *,
+        snapshot_day: str,
+        teams_in_scope: set[str],
+        refresh: bool,
+    ) -> dict[str, Any]:
+        results = self._fetch_historical_results(
+            snapshot_day=snapshot_day,
+            teams_in_scope=teams_in_scope,
+            refresh=refresh,
+        )
+        games = results.get("games", [])
+        game_rows = games if isinstance(games, list) else []
+
+        rows: list[dict[str, Any]] = []
+        for game in game_rows:
+            if not isinstance(game, dict):
+                continue
+            players = game.get("players", {})
+            if not isinstance(players, dict):
+                continue
+            for row in players.values():
+                if not isinstance(row, dict):
+                    continue
+                player = str(row.get("name", "")).strip()
+                player_norm = normalize_person_name(player)
+                team_name = canonical_team_name(str(row.get("team", "")))
+                if not player or not player_norm or not team_name:
+                    continue
+                status = str(row.get("status", "")).strip().upper()
+                rows.append(
+                    {
+                        "player": player,
+                        "player_norm": player_norm,
+                        "team": team_name,
+                        "team_norm": team_name,
+                        "date_update": snapshot_day,
+                        "status": "out" if status == "INACTIVE" else "available",
+                        "note": "historical_boxscore_status",
+                        "source": "historical_boxscore",
+                    }
+                )
+
+        official = {
+            "source": "official_nba_historical_boxscore",
+            "url": "",
+            "fetched_at_utc": _now_utc(),
+            "ttl_minutes": 525600,
+            "status": "ok" if rows else "error",
+            "rows": rows,
+            "rows_count": len(rows),
+            "count": len(rows),
+            "parse_status": "ok" if rows else "error",
+            "parse_error": "" if rows else "no_historical_boxscore_rows",
+        }
+        secondary = {
+            "source": "secondary_historical_boxscore",
+            "url": "",
+            "fetched_at_utc": _now_utc(),
+            "ttl_minutes": 525600,
+            "status": "ok",
+            "rows": [],
+            "count": 0,
+        }
+        errors = results.get("errors", [])
+        return {
+            "source": "nba_data_historical_boxscore",
+            "fetched_at_utc": _now_utc(),
+            "snapshot_date": snapshot_day,
+            "status": "ok" if rows else "partial",
+            "official": official,
+            "secondary": secondary,
+            "errors": errors if isinstance(errors, list) else [],
+            "count_games": len(game_rows),
+            "count_errors": len(errors) if isinstance(errors, list) else 0,
+        }
 
     def load_results_for_settlement(
         self,
