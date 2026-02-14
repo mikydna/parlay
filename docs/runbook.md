@@ -149,6 +149,9 @@ Strategy IDs:
 - `s009` — Conservative Quality + Rolling Priors (s008 + rolling settled-outcome ranking tilt)
 - `s010` — Tier B + Quality Floor (s002 + conservative quality/uncertainty gates)
 - `s011` — Tier B + Quality + Rolling Priors (s010 + rolling settled-outcome ranking tilt)
+- `s012` — Tier B + Aggressive Best EV (s002 + best-EV portfolio ranking)
+- `s013` — Tier B + Quality-Weighted EV Low (s002 + quality-weighted conservative EV-low ranking)
+- `s014` — Median No-Vig + Tier B (s003 + tier-B edges)
 
 Legacy IDs are not accepted.
 
