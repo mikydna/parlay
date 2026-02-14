@@ -85,6 +85,8 @@ def test_market_baseline_median_book_and_gates() -> None:
         "median_book_interpolated",
         "best_sides_fallback",
     }
+    assert row["line_source"] in {"exact_point_pairs", "reference_curve", "best_sides"}
+    assert row["books_used"] == ["book_a", "book_b"]
     assert row["book_pair_count"] == 2
     assert row["p_over_book_median"] is not None
     assert row["hold_book_median"] is not None
@@ -277,6 +279,8 @@ def test_market_baseline_interpolates_when_exact_book_pairs_missing() -> None:
 
     candidate = next(row for row in report["candidates"] if row["point"] == 22.5)
     assert candidate["baseline_used"] == "median_book_interpolated"
+    assert candidate["line_source"] == "reference_curve"
     assert candidate["reference_line_method"] == "interpolated"
     assert candidate["reference_points_count"] >= 2
+    assert candidate["books_used"] == []
     assert candidate["p_over_fair"] is not None
