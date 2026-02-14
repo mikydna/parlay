@@ -133,7 +133,20 @@ def pick_promotion_winner(strategy_rows: list[dict[str, Any]]) -> dict[str, Any]
             continue
         eligible.append(row)
 
-    if not eligible:
+    winner = pick_execution_winner(eligible)
+    if winner is None:
+        return None
+    return {
+        **winner,
+        "decision": (
+            "selected_by=roi_then_rows_graded_then_ece_then_brier_then_strategy_id "
+            "(promotion_gate_pass_only)"
+        ),
+    }
+
+
+def pick_execution_winner(strategy_rows: list[dict[str, Any]]) -> dict[str, Any] | None:
+    if not strategy_rows:
         return None
 
     def _key(row: dict[str, Any]) -> tuple[float, int, float, float, str]:
@@ -150,14 +163,20 @@ def pick_promotion_winner(strategy_rows: list[dict[str, Any]]) -> dict[str, Any]
             strategy_id,
         )
 
-    winner = sorted(eligible, key=_key)[0]
+    winner = sorted(strategy_rows, key=_key)[0]
+    gate = winner.get("promotion_gate") if isinstance(winner.get("promotion_gate"), dict) else {}
+    gate_status = str(gate.get("status", "")).strip().lower() if isinstance(gate, dict) else ""
     return {
         "strategy_id": str(winner.get("strategy_id", "")),
         "roi": winner.get("roi"),
         "rows_graded": winner.get("rows_graded"),
         "ece": winner.get("ece"),
         "brier": winner.get("brier"),
-        "decision": "selected_by=roi_then_rows_graded_then_ece_then_brier_then_strategy_id",
+        "promotion_gate_status": gate_status,
+        "decision": (
+            "selected_by=roi_then_rows_graded_then_ece_then_brier_then_strategy_id "
+            "(execution_winner_gate_advisory)"
+        ),
     }
 
 

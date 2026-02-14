@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import json
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -454,6 +455,8 @@ def test_strategy_backtest_summarize_writes_power_guidance_for_complete_days(
     assert summary_path
     payload = json.loads(Path(summary_path).read_text(encoding="utf-8"))
     power_guidance = payload.get("power_guidance", {})
+    assert isinstance(payload.get("winner"), dict)
+    assert isinstance(payload.get("promotion_winner"), dict)
     assert power_guidance["baseline_strategy_id"] == "s007"
     strategy_rows = power_guidance.get("strategies", [])
     assert len(strategy_rows) == 1
@@ -560,3 +563,115 @@ def test_strategy_backtest_summarize_analysis_scoreboard_is_deterministic(
     assert _canonical_scoreboard_payload(analysis_payloads[0]) == _canonical_scoreboard_payload(
         analysis_payloads[1]
     )
+
+
+def test_strategy_backtest_summarize_analysis_pdf_missing_tool_keeps_tex(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch,
+) -> None:
+    data_root = tmp_path / "data" / "odds_api"
+    store = SnapshotStore(data_root)
+    snapshot_id = "day-a-2026-02-12"
+    store.ensure_snapshot(snapshot_id)
+    reports_dir = snapshot_reports_dir(store, snapshot_id)
+    _write_backtest_csv(
+        reports_dir / "backtest-results-template.s008.csv",
+        [
+            {
+                "snapshot_id": snapshot_id,
+                "strategy_id": "s008",
+                "market": "player_points",
+                "recommended_side": "over",
+                "selected_price_american": 100,
+                "stake_units": 1,
+                "result": "win",
+            }
+        ],
+    )
+
+    def _missing(*, tex_path: Path, pdf_path: Path) -> dict[str, Any]:
+        return {"status": "missing_tool", "message": "tectonic missing", "pdf_path": str(pdf_path)}
+
+    monkeypatch.setattr("prop_ev.scoreboard_pdf.compile_pdf", _missing)
+    code = main(
+        [
+            "--data-dir",
+            str(data_root),
+            "strategy",
+            "backtest-summarize",
+            "--snapshot-id",
+            snapshot_id,
+            "--strategies",
+            "s008",
+            "--write-analysis-scoreboard",
+            "--analysis-run-id",
+            "pdf-missing",
+            "--write-analysis-pdf",
+        ]
+    )
+    out = capsys.readouterr().out
+    assert code == 0
+    analysis_json = _extract_output_path(out, key="analysis_scoreboard_json")
+    assert analysis_json
+    analysis_dir = Path(analysis_json).parent
+    assert (analysis_dir / "aggregate-scoreboard.tex").exists()
+    assert not (analysis_dir / "aggregate-scoreboard.pdf").exists()
+    assert _extract_output_path(out, key="analysis_scoreboard_pdf_status") == "missing_tool"
+
+
+def test_strategy_backtest_summarize_analysis_pdf_keep_tex_flag(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch,
+) -> None:
+    data_root = tmp_path / "data" / "odds_api"
+    store = SnapshotStore(data_root)
+    snapshot_id = "day-a-2026-02-13"
+    store.ensure_snapshot(snapshot_id)
+    reports_dir = snapshot_reports_dir(store, snapshot_id)
+    _write_backtest_csv(
+        reports_dir / "backtest-results-template.s008.csv",
+        [
+            {
+                "snapshot_id": snapshot_id,
+                "strategy_id": "s008",
+                "market": "player_points",
+                "recommended_side": "over",
+                "selected_price_american": 100,
+                "stake_units": 1,
+                "result": "win",
+            }
+        ],
+    )
+
+    def _ok(*, tex_path: Path, pdf_path: Path) -> dict[str, Any]:
+        pdf_path.write_bytes(b"%PDF-1.4\n")
+        return {"status": "ok", "message": "pdf generated", "pdf_path": str(pdf_path)}
+
+    monkeypatch.setattr("prop_ev.scoreboard_pdf.compile_pdf", _ok)
+    code = main(
+        [
+            "--data-dir",
+            str(data_root),
+            "strategy",
+            "backtest-summarize",
+            "--snapshot-id",
+            snapshot_id,
+            "--strategies",
+            "s008",
+            "--write-analysis-scoreboard",
+            "--analysis-run-id",
+            "pdf-keep-tex",
+            "--write-analysis-pdf",
+            "--keep-analysis-tex",
+        ]
+    )
+    out = capsys.readouterr().out
+    assert code == 0
+    analysis_json = _extract_output_path(out, key="analysis_scoreboard_json")
+    assert analysis_json
+    analysis_dir = Path(analysis_json).parent
+    assert (analysis_dir / "aggregate-scoreboard.tex").exists()
+    assert (analysis_dir / "aggregate-scoreboard.pdf").exists()
+    assert _extract_output_path(out, key="analysis_scoreboard_pdf_status") == "ok"
