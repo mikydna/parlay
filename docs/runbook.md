@@ -69,6 +69,18 @@ uv run prop-ev data verify --dataset-id <DATASET_ID> --from 2026-01-22 --to 2026
 uv run prop-ev data guardrails --json
 ```
 
+If known historical API gaps are acceptable, keep strict preflight but allowlist them explicitly:
+
+```bash
+uv run prop-ev data done-days \
+  --dataset-id <DATASET_ID> \
+  --from 2026-01-22 --to 2026-02-12 \
+  --allow-incomplete-day 2026-01-24 \
+  --allow-incomplete-day 2026-01-25 \
+  --allow-incomplete-reason upstream_404 \
+  --require-complete --json
+```
+
 Check known cache misses without spending:
 
 ```bash

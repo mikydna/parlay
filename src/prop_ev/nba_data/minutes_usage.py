@@ -45,8 +45,16 @@ def _read_clean_table(
     schema_version: int,
 ) -> pl.DataFrame:
     glob_path = _clean_table_glob(layout, table=table, schema_version=schema_version)
+    season_type_slug = slugify_season_type(season_type)
+    season_type_slug_expr = (
+        pl.col("season_type")
+        .cast(pl.Utf8)
+        .str.to_lowercase()
+        .str.replace_all(r"[^a-z0-9]+", "_")
+        .str.strip_chars("_")
+    )
     frame = pl.scan_parquet(glob_path).filter(
-        pl.col("season").is_in(seasons) & (pl.col("season_type") == season_type)
+        pl.col("season").is_in(seasons) & (season_type_slug_expr == season_type_slug)
     )
     return frame.collect()
 
