@@ -63,8 +63,6 @@ def test_summarize_backtest_rows_roi_and_brier(tmp_path: Path) -> None:
     rows = csv_path.read_text(encoding="utf-8").splitlines()
     assert rows[0]
 
-    # Skip CSV parsing here: summarize_backtest_rows operates on DictReader rows in production,
-    # but the math is what matters for this unit test.
     summary = summarize_backtest_rows(
         [
             {
@@ -111,16 +109,18 @@ def test_summarize_backtest_rows_roi_and_brier(tmp_path: Path) -> None:
         bin_size=0.1,
     )
     assert summary.rows_graded == 3
+    assert summary.rows_scored == 2
     assert summary.wins == 1
     assert summary.losses == 1
     assert summary.pushes == 1
-    # +1 (win at +100) -1 (loss) +0 (push) => 0 pnl on 3 units stake.
     assert summary.total_pnl_units == 0.0
     assert summary.total_stake_units == 3.0
     assert summary.roi == 0.0
-    # Brier excludes pushes: mean((0.6-1)^2, (0.55-0)^2) = (0.16 + 0.3025) / 2
     assert summary.brier == 0.23125
     assert summary.brier_low == 0.22625
+    assert summary.log_loss == 0.654667
+    assert summary.ece == 0.075
+    assert summary.mce == 0.075
     assert summary.avg_ev_low == 0.013333
     assert summary.avg_quality_score == 0.6
     assert summary.avg_p_hit_low == 0.525
@@ -147,10 +147,65 @@ def test_summarize_backtest_rows_accepts_decimal_price_strings() -> None:
         bin_size=0.1,
     )
     assert summary.rows_graded == 2
+    assert summary.rows_scored == 2
     assert summary.wins == 1
     assert summary.losses == 1
     assert summary.total_stake_units == 2.0
     assert summary.brier is not None
+    assert summary.log_loss is not None
+
+
+def test_summarize_backtest_rows_log_loss_clamps_edges() -> None:
+    summary = summarize_backtest_rows(
+        [
+            {
+                "selected_price_american": "-110",
+                "stake_units": "1",
+                "model_p_hit": "0.0",
+                "result": "win",
+            },
+            {
+                "selected_price_american": "-110",
+                "stake_units": "1",
+                "model_p_hit": "1.0",
+                "result": "loss",
+            },
+        ],
+        strategy_id="s001",
+        bin_size=0.5,
+    )
+    assert summary.rows_scored == 2
+    assert summary.brier == 1.0
+    assert summary.log_loss == 13.815511
+    assert summary.ece == 1.0
+    assert summary.mce == 1.0
+
+
+def test_summarize_backtest_rows_rows_scored_ignores_invalid_probabilities() -> None:
+    summary = summarize_backtest_rows(
+        [
+            {
+                "selected_price_american": "-110",
+                "stake_units": "1",
+                "model_p_hit": "0.4",
+                "result": "win",
+            },
+            {
+                "selected_price_american": "-110",
+                "stake_units": "1",
+                "model_p_hit": "",
+                "result": "loss",
+            },
+        ],
+        strategy_id="s001",
+        bin_size=0.1,
+    )
+    assert summary.wins == 1
+    assert summary.losses == 1
+    assert summary.rows_graded == 2
+    assert summary.rows_scored == 1
+    assert summary.ece == 0.6
+    assert summary.mce == 0.6
 
 
 def test_pick_winner_min_graded(tmp_path: Path) -> None:

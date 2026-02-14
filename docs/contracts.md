@@ -86,11 +86,24 @@ Required keys:
 
 Path:
 - `<REPORTS_DIR>/by-snapshot/<snapshot_id>/backtest-summary.json`
+- `<REPORTS_DIR>/by-snapshot/<report_snapshot>/backtest-summary.json`
 
-Per-strategy metric fields include:
+Summary-level required keys:
+- `snapshot_id`
+- `strategy_count`
+- `min_graded`
+- `bin_size`
+- `baseline_strategy_id`
+- `baseline_found`
+- `require_scored_fraction`
+- `ece_slack`
+- `brier_slack`
+
+Per-strategy required fields:
 - `strategy_id`
 - `rows_total`
 - `rows_graded`
+- `rows_scored`
 - `wins`
 - `losses`
 - `pushes`
@@ -102,6 +115,11 @@ Per-strategy metric fields include:
 - `avg_quality_score`
 - `avg_p_hit_low`
 - `actionability_rate`
+- `log_loss`
+- `ece`
+- `mce`
+- `calibration` (bucket list with `bucket_low`, `bucket_high`, `count`, `avg_p`, `hit_rate`, `brier`)
+- `promotion_gate` (`status`, `reasons`, `rows_win_loss`, `rows_scored`, `scored_fraction`, `thresholds`)
 
 ## Settlement Contract
 
