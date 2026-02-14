@@ -20,8 +20,10 @@ If env vars are missing, the CLI also checks key files at repo root:
 Set `OPENAI_API_KEY` for LLM summaries, or place the key in `OPENAI_KEY` /
 `OPENAI_KEY.ignore` at repo root.
 Set `ODDS_DATA_DIR` in your shell (or pass `--data-dir`) to the storage location,
-for example `/Users/$USER/Documents/Code/parlay-data/odds_api`.
-Reports are written to `REPORTS_DIR` (default: sibling `reports/` next to `ODDS_DATA_DIR`).
+for example `/Users/$USER/Documents/Code/parlay-data/lakes/odds`.
+Set `NBA_DATA_DIR` via `PROP_EV_NBA_DATA_DIR`, for example
+`/Users/$USER/Documents/Code/parlay-data/lakes/nba`.
+Reports are written to `REPORTS_DIR` (default: sibling `reports/odds/` next to `ODDS_DATA_DIR`).
 
 Bookmaker whitelist defaults are in `config/bookmakers.json` (currently DraftKings + FanDuel).
 When `--bookmakers` is omitted, snapshot/playbook commands use this whitelist automatically.
@@ -30,7 +32,7 @@ When `--bookmakers` is omitted, snapshot/playbook commands use this whitelist au
 
 ```bash
 uv run prop-ev --help
-uv run prop-ev --data-dir /Users/$USER/Documents/Code/parlay-data/odds_api snapshot ls
+uv run prop-ev --data-dir /Users/$USER/Documents/Code/parlay-data/lakes/odds snapshot ls
 uv run prop-ev snapshot slate --dry-run
 uv run prop-ev snapshot props --dry-run --max-events 10
 uv run prop-ev strategy health --offline
@@ -160,16 +162,16 @@ uv run prop-ev playbook run --block-paid
 This allows free endpoints (like event listing) but makes paid endpoints cache-only.
 
 Strategy reports are written to:
-- `<REPORTS_DIR>/snapshots/<REPORT_SNAPSHOT>/strategy-report.json`
-- `<REPORTS_DIR>/snapshots/<REPORT_SNAPSHOT>/strategy-report.md`
-- `<REPORTS_DIR>/snapshots/<REPORT_SNAPSHOT>/backtest-seed.jsonl`
-- `<REPORTS_DIR>/snapshots/<REPORT_SNAPSHOT>/backtest-results-template.csv`
-- `<REPORTS_DIR>/snapshots/<REPORT_SNAPSHOT>/backtest-readiness.json`
+- `<REPORTS_DIR>/by-snapshot/<REPORT_SNAPSHOT>/strategy-report.json`
+- `<REPORTS_DIR>/by-snapshot/<REPORT_SNAPSHOT>/strategy-report.md`
+- `<REPORTS_DIR>/by-snapshot/<REPORT_SNAPSHOT>/backtest-seed.jsonl`
+- `<REPORTS_DIR>/by-snapshot/<REPORT_SNAPSHOT>/backtest-results-template.csv`
+- `<REPORTS_DIR>/by-snapshot/<REPORT_SNAPSHOT>/backtest-readiness.json`
 
 Per-strategy runs also write suffixed artifacts:
-- `<REPORTS_DIR>/snapshots/<REPORT_SNAPSHOT>/strategy-report.<STRATEGY_ID>.json`
-- `<REPORTS_DIR>/snapshots/<REPORT_SNAPSHOT>/strategy-report.<STRATEGY_ID>.md`
-- `<REPORTS_DIR>/snapshots/<REPORT_SNAPSHOT>/backtest-results-template.<STRATEGY_ID>.csv`
+- `<REPORTS_DIR>/by-snapshot/<REPORT_SNAPSHOT>/strategy-report.<STRATEGY_ID>.json`
+- `<REPORTS_DIR>/by-snapshot/<REPORT_SNAPSHOT>/strategy-report.<STRATEGY_ID>.md`
+- `<REPORTS_DIR>/by-snapshot/<REPORT_SNAPSHOT>/backtest-results-template.<STRATEGY_ID>.csv`
 
 Rebuild backtest artifacts for any snapshot:
 
@@ -180,15 +182,16 @@ uv run prop-ev strategy backtest-summarize --snapshot-id <SNAPSHOT_ID> --strateg
 ```
 
 Strategy context caches are written to:
-- `<ODDS_DATA_DIR>/snapshots/<SNAPSHOT_ID>/context/injuries.json`
-- `<ODDS_DATA_DIR>/snapshots/<SNAPSHOT_ID>/context/roster.json`
-- `<ODDS_DATA_DIR>/snapshots/<SNAPSHOT_ID>/context/results.json`
-- `<ODDS_DATA_DIR>/snapshots/<SNAPSHOT_ID>/context/official_injury_pdf/latest.pdf`
+- `<NBA_DATA_DIR>/context/snapshots/<SNAPSHOT_ID>/injuries.json`
+- `<NBA_DATA_DIR>/context/snapshots/<SNAPSHOT_ID>/roster.json`
+- `<NBA_DATA_DIR>/context/snapshots/<SNAPSHOT_ID>/results.json`
+- `<NBA_DATA_DIR>/context/snapshots/<SNAPSHOT_ID>/official_injury_pdf/latest.pdf`
+- `<ODDS_DATA_DIR>/snapshots/<SNAPSHOT_ID>/context_ref.json` (lightweight pointer only)
 
 Global context mirrors (for fallback and reruns) are written to:
-- `<ODDS_DATA_DIR>/reference/injuries/latest.json`
-- `<ODDS_DATA_DIR>/reference/rosters/latest.json`
-- `<ODDS_DATA_DIR>/reference/rosters/roster-YYYY-MM-DD.json`
+- `<NBA_DATA_DIR>/reference/injuries/latest.json`
+- `<NBA_DATA_DIR>/reference/rosters/latest.json`
+- `<NBA_DATA_DIR>/reference/rosters/roster-YYYY-MM-DD.json`
 
 ## Playbook Workflow (Reader-Friendly Briefs)
 
@@ -249,16 +252,16 @@ uv run prop-ev playbook publish --snapshot-id <SNAPSHOT_ID>
 ```
 
 Playbook outputs per snapshot:
-- `<REPORTS_DIR>/snapshots/<REPORT_SNAPSHOT>/brief-input.json`
-- `<REPORTS_DIR>/snapshots/<REPORT_SNAPSHOT>/brief-pass1.json`
-- `<REPORTS_DIR>/snapshots/<REPORT_SNAPSHOT>/strategy-brief.md` (only with `--write-markdown`)
-- `<REPORTS_DIR>/snapshots/<REPORT_SNAPSHOT>/strategy-brief.tex`
-- `<REPORTS_DIR>/snapshots/<REPORT_SNAPSHOT>/strategy-brief.pdf` (if `tectonic` exists)
-- `<REPORTS_DIR>/snapshots/<REPORT_SNAPSHOT>/strategy-brief.meta.json`
+- `<REPORTS_DIR>/by-snapshot/<REPORT_SNAPSHOT>/brief-input.json`
+- `<REPORTS_DIR>/by-snapshot/<REPORT_SNAPSHOT>/brief-pass1.json`
+- `<REPORTS_DIR>/by-snapshot/<REPORT_SNAPSHOT>/strategy-brief.md` (only with `--write-markdown`)
+- `<REPORTS_DIR>/by-snapshot/<REPORT_SNAPSHOT>/strategy-brief.tex`
+- `<REPORTS_DIR>/by-snapshot/<REPORT_SNAPSHOT>/strategy-brief.pdf` (if `tectonic` exists)
+- `<REPORTS_DIR>/by-snapshot/<REPORT_SNAPSHOT>/strategy-brief.meta.json`
 
 Discovery vs execution report output:
-- `<REPORTS_DIR>/snapshots/<REPORT_SNAPSHOT>/discovery-execution.json`
-- `<REPORTS_DIR>/snapshots/<REPORT_SNAPSHOT>/discovery-execution.md`
+- `<REPORTS_DIR>/by-snapshot/<REPORT_SNAPSHOT>/discovery-execution.json`
+- `<REPORTS_DIR>/by-snapshot/<REPORT_SNAPSHOT>/discovery-execution.md`
 
 Strategy report health now includes:
 - feed status contract (`official_injuries`, `secondary_injuries`, `roster`)

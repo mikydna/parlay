@@ -9,6 +9,8 @@ from contextlib import suppress
 from pathlib import Path
 from typing import Any
 
+from prop_ev.data_paths import resolve_runtime_root
+
 
 def _atomic_write_json(path: Path, value: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -27,11 +29,16 @@ class NBADataCacheStore:
     """Shared key-addressed cache for NBA repository requests."""
 
     def __init__(self, root: Path | str = Path("data/odds_api")) -> None:
-        self.root = Path(root)
-        self.cache_dir = self.root / "nba_cache"
+        self.root = Path(root).resolve()
+        self.runtime_root = resolve_runtime_root(self.root)
+        self.cache_dir = self.runtime_root / "nba_cache"
         self.requests_dir = self.cache_dir / "requests"
         self.responses_dir = self.cache_dir / "responses"
         self.meta_dir = self.cache_dir / "meta"
+        self.legacy_cache_dir = self.root / "nba_cache"
+        self.legacy_requests_dir = self.legacy_cache_dir / "requests"
+        self.legacy_responses_dir = self.legacy_cache_dir / "responses"
+        self.legacy_meta_dir = self.legacy_cache_dir / "meta"
         self.requests_dir.mkdir(parents=True, exist_ok=True)
         self.responses_dir.mkdir(parents=True, exist_ok=True)
         self.meta_dir.mkdir(parents=True, exist_ok=True)
@@ -45,21 +52,32 @@ class NBADataCacheStore:
     def _meta_path(self, key: str) -> Path:
         return self.meta_dir / f"{key}.json"
 
+    def _legacy_request_path(self, key: str) -> Path:
+        return self.legacy_requests_dir / f"{key}.json"
+
+    def _legacy_response_path(self, key: str) -> Path:
+        return self.legacy_responses_dir / f"{key}.json"
+
+    def _legacy_meta_path(self, key: str) -> Path:
+        return self.legacy_meta_dir / f"{key}.json"
+
     def has_response(self, key: str) -> bool:
-        return self._response_path(key).exists()
+        return self._response_path(key).exists() or self._legacy_response_path(key).exists()
 
     def load_response(self, key: str) -> Any | None:
-        path = self._response_path(key)
-        if not path.exists():
-            return None
-        return json.loads(path.read_text(encoding="utf-8"))
+        for path in (self._response_path(key), self._legacy_response_path(key)):
+            if not path.exists():
+                continue
+            return json.loads(path.read_text(encoding="utf-8"))
+        return None
 
     def load_meta(self, key: str) -> dict[str, Any] | None:
-        path = self._meta_path(key)
-        if not path.exists():
-            return None
-        payload = json.loads(path.read_text(encoding="utf-8"))
-        return payload if isinstance(payload, dict) else None
+        for path in (self._meta_path(key), self._legacy_meta_path(key)):
+            if not path.exists():
+                continue
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            return payload if isinstance(payload, dict) else None
+        return None
 
     def write_request(self, key: str, request_data: dict[str, Any]) -> None:
         _atomic_write_json(self._request_path(key), request_data)

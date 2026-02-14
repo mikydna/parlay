@@ -7,6 +7,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from prop_ev.data_paths import resolve_runtime_root
+
 
 def current_month_utc() -> str:
     """Return current UTC month as YYYY-MM."""
@@ -80,7 +82,15 @@ def read_odds_usage(data_root: Path, month: str) -> dict[str, Any]:
 
 def read_llm_usage(data_root: Path, month: str) -> dict[str, Any]:
     """Summarize LLM usage for one month from the usage ledger."""
-    path = data_root / "llm_usage" / f"usage-{month}.jsonl"
+    root = Path(data_root).resolve()
+    if root.name == "runtime":
+        path = root / "llm_usage" / f"usage-{month}.jsonl"
+        legacy_path = root.parent / "llm_usage" / f"usage-{month}.jsonl"
+    else:
+        path = resolve_runtime_root(root) / "llm_usage" / f"usage-{month}.jsonl"
+        legacy_path = root / "llm_usage" / f"usage-{month}.jsonl"
+    if not path.exists() and legacy_path.exists():
+        path = legacy_path
     rows = _load_jsonl(path)
     total_cost_usd = 0.0
     total_input_tokens = 0
