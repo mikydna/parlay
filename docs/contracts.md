@@ -50,6 +50,29 @@ Candidate pricing-quality fields:
 - `reference_line_method` (`exact`, `interpolated`, `clamped_low`, `clamped_high`, `missing`)
 - `reference_points_count`
 
+## ExecutionPlan Contract
+
+Path:
+- `<REPORTS_DIR>/by-snapshot/<snapshot_id>/execution-plan.json`
+
+Required top-level keys:
+- `schema_version` (`1`)
+- `snapshot_id`
+- `strategy_id`
+- `generated_at_utc`
+- `constraints` (`max_picks`, `max_per_player`, `max_per_game`)
+- `counts` (`candidate_lines`, `eligible_lines`, `selected_lines`, `excluded_lines`)
+- `selected`
+- `excluded`
+- `exclusion_reason_counts`
+
+Validation invariants:
+- `counts.selected_lines == len(selected)`
+- `counts.excluded_lines == len(excluded)`
+- selected rows have empty `portfolio_reason` and positive unique `portfolio_rank`
+- excluded rows have non-empty `portfolio_reason`
+- selected rows obey configured `max_picks`, `max_per_player`, and `max_per_game`
+
 ## Brief Artifact Contract
 
 Paths:
