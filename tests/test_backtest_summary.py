@@ -24,7 +24,12 @@ def test_summarize_backtest_rows_roi_and_brier(tmp_path: Path) -> None:
                 "selected_price_american": 100,
                 "stake_units": 1,
                 "model_p_hit": 0.6,
+                "p_hit_low": 0.55,
                 "best_ev": 0.05,
+                "ev_low": 0.03,
+                "quality_score": 0.7,
+                "summary_candidate_lines": 2,
+                "summary_eligible_lines": 1,
                 "result": "win",
             },
             {
@@ -32,7 +37,12 @@ def test_summarize_backtest_rows_roi_and_brier(tmp_path: Path) -> None:
                 "selected_price_american": -110,
                 "stake_units": 1,
                 "model_p_hit": 0.55,
+                "p_hit_low": 0.5,
                 "best_ev": 0.02,
+                "ev_low": 0.01,
+                "quality_score": 0.6,
+                "summary_candidate_lines": 2,
+                "summary_eligible_lines": 1,
                 "result": "loss",
             },
             {
@@ -40,7 +50,12 @@ def test_summarize_backtest_rows_roi_and_brier(tmp_path: Path) -> None:
                 "selected_price_american": -110,
                 "stake_units": 1,
                 "model_p_hit": 0.5,
+                "p_hit_low": 0.45,
                 "best_ev": 0.0,
+                "ev_low": 0.0,
+                "quality_score": 0.5,
+                "summary_candidate_lines": 2,
+                "summary_eligible_lines": 1,
                 "result": "push",
             },
         ],
@@ -57,7 +72,12 @@ def test_summarize_backtest_rows_roi_and_brier(tmp_path: Path) -> None:
                 "selected_price_american": "100",
                 "stake_units": "1",
                 "model_p_hit": "0.6",
+                "p_hit_low": "0.55",
                 "best_ev": "0.05",
+                "ev_low": "0.03",
+                "quality_score": "0.7",
+                "summary_candidate_lines": "2",
+                "summary_eligible_lines": "1",
                 "result": "win",
             },
             {
@@ -65,7 +85,12 @@ def test_summarize_backtest_rows_roi_and_brier(tmp_path: Path) -> None:
                 "selected_price_american": "-110",
                 "stake_units": "1",
                 "model_p_hit": "0.55",
+                "p_hit_low": "0.5",
                 "best_ev": "0.02",
+                "ev_low": "0.01",
+                "quality_score": "0.6",
+                "summary_candidate_lines": "2",
+                "summary_eligible_lines": "1",
                 "result": "loss",
             },
             {
@@ -73,7 +98,12 @@ def test_summarize_backtest_rows_roi_and_brier(tmp_path: Path) -> None:
                 "selected_price_american": "-110",
                 "stake_units": "1",
                 "model_p_hit": "0.5",
+                "p_hit_low": "0.45",
                 "best_ev": "0.0",
+                "ev_low": "0.0",
+                "quality_score": "0.5",
+                "summary_candidate_lines": "2",
+                "summary_eligible_lines": "1",
                 "result": "push",
             },
         ],
@@ -90,6 +120,11 @@ def test_summarize_backtest_rows_roi_and_brier(tmp_path: Path) -> None:
     assert summary.roi == 0.0
     # Brier excludes pushes: mean((0.6-1)^2, (0.55-0)^2) = (0.16 + 0.3025) / 2
     assert summary.brier == 0.23125
+    assert summary.brier_low == 0.22625
+    assert summary.avg_ev_low == 0.013333
+    assert summary.avg_quality_score == 0.6
+    assert summary.avg_p_hit_low == 0.525
+    assert summary.actionability_rate == 0.5
 
 
 def test_pick_winner_min_graded(tmp_path: Path) -> None:

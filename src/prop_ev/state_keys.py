@@ -50,6 +50,7 @@ STRATEGY_TITLE_KEY = {
     "s005": "Hold-Cap Gate",
     "s006": "Dispersion-IQR Gate",
     "s007": "Quality Composite Gate",
+    "s008": "Conservative Quality Floor",
 }
 
 STRATEGY_DESCRIPTION_KEY = {
@@ -66,6 +67,10 @@ STRATEGY_DESCRIPTION_KEY = {
     "s007": (
         "Composes median no-vig baseline with min-2 book-pair and hold-cap gates "
         "(s003 + s004 + s005)."
+    ),
+    "s008": (
+        "Extends quality composite gating with conservative uncertainty and EV-low floors "
+        "for more stable execution picks."
     ),
 }
 

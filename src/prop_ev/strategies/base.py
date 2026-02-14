@@ -63,6 +63,9 @@ class StrategyRecipe:
     min_book_pairs: int | None = None
     hold_cap: float | None = None
     p_over_iqr_cap: float | None = None
+    min_quality_score: float | None = None
+    min_ev_low: float | None = None
+    max_uncertainty_band: float | None = None
 
 
 class StrategyPlugin(Protocol):
@@ -97,6 +100,17 @@ def compose_strategy_recipes(*recipes: StrategyRecipe) -> StrategyRecipe:
                 recipe.p_over_iqr_cap
                 if recipe.p_over_iqr_cap is not None
                 else merged.p_over_iqr_cap
+            ),
+            min_quality_score=(
+                recipe.min_quality_score
+                if recipe.min_quality_score is not None
+                else merged.min_quality_score
+            ),
+            min_ev_low=recipe.min_ev_low if recipe.min_ev_low is not None else merged.min_ev_low,
+            max_uncertainty_band=(
+                recipe.max_uncertainty_band
+                if recipe.max_uncertainty_band is not None
+                else merged.max_uncertainty_band
             ),
         )
     return merged
@@ -133,6 +147,9 @@ def run_strategy_recipe(
         min_book_pairs=recipe.min_book_pairs if recipe.min_book_pairs is not None else 0,
         hold_cap=recipe.hold_cap,
         p_over_iqr_cap=recipe.p_over_iqr_cap,
+        min_quality_score=recipe.min_quality_score,
+        min_ev_low=recipe.min_ev_low,
+        max_uncertainty_band=recipe.max_uncertainty_band,
     )
     return StrategyResult(report=report, config=effective_config)
 

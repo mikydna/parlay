@@ -120,7 +120,12 @@ class BacktestSummary:
     total_pnl_units: float
     roi: float | None
     avg_best_ev: float | None
+    avg_ev_low: float | None
+    avg_quality_score: float | None
+    avg_p_hit_low: float | None
     brier: float | None
+    brier_low: float | None
+    actionability_rate: float | None
     calibration: list[CalibrationBucket]
 
     def to_dict(self) -> dict[str, Any]:
@@ -153,9 +158,14 @@ def summarize_backtest_rows(
     total_stake = 0.0
     total_pnl = 0.0
     best_evs: list[float] = []
+    ev_lows: list[float] = []
+    quality_scores: list[float] = []
 
     brier_terms: list[float] = []
+    brier_low_terms: list[float] = []
     cal_points: list[tuple[float, int]] = []
+    p_hit_low_points: list[float] = []
+    actionability_samples: list[float] = []
 
     for row in rows:
         result = _normalize_result(row.get("result", ""))
@@ -186,6 +196,22 @@ def summarize_backtest_rows(
         best_ev = _safe_float(row.get("best_ev"))
         if best_ev is not None:
             best_evs.append(best_ev)
+        ev_low = _safe_float(row.get("ev_low"))
+        if ev_low is not None:
+            ev_lows.append(ev_low)
+        quality_score = _safe_float(row.get("quality_score"))
+        if quality_score is not None:
+            quality_scores.append(quality_score)
+        eligible_lines = _safe_float(row.get("summary_eligible_lines"))
+        candidate_lines = _safe_float(row.get("summary_candidate_lines"))
+        if (
+            eligible_lines is not None
+            and candidate_lines is not None
+            and candidate_lines > 0
+            and eligible_lines >= 0
+        ):
+            ratio = eligible_lines / candidate_lines
+            actionability_samples.append(max(0.0, min(1.0, ratio)))
 
         if result in {"win", "loss"}:
             p = _safe_float(row.get("model_p_hit"))
@@ -193,11 +219,21 @@ def summarize_backtest_rows(
                 y = 1 if result == "win" else 0
                 brier_terms.append(_brier(p, y))
                 cal_points.append((p, y))
+            p_low = _safe_float(row.get("p_hit_low"))
+            if p_low is not None and 0.0 <= p_low <= 1.0:
+                y = 1 if result == "win" else 0
+                brier_low_terms.append(_brier(p_low, y))
+                p_hit_low_points.append(p_low)
 
     graded = wins + losses + pushes
     roi = (total_pnl / total_stake) if total_stake > 0 else None
     avg_best_ev = _mean(best_evs)
+    avg_ev_low = _mean(ev_lows)
+    avg_quality_score = _mean(quality_scores)
+    avg_p_hit_low = _mean(p_hit_low_points)
     brier_score = _mean(brier_terms)
+    brier_low_score = _mean(brier_low_terms)
+    actionability_rate = _mean(actionability_samples)
 
     calibration: list[CalibrationBucket] = []
     if cal_points:
@@ -241,7 +277,12 @@ def summarize_backtest_rows(
         total_pnl_units=round(total_pnl, 6),
         roi=None if roi is None else round(roi, 6),
         avg_best_ev=None if avg_best_ev is None else round(avg_best_ev, 6),
+        avg_ev_low=None if avg_ev_low is None else round(avg_ev_low, 6),
+        avg_quality_score=(None if avg_quality_score is None else round(avg_quality_score, 6)),
+        avg_p_hit_low=None if avg_p_hit_low is None else round(avg_p_hit_low, 6),
         brier=None if brier_score is None else round(brier_score, 6),
+        brier_low=None if brier_low_score is None else round(brier_low_score, 6),
+        actionability_rate=(None if actionability_rate is None else round(actionability_rate, 6)),
         calibration=calibration,
     )
 

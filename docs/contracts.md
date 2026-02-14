@@ -28,6 +28,24 @@ Expected audit fields:
 - `allow_tier_b`
 - `market_baseline_method`
 - `market_baseline_fallback`
+- `min_book_pairs`
+- `hold_cap`
+- `p_over_iqr_cap`
+- `min_quality_score`
+- `min_ev_low`
+- `max_uncertainty_band`
+
+Candidate pricing-quality fields:
+- `quality_score`
+- `depth_score`
+- `hold_score`
+- `dispersion_score`
+- `freshness_score`
+- `uncertainty_band`
+- `p_hit_low`
+- `p_hit_high`
+- `ev_low`
+- `ev_high`
 
 ## Brief Artifact Contract
 
@@ -63,6 +81,27 @@ Required keys:
 - `ranked_lines`
 - `eligible_lines`
 - `generated_at_utc`
+
+## Backtest Summary Contract
+
+Path:
+- `<REPORTS_DIR>/by-snapshot/<report_snapshot>/backtest-summary.json`
+
+Per-strategy metric fields include:
+- `strategy_id`
+- `rows_total`
+- `rows_graded`
+- `wins`
+- `losses`
+- `pushes`
+- `roi`
+- `brier`
+- `brier_low`
+- `avg_best_ev`
+- `avg_ev_low`
+- `avg_quality_score`
+- `avg_p_hit_low`
+- `actionability_rate`
 
 ## Settlement Contract
 
@@ -198,6 +237,7 @@ Canonical strategy IDs:
 - `s005` — Hold-Cap Gate
 - `s006` — Dispersion-IQR Gate
 - `s007` — Quality Composite Gate
+- `s008` — Conservative Quality Floor
 
 Legacy strategy IDs are intentionally unsupported.
 

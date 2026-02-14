@@ -2847,13 +2847,16 @@ def _render_backtest_summary_markdown(report: dict[str, Any]) -> str:
     lines.append("")
 
     if rows:
-        lines.append("| Strategy | Graded | ROI | W | L | P | Brier |")
-        lines.append("| --- | --- | --- | --- | --- | --- | --- |")
+        lines.append(
+            "| Strategy | Graded | ROI | W | L | P | Brier | BrierLow | "
+            "AvgQ | AvgEVLow | Actionability |"
+        )
+        lines.append("| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |")
         for row in rows:
             if not isinstance(row, dict):
                 continue
             lines.append(
-                "| {} | {} | {} | {} | {} | {} | {} |".format(
+                "| {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} |".format(
                     row.get("strategy_id", ""),
                     row.get("rows_graded", 0),
                     row.get("roi", ""),
@@ -2861,6 +2864,10 @@ def _render_backtest_summary_markdown(report: dict[str, Any]) -> str:
                     row.get("losses", 0),
                     row.get("pushes", 0),
                     row.get("brier", ""),
+                    row.get("brier_low", ""),
+                    row.get("avg_quality_score", ""),
+                    row.get("avg_ev_low", ""),
+                    row.get("actionability_rate", ""),
                 )
             )
         lines.append("")
