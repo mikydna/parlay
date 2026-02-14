@@ -62,6 +62,7 @@ class StrategyResult:
 class StrategyRecipe:
     force_allow_tier_b: bool = False
     use_rolling_priors: bool = False
+    rolling_priors_source_strategy_id: str | None = None
     portfolio_ranking: PortfolioRanking | None = None
     market_baseline_method: str | None = None
     market_baseline_fallback: str | None = None
@@ -86,6 +87,11 @@ def compose_strategy_recipes(*recipes: StrategyRecipe) -> StrategyRecipe:
         merged = StrategyRecipe(
             force_allow_tier_b=merged.force_allow_tier_b or bool(recipe.force_allow_tier_b),
             use_rolling_priors=merged.use_rolling_priors or bool(recipe.use_rolling_priors),
+            rolling_priors_source_strategy_id=(
+                recipe.rolling_priors_source_strategy_id
+                if recipe.rolling_priors_source_strategy_id is not None
+                else merged.rolling_priors_source_strategy_id
+            ),
             portfolio_ranking=(
                 recipe.portfolio_ranking
                 if recipe.portfolio_ranking is not None

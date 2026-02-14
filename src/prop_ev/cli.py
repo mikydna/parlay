@@ -1987,6 +1987,29 @@ def _load_rolling_priors_for_strategy(
         window_days=max(1, _env_int("PROP_EV_STRATEGY_ROLLING_PRIOR_WINDOW_DAYS", 21)),
         min_samples=max(1, _env_int("PROP_EV_STRATEGY_ROLLING_PRIOR_MIN_SAMPLES", 25)),
         max_abs_delta=max(0.0, _env_float("PROP_EV_STRATEGY_ROLLING_PRIOR_MAX_DELTA", 0.02)),
+        calibration_bin_size=max(
+            0.02,
+            min(0.5, _env_float("PROP_EV_STRATEGY_CALIBRATION_BIN_SIZE", 0.1)),
+        ),
+        calibration_min_bin_samples=max(
+            1,
+            _env_int("PROP_EV_STRATEGY_CALIBRATION_MIN_BIN_SAMPLES", 10),
+        ),
+        calibration_max_abs_delta=max(
+            0.0,
+            _env_float(
+                "PROP_EV_STRATEGY_CALIBRATION_MAX_DELTA",
+                _env_float("PROP_EV_STRATEGY_ROLLING_PRIOR_MAX_DELTA", 0.02),
+            ),
+        ),
+        calibration_shrink_k=max(
+            1,
+            _env_int("PROP_EV_STRATEGY_CALIBRATION_SHRINK_K", 100),
+        ),
+        calibration_bucket_weight=max(
+            0.0,
+            min(1.0, _env_float("PROP_EV_STRATEGY_CALIBRATION_BUCKET_WEIGHT", 0.3)),
+        ),
     )
 
 
@@ -2501,9 +2524,13 @@ def _cmd_strategy_run(args: argparse.Namespace) -> int:
     rolling_priors: dict[str, Any] = {}
     strategy_recipe = getattr(plugin, "recipe", None)
     if bool(getattr(strategy_recipe, "use_rolling_priors", False)):
+        rolling_source_strategy_id = str(
+            getattr(strategy_recipe, "rolling_priors_source_strategy_id", "") or strategy_id
+        )
+        rolling_source_strategy_id = normalize_strategy_id(rolling_source_strategy_id)
         rolling_priors = _load_rolling_priors_for_strategy(
             store=store,
-            strategy_id=strategy_id,
+            strategy_id=rolling_source_strategy_id,
             snapshot_id=snapshot_id,
         )
     config = StrategyRunConfig(
@@ -2805,9 +2832,13 @@ def _cmd_strategy_compare(args: argparse.Namespace) -> int:
         rolling_priors: dict[str, Any] = {}
         strategy_recipe = getattr(plugin, "recipe", None)
         if bool(getattr(strategy_recipe, "use_rolling_priors", False)):
+            rolling_source_strategy_id = str(
+                getattr(strategy_recipe, "rolling_priors_source_strategy_id", "") or strategy_id
+            )
+            rolling_source_strategy_id = normalize_strategy_id(rolling_source_strategy_id)
             rolling_priors = _load_rolling_priors_for_strategy(
                 store=store,
-                strategy_id=strategy_id,
+                strategy_id=rolling_source_strategy_id,
                 snapshot_id=snapshot_id,
             )
         inputs = StrategyInputs(
