@@ -39,6 +39,7 @@ class StrategyInputs:
     slate_rows: list[dict[str, Any]] | None
     player_identity_map: dict[str, Any] | None
     rolling_priors: dict[str, Any] | None = None
+    minutes_probabilities: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -50,6 +51,7 @@ class StrategyRunConfig:
     require_official_injuries: bool
     stale_quote_minutes: int
     require_fresh_context: bool
+    probabilistic_profile: str = "off"
 
 
 @dataclass(frozen=True)
@@ -72,6 +74,9 @@ class StrategyRecipe:
     min_quality_score: float | None = None
     min_ev_low: float | None = None
     max_uncertainty_band: float | None = None
+    probabilistic_profile: str | None = None
+    min_prob_confidence: float | None = None
+    max_minutes_band: float | None = None
 
 
 class StrategyPlugin(Protocol):
@@ -129,6 +134,21 @@ def compose_strategy_recipes(*recipes: StrategyRecipe) -> StrategyRecipe:
                 if recipe.max_uncertainty_band is not None
                 else merged.max_uncertainty_band
             ),
+            probabilistic_profile=(
+                recipe.probabilistic_profile
+                if recipe.probabilistic_profile is not None
+                else merged.probabilistic_profile
+            ),
+            min_prob_confidence=(
+                recipe.min_prob_confidence
+                if recipe.min_prob_confidence is not None
+                else merged.min_prob_confidence
+            ),
+            max_minutes_band=(
+                recipe.max_minutes_band
+                if recipe.max_minutes_band is not None
+                else merged.max_minutes_band
+            ),
         )
     return merged
 
@@ -156,6 +176,7 @@ def run_strategy_recipe(
         slate_rows=inputs.slate_rows,
         player_identity_map=inputs.player_identity_map,
         rolling_priors=inputs.rolling_priors if recipe.use_rolling_priors else None,
+        minutes_probabilities=inputs.minutes_probabilities,
         min_ev=effective_config.min_ev,
         allow_tier_b=effective_config.allow_tier_b,
         require_official_injuries=effective_config.require_official_injuries,
@@ -172,6 +193,11 @@ def run_strategy_recipe(
         min_quality_score=recipe.min_quality_score,
         min_ev_low=recipe.min_ev_low,
         max_uncertainty_band=recipe.max_uncertainty_band,
+        probabilistic_profile=(
+            recipe.probabilistic_profile or effective_config.probabilistic_profile
+        ),
+        min_prob_confidence=recipe.min_prob_confidence,
+        max_minutes_band=recipe.max_minutes_band,
     )
     return StrategyResult(report=report, config=effective_config)
 

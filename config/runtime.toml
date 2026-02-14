@@ -33,5 +33,6 @@ allow_secondary_injuries = false
 require_fresh_context = true
 stale_quote_minutes = 20
 max_picks_default = 5
+probabilistic_profile = "off"
 context_injuries_stale_hours = 6.0
 context_roster_stale_hours = 24.0

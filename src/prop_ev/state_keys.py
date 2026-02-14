@@ -58,6 +58,7 @@ STRATEGY_TITLE_KEY = {
     "s013": "Tier B + Quality-Weighted EV Low",
     "s014": "Median No-Vig + Tier B",
     "s015": "Tier B + Calibrated EV Low",
+    "s020": "Probabilistic Minutes v1",
 }
 
 STRATEGY_DESCRIPTION_KEY = {
@@ -106,6 +107,10 @@ STRATEGY_DESCRIPTION_KEY = {
     "s015": (
         "Extends s010 with rolling historical calibration feedback and ranks picks by "
         "calibrated conservative EV-low."
+    ),
+    "s020": (
+        "Tier-B enabled strategy using minutes-probability profile with confidence/band gates "
+        "and conservative quality floors."
     ),
 }
 

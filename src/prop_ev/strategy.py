@@ -587,6 +587,67 @@ def _market_side_adjustment_core(
     )
 
 
+def _market_minutes_weight(market: str) -> float:
+    return {
+        "player_points": 0.008,
+        "player_rebounds": 0.007,
+        "player_assists": 0.008,
+        "player_threes": 0.006,
+        "player_points_rebounds_assists": 0.009,
+        "player_points_rebounds": 0.008,
+        "player_points_assists": 0.008,
+        "player_rebounds_assists": 0.007,
+        "player_turnovers": 0.005,
+        "player_blocks": 0.004,
+        "player_steals": 0.004,
+        "player_blocks_steals": 0.004,
+    }.get(market, 0.007)
+
+
+def _minutes_prob_lookup(
+    minutes_probabilities: dict[str, Any] | None,
+    *,
+    event_id: str,
+    player: str,
+    market: str,
+) -> dict[str, Any]:
+    if not isinstance(minutes_probabilities, dict):
+        return {}
+    player_norm = normalize_person_name(player)
+    if not player_norm:
+        return {}
+    exact = minutes_probabilities.get("exact", {})
+    if isinstance(exact, dict):
+        key = f"{event_id}|{player_norm}|{market.strip().lower()}"
+        payload = exact.get(key)
+        if isinstance(payload, dict):
+            return payload
+    by_player = minutes_probabilities.get("player", {})
+    if isinstance(by_player, dict):
+        payload = by_player.get(player_norm)
+        if isinstance(payload, dict):
+            return payload
+    return {}
+
+
+def _minutes_prob_adjustment_over(
+    *,
+    market: str,
+    projected_minutes: float | None,
+    minutes_p50: float | None,
+    p_active: float | None,
+    confidence_score: float | None,
+) -> float:
+    if projected_minutes is None or minutes_p50 is None:
+        return 0.0
+    market_weight = _market_minutes_weight(market)
+    minutes_delta = (minutes_p50 - projected_minutes) * market_weight * 0.75
+    active_penalty = ((p_active if p_active is not None else 1.0) - 1.0) * 0.2
+    confidence = 0.0 if confidence_score is None else _clamp(confidence_score, 0.0, 1.0)
+    adjusted = (minutes_delta + active_penalty) * max(0.1, confidence)
+    return _clamp(adjusted, -0.08, 0.08)
+
+
 def _probability_adjustment(
     *,
     injury_status: str,
@@ -1261,6 +1322,7 @@ def build_strategy_report(
     slate_rows: list[dict[str, Any]] | None = None,
     player_identity_map: dict[str, Any] | None = None,
     rolling_priors: dict[str, Any] | None = None,
+    minutes_probabilities: dict[str, Any] | None = None,
     min_ev: float = 0.01,
     allow_tier_b: bool = False,
     require_official_injuries: bool = True,
@@ -1275,6 +1337,9 @@ def build_strategy_report(
     min_quality_score: float | None = None,
     min_ev_low: float | None = None,
     max_uncertainty_band: float | None = None,
+    probabilistic_profile: str = "off",
+    min_prob_confidence: float | None = None,
+    max_minutes_band: float | None = None,
 ) -> dict[str, Any]:
     """Create an audit-ready, deterministic NBA prop strategy report."""
     baseline_method = market_baseline_method.strip().lower()
@@ -1292,8 +1357,13 @@ def build_strategy_report(
         raise ValueError("min_quality_score must be in [0, 1]")
     if max_uncertainty_band is not None and max_uncertainty_band < 0:
         raise ValueError("max_uncertainty_band must be >= 0")
+    if min_prob_confidence is not None and not (0.0 <= min_prob_confidence <= 1.0):
+        raise ValueError("min_prob_confidence must be in [0, 1]")
+    if max_minutes_band is not None and max_minutes_band < 0:
+        raise ValueError("max_minutes_band must be >= 0")
     if int(max_picks) < 0:
         raise ValueError("max_picks must be >= 0")
+    probabilistic_profile = probabilistic_profile.strip().lower() or "off"
 
     strategy_now_utc = datetime.now(UTC)
     resolved_max_picks = _resolve_max_picks(top_n=top_n, max_picks=max_picks)
@@ -1368,6 +1438,7 @@ def build_strategy_report(
     tier_a_count = 0
     tier_b_count = 0
     eligible_count = 0
+    probabilistic_rows_used = 0
 
     tier_a_min_ev = max(min_ev, 0.03)
     tier_b_min_ev = max(min_ev, 0.05)
@@ -1573,13 +1644,59 @@ def build_strategy_report(
         p_over_high: float | None = None
         p_under_low: float | None = None
         p_under_high: float | None = None
+        minutes_p10: float | None = None
+        minutes_p50: float | None = None
+        minutes_p90: float | None = None
+        p_active: float | None = None
+        confidence_score: float | None = None
+        prob_source = "off"
+        minutes_band: float | None = None
+        minutes_prob_delta_over = 0.0
+        data_quality_flags = ""
         if p_over_fair is not None and p_under_fair is not None:
             p_over_model = _clamp(p_over_fair + adjustment + market_delta, 0.01, 0.99)
             p_under_model = 1.0 - p_over_model
+            if probabilistic_profile == "minutes_v1":
+                minutes_prob_row = _minutes_prob_lookup(
+                    minutes_probabilities,
+                    event_id=event_id,
+                    player=player,
+                    market=market,
+                )
+                minutes_p10 = _safe_float(minutes_prob_row.get("minutes_p10"))
+                minutes_p50 = _safe_float(minutes_prob_row.get("minutes_p50"))
+                minutes_p90 = _safe_float(minutes_prob_row.get("minutes_p90"))
+                p_active = _safe_float(minutes_prob_row.get("p_active"))
+                confidence_score = _safe_float(minutes_prob_row.get("confidence_score"))
+                data_quality_flags = str(minutes_prob_row.get("data_quality_flags", ""))
+                if (
+                    minutes_p10 is not None
+                    and minutes_p90 is not None
+                    and minutes_p90 >= minutes_p10
+                ):
+                    minutes_band = round(minutes_p90 - minutes_p10, 6)
+                projected_minutes = _safe_float(minutes_projection.get("projected_minutes"))
+                minutes_prob_delta_over = _minutes_prob_adjustment_over(
+                    market=market,
+                    projected_minutes=projected_minutes,
+                    minutes_p50=minutes_p50,
+                    p_active=p_active,
+                    confidence_score=confidence_score,
+                )
+                if minutes_prob_delta_over != 0.0:
+                    p_over_model = _clamp(p_over_model + minutes_prob_delta_over, 0.01, 0.99)
+                    p_under_model = 1.0 - p_over_model
+                if minutes_p50 is not None:
+                    probabilistic_rows_used += 1
+                    prob_source = "minutes_v1_model"
+                else:
+                    prob_source = "minutes_v1_missing"
             p_over_low = round(_clamp(p_over_model - uncertainty_band, 0.01, 0.99), 6)
             p_over_high = round(_clamp(p_over_model + uncertainty_band, 0.01, 0.99), 6)
             p_under_low = round(_clamp(1.0 - p_over_high, 0.01, 0.99), 6)
             p_under_high = round(_clamp(1.0 - p_over_low, 0.01, 0.99), 6)
+        elif probabilistic_profile == "minutes_v1":
+            prob_source = "minutes_v1_baseline_missing"
 
         ev_over, kelly_over = _ev_and_kelly(p_over_model, _to_price(over["price"]))
         ev_under, kelly_under = _ev_and_kelly(p_under_model, _to_price(under["price"]))
@@ -1663,6 +1780,21 @@ def build_strategy_report(
             elif ev_low < min_ev_low:
                 eligible = False
                 reason = "ev_low_below_threshold"
+        if eligible and probabilistic_profile == "minutes_v1":
+            if min_prob_confidence is not None:
+                if confidence_score is None:
+                    eligible = False
+                    reason = "prob_confidence_missing"
+                elif confidence_score < min_prob_confidence:
+                    eligible = False
+                    reason = "prob_confidence_gate"
+            if eligible and max_minutes_band is not None:
+                if minutes_band is None:
+                    eligible = False
+                    reason = "minutes_band_missing"
+                elif minutes_band > max_minutes_band:
+                    eligible = False
+                    reason = "minutes_band_gate"
 
         if eligible:
             eligible_count += 1
@@ -1817,6 +1949,16 @@ def build_strategy_report(
                 "minutes_delta": minutes_projection.get("minutes_delta"),
                 "usage_delta": minutes_projection.get("usage_delta"),
                 "market_delta": round(market_delta, 6),
+                "probabilistic_profile": probabilistic_profile,
+                "prob_source": prob_source,
+                "minutes_prob_delta_over": round(minutes_prob_delta_over, 6),
+                "minutes_p10": minutes_p10,
+                "minutes_p50": minutes_p50,
+                "minutes_p90": minutes_p90,
+                "minutes_band": minutes_band,
+                "p_active": p_active,
+                "confidence_score": confidence_score,
+                "data_quality_flags": data_quality_flags,
                 "player_team": player_team,
                 "opponent_team": opponent_team,
                 "mapping_suggestion": {
@@ -2218,6 +2360,16 @@ def build_strategy_report(
             "under_sweep_status": under_sweep.get("status", ""),
             "sgp_candidates": len(sgp_candidates),
             "actionability_rate": actionability_rate,
+            "probabilistic_profile": probabilistic_profile,
+            "probabilistic_rows_used": probabilistic_rows_used,
+            "probabilistic_rows_missing": len(
+                [
+                    item
+                    for item in candidates
+                    if str(item.get("prob_source", "")).startswith("minutes_v1")
+                    and str(item.get("prob_source", "")) != "minutes_v1_model"
+                ]
+            ),
             "avg_quality_score_all": round(avg_quality_all, 6)
             if avg_quality_all is not None
             else None,
@@ -2252,6 +2404,10 @@ def build_strategy_report(
             "min_quality_score": min_quality_score,
             "min_ev_low": min_ev_low,
             "max_uncertainty_band": max_uncertainty_band,
+            "probabilistic_profile": probabilistic_profile,
+            "min_prob_confidence": min_prob_confidence,
+            "max_minutes_band": max_minutes_band,
+            "probabilistic_rows_used": probabilistic_rows_used,
             "rolling_priors_window_days": rolling_priors_window_days,
             "rolling_priors_rows_used": rolling_priors_rows_used,
             "rolling_priors_as_of_day": rolling_priors_as_of_day,

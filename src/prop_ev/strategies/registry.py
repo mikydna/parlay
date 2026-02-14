@@ -18,6 +18,7 @@ from prop_ev.strategies.s012_tier_b_aggressive_best_ev import S012
 from prop_ev.strategies.s013_tier_b_quality_weighted import S013
 from prop_ev.strategies.s014_median_tier_b import S014
 from prop_ev.strategies.s015_tier_b_calibrated_ev_low import S015
+from prop_ev.strategies.s020_prob_minutes import S020
 
 
 def _registry() -> dict[str, StrategyPlugin]:
@@ -37,6 +38,7 @@ def _registry() -> dict[str, StrategyPlugin]:
         S013(),
         S014(),
         S015(),
+        S020(),
     ]
     out: dict[str, StrategyPlugin] = {}
     for plugin in plugins:
