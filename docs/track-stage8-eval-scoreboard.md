@@ -261,3 +261,102 @@ Rollback is low risk:
 
 No data migration and no odds re-download required.
 
+---
+
+## 10) Extension: Pick-level confidence + brief explainability (Stage 7 integration)
+
+This is an optional follow-on that makes the calibration work visible at the **pick** level
+(not only at the strategy level).
+
+### 10.1 Goal
+
+For every selected play (and optionally for every eligible candidate), surface:
+- a conservative probability (`p_hit_low` when available),
+- a **calibrated** probability estimate derived from historical buckets,
+- an uncertainty/quality summary that an operator can understand quickly,
+- an optional filter/rank policy to reduce fragile picks.
+
+This yields:
+- better “why did we take this?” explanations,
+- safer defaults when we want only ~5 executable bets/day.
+
+### 10.2 Data + leakage rules
+
+We must avoid “using the answer to explain the answer”.
+
+**Production/live**:
+- allowed: calibration derived from a rolling historical window ending *before* the current day.
+
+**Backtest evaluation**:
+- required: walk-forward calibration.
+  - for day `D`, compute calibration map from days `< D` only,
+  - apply to day `D` picks.
+
+If we can’t do walk-forward yet, we can still annotate picks with *uncertainty/quality* fields,
+but calibrated probabilities must be labeled as “in-sample” and excluded from promotion logic.
+
+### 10.3 “Calibration map” artifact (new)
+
+Add an optional artifact produced by the scoreboard run:
+- `reports/odds/analysis/<run_id>/calibration-map.json`
+
+Recommended v1 shape:
+- `schema_version`
+- `generated_at_utc`
+- `dataset_id`
+- `bin_size`
+- `strategies`: mapping `{strategy_id: {bins: [{low, high, count, avg_p, hit_rate}]}}`
+
+This is intentionally simple (piecewise constant mapping by probability bin).
+
+### 10.4 Pick-level fields (additive; no default behavior change)
+
+When a calibration map is provided, annotate candidate rows with:
+- `p_conservative`:
+  - `p_hit_low` if present else `model_p_hit`
+- `p_calibrated`:
+  - map `p_conservative` to `hit_rate` of its bin
+- `calibration_bin`:
+  - `{low, high, count}`
+- `confidence_tier` (optional):
+  - derived from thresholds on `quality_score`, `uncertainty_band`, and `p_calibrated`
+
+Keep the fields additive so older reports/briefs still parse.
+
+### 10.5 Optional filter/rank policies (behind flags)
+
+Do not change defaults initially. Add opt-in modes:
+- `annotate`: write confidence fields only (default for first release).
+- `filter`: drop picks below a floor (e.g., `p_calibrated < 0.52` or `quality_score < 0.55`).
+- `rank`: rank by a conservative objective (example):
+  - `score = ev_low * quality_score`
+  - or `score = (p_calibrated - implied_p_execution) * (1 - uncertainty_band)`
+
+Policy parameters must be recorded in `audit` so results are replayable.
+
+### 10.6 Implementation slices (commit-sized)
+
+**D5 — Produce `calibration-map.json`**
+- Extend scoreboard generation to optionally emit the calibration map artifact.
+- Support a walk-forward mode in dataset windows to prevent leakage.
+- Tests: deterministic bytes; walk-forward uses only past days.
+
+**D6 — Annotate picks with calibrated confidence**
+- Add a pure function that applies `calibration-map.json` to candidate rows.
+- Update report generation to include new per-row fields when the map is provided.
+- Tests: bin assignment, missing-bin behavior, stable output.
+
+**D7 — Brief + report rendering**
+- Update brief input schema to include `p_conservative`, `p_calibrated`, `uncertainty_band`,
+  and `quality_score`.
+- Update PDF template to show a compact confidence line per pick.
+- Default: annotate only; keep pick selection unchanged unless flags enabled.
+
+### 10.7 “Done when”
+
+- For a fixed dataset + snapshot set:
+  - `calibration-map.json` is deterministic,
+  - pick annotations are deterministic,
+  - walk-forward mode reproduces the same values across reruns.
+- Brief shows confidence fields without increasing report noise (no extra temp files tracked).
+
