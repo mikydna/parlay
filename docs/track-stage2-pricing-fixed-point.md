@@ -175,3 +175,7 @@ No data migration or odds re-download is required for rollback.
 - Candidate rows now include provenance for reference probability selection:
   - `reference_line_method`
   - `reference_points_count`
+- De-vig + quality scoring are extracted into `src/prop_ev/pricing_core.py` with dedicated
+  contract tests (`tests/test_pricing_core.py`), and candidate provenance now includes:
+  - `line_source`
+  - `books_used`

@@ -26,6 +26,11 @@ from prop_ev.odds_math import (
     normalize_prob_pair,
 )
 from prop_ev.portfolio import PortfolioConstraints, PortfolioRanking, select_portfolio_candidates
+from prop_ev.pricing_core import (
+    extract_book_fair_pairs,
+    resolve_baseline_selection,
+    summarize_line_pricing,
+)
 from prop_ev.pricing_reference import ReferencePoint, estimate_reference_probability
 from prop_ev.rolling_priors import calibration_feedback
 from prop_ev.state_keys import strategy_report_state_key
@@ -255,80 +260,6 @@ def _resolve_max_picks(*, top_n: int, max_picks: int) -> int:
 
 def _clamp(value: float, low: float, high: float) -> float:
     return max(low, min(high, value))
-
-
-def _quantile(sorted_values: list[float], q: float) -> float | None:
-    if not sorted_values:
-        return None
-    if q <= 0:
-        return sorted_values[0]
-    if q >= 1:
-        return sorted_values[-1]
-    pos = q * (len(sorted_values) - 1)
-    lower = int(pos)
-    upper = min(len(sorted_values) - 1, lower + 1)
-    if lower == upper:
-        return sorted_values[lower]
-    frac = pos - lower
-    return (sorted_values[lower] * (1.0 - frac)) + (sorted_values[upper] * frac)
-
-
-def _iqr(values: list[float]) -> float | None:
-    if not values:
-        return None
-    ordered = sorted(values)
-    q1 = _quantile(ordered, 0.25)
-    q3 = _quantile(ordered, 0.75)
-    if q1 is None or q3 is None:
-        return None
-    return q3 - q1
-
-
-def _per_book_prob_pairs(group_rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Return per-book no-vig probability pairs for a single (event, player, market, point) line."""
-    book_sides: dict[str, dict[str, list[int]]] = {}
-    for row in group_rows:
-        if not isinstance(row, dict):
-            continue
-        book = str(row.get("book", "")).strip()
-        if not book:
-            continue
-        side_raw = str(row.get("side", "")).strip().lower()
-        if side_raw in {"over", "o"}:
-            side = "over"
-        elif side_raw in {"under", "u"}:
-            side = "under"
-        else:
-            continue
-        price = _to_price(row.get("price"))
-        if price is None:
-            continue
-        entry = book_sides.setdefault(book, {"over": [], "under": []})
-        entry[side].append(price)
-
-    pairs: list[dict[str, Any]] = []
-    for book, sides in book_sides.items():
-        if not sides["over"] or not sides["under"]:
-            continue
-        over_price = max(sides["over"])
-        under_price = max(sides["under"])
-        over_prob_imp = _implied_prob_from_american(over_price)
-        under_prob_imp = _implied_prob_from_american(under_price)
-        if over_prob_imp is None or under_prob_imp is None:
-            continue
-        p_over_fair, p_under_fair = _normalize_prob_pair(over_prob_imp, under_prob_imp)
-        pairs.append(
-            {
-                "book": book,
-                "over_price": over_price,
-                "under_price": under_price,
-                "p_over_fair": p_over_fair,
-                "p_under_fair": p_under_fair,
-                "hold": (over_prob_imp + under_prob_imp) - 1.0,
-            }
-        )
-    pairs.sort(key=lambda row: str(row.get("book", "")))
-    return pairs
 
 
 def _line_key(row: dict[str, Any]) -> tuple[str, str, str, float]:
@@ -1375,20 +1306,16 @@ def build_strategy_report(
     reference_points_by_line: dict[tuple[str, str, str], list[ReferencePoint]] = {}
     for key, group_rows in grouped.items():
         event_id, market, player, point = key
-        point_book_pairs = _per_book_prob_pairs(group_rows)
+        point_book_pairs = extract_book_fair_pairs(group_rows)
         p_over_values = [
-            pair["p_over_fair"]
-            for pair in point_book_pairs
-            if isinstance(pair.get("p_over_fair"), float)
+            pair.p_over_fair for pair in point_book_pairs if isinstance(pair.p_over_fair, float)
         ]
         if not p_over_values:
             continue
         p_over_median = _median(p_over_values)
         if p_over_median is None:
             continue
-        hold_values = [
-            pair["hold"] for pair in point_book_pairs if isinstance(pair.get("hold"), float)
-        ]
+        hold_values = [pair.hold for pair in point_book_pairs if isinstance(pair.hold, float)]
         hold_median = _median(hold_values)
         reference_points_by_line.setdefault((event_id, market, player), []).append(
             ReferencePoint(
@@ -1479,100 +1406,51 @@ def build_strategy_report(
             )
             hold_best = (over_prob_imp_best + under_prob_imp_best) - 1.0
 
-        book_pairs = _per_book_prob_pairs(group_rows)
-        book_pair_count = len(book_pairs)
-        p_over_book = [
-            pair["p_over_fair"] for pair in book_pairs if isinstance(pair.get("p_over_fair"), float)
-        ]
-        hold_book = [pair["hold"] for pair in book_pairs if isinstance(pair.get("hold"), float)]
-        p_over_book_median = _median(p_over_book)
-        hold_book_median = _median(hold_book)
-        p_over_book_iqr = _iqr(p_over_book)
-        p_over_book_range: float | None = None
-        if p_over_book:
-            p_over_book_range = max(p_over_book) - min(p_over_book)
+        pricing_quality = summarize_line_pricing(
+            group_rows=group_rows,
+            now_utc=strategy_now_utc,
+            stale_quote_minutes=stale_quote_minutes,
+            hold_fallback=hold_best,
+        )
+        book_pair_count = pricing_quality.book_pair_count
+        p_over_book_median = pricing_quality.p_over_median
+        hold_book_median = pricing_quality.hold_median
+        p_over_book_iqr = pricing_quality.p_over_iqr
+        p_over_book_range = pricing_quality.p_over_range
         reference_estimate = estimate_reference_probability(
             reference_points_by_line.get((event_id, market, player), []),
             target_point=float(point),
         )
         reference_line_method = reference_estimate.method
-
-        freshest_quote_utc = ""
-        freshest_quote = max(
-            (
-                parsed
-                for row in group_rows
-                if isinstance(row, dict)
-                for parsed in [_parse_quote_time(str(row.get("last_update", "")))]
-                if parsed is not None
-            ),
-            default=None,
-        )
-        if freshest_quote is not None:
-            freshest_quote_utc = freshest_quote.isoformat().replace("+00:00", "Z")
-        quote_age_minutes = _quote_age_minutes(
-            quote_utc=freshest_quote_utc, now_utc=strategy_now_utc
-        )
-
-        depth_score = _clamp(book_pair_count / 4.0, 0.0, 1.0)
-        hold_for_quality = hold_book_median if hold_book_median is not None else hold_best
-        hold_score = (
-            _clamp(1.0 - (_clamp(hold_for_quality, 0.0, 1.0) / 0.12), 0.0, 1.0)
-            if hold_for_quality is not None
-            else 0.0
-        )
-        dispersion_source = p_over_book_iqr if p_over_book_iqr is not None else p_over_book_range
-        dispersion_score = (
-            _clamp(1.0 - (_clamp(dispersion_source, 0.0, 1.0) / 0.15), 0.0, 1.0)
-            if dispersion_source is not None
-            else 0.0
-        )
-        freshness_horizon_minutes = max(5.0, float(max(stale_quote_minutes, 1) * 2))
-        freshness_score = (
-            _clamp(1.0 - (quote_age_minutes / freshness_horizon_minutes), 0.0, 1.0)
-            if quote_age_minutes is not None
-            else 0.0
-        )
-        quality_score = round(
-            (depth_score * 0.30)
-            + (hold_score * 0.25)
-            + (dispersion_score * 0.25)
-            + (freshness_score * 0.20),
-            6,
-        )
-        uncertainty_band = (
-            0.01
-            + ((1.0 - depth_score) * 0.05)
-            + ((1.0 - hold_score) * 0.02)
-            + ((1.0 - dispersion_score) * 0.05)
-            + ((1.0 - freshness_score) * 0.03)
-        )
-        if p_over_book_iqr is not None:
-            uncertainty_band = max(uncertainty_band, p_over_book_iqr / 2.0)
-        uncertainty_band = round(_clamp(uncertainty_band, 0.01, 0.2), 6)
+        freshest_quote_utc = pricing_quality.freshest_quote_utc
+        quote_age_minutes = pricing_quality.quote_age_minutes
+        depth_score = pricing_quality.depth_score
+        hold_score = pricing_quality.hold_score
+        dispersion_score = pricing_quality.dispersion_score
+        freshness_score = pricing_quality.freshness_score
+        quality_score = pricing_quality.quality_score
+        uncertainty_band = pricing_quality.uncertainty_band
 
         p_over_fair: float | None = None
         p_under_fair: float | None = None
         hold: float | None = None
         baseline_used = "best_sides"
-        p_over_fair, p_under_fair, hold = p_over_fair_best, p_under_fair_best, hold_best
-        if baseline_method == "median_book":
-            if p_over_book_median is not None and hold_book_median is not None:
-                p_over_fair = p_over_book_median
-                p_under_fair = 1.0 - p_over_fair
-                hold = hold_book_median
-                baseline_used = "median_book"
-                reference_line_method = "exact"
-            elif reference_estimate.p_over is not None:
-                p_over_fair = reference_estimate.p_over
-                p_under_fair = 1.0 - p_over_fair
-                hold = reference_estimate.hold
-                baseline_used = "median_book_interpolated"
-            elif baseline_fallback == "best_sides":
-                baseline_used = "best_sides_fallback"
-            else:
-                p_over_fair, p_under_fair, hold = None, None, None
-                baseline_used = "missing"
+        baseline_selection = resolve_baseline_selection(
+            baseline_method=baseline_method,
+            baseline_fallback=baseline_fallback,
+            p_over_fair_best=p_over_fair_best,
+            p_under_fair_best=p_under_fair_best,
+            hold_best=hold_best,
+            p_over_book_median=p_over_book_median,
+            hold_book_median=hold_book_median,
+            reference_estimate=reference_estimate,
+        )
+        p_over_fair = baseline_selection.p_over_fair
+        p_under_fair = baseline_selection.p_under_fair
+        hold = baseline_selection.hold
+        baseline_used = baseline_selection.baseline_used
+        reference_line_method = baseline_selection.reference_line_method
+        line_source = baseline_selection.line_source
 
         player_norm = normalize_person_name(player)
         injury_row = injuries_by_player.get(player_norm, {})
@@ -1860,8 +1738,10 @@ def build_strategy_report(
                 "p_over_fair": p_over_fair,
                 "p_under_fair": p_under_fair,
                 "baseline_used": baseline_used,
+                "line_source": line_source,
                 "reference_line_method": reference_line_method,
                 "reference_points_count": reference_estimate.points_used,
+                "books_used": list(pricing_quality.books_used),
                 "book_pair_count": book_pair_count,
                 "p_over_book_median": p_over_book_median,
                 "hold_book_median": hold_book_median,

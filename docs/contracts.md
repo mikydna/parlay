@@ -47,8 +47,10 @@ Candidate pricing-quality fields:
 - `ev_low`
 - `ev_high`
 - `baseline_used` (`best_sides`, `best_sides_fallback`, `median_book`, `median_book_interpolated`)
+- `line_source` (`best_sides`, `exact_point_pairs`, `reference_curve`, `missing`)
 - `reference_line_method` (`exact`, `interpolated`, `clamped_low`, `clamped_high`, `missing`)
 - `reference_points_count`
+- `books_used` (discovery books contributing paired over/under no-vig baseline at the line)
 
 ## ExecutionPlan Contract
 
