@@ -36,7 +36,7 @@ def test_settings_error_when_missing_key(monkeypatch: pytest.MonkeyPatch) -> Non
     assert "ODDS_API_KEY" in err or "odds_api_key" in err
 
 
-def test_settings_from_env_uses_key_file_fallback(
+def test_settings_from_runtime_uses_key_file_fallback(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.delenv("ODDS_API_KEY", raising=False)
@@ -45,6 +45,6 @@ def test_settings_from_env_uses_key_file_fallback(
     monkeypatch.chdir(tmp_path)
     (tmp_path / "ODDS_API_KEY").write_text("file-key\n", encoding="utf-8")
 
-    settings = Settings.from_env()
+    settings = Settings.from_runtime()
 
     assert settings.odds_api_key == "file-key"

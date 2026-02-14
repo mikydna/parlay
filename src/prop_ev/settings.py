@@ -8,7 +8,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    """Environment-driven settings for external service configuration."""
+    """Runtime settings for external service configuration."""
 
     model_config = SettingsConfigDict(
         env_prefix="PROP_EV_",
@@ -46,8 +46,8 @@ class Settings(BaseSettings):
     data_dir: str = "data/odds_api"
 
     @classmethod
-    def from_env(cls) -> "Settings":
-        """Construct settings from environment/.env, with key-file fallback."""
+    def from_runtime(cls) -> "Settings":
+        """Construct settings from runtime-projected config, with key-file fallback."""
         direct_key = (
             os.environ.get("ODDS_API_KEY", "").strip()
             or os.environ.get("PROP_EV_ODDS_API_KEY", "").strip()

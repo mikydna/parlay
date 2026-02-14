@@ -35,10 +35,6 @@ class NBADataCacheStore:
         self.requests_dir = self.cache_dir / "requests"
         self.responses_dir = self.cache_dir / "responses"
         self.meta_dir = self.cache_dir / "meta"
-        self.legacy_cache_dir = self.root / "nba_cache"
-        self.legacy_requests_dir = self.legacy_cache_dir / "requests"
-        self.legacy_responses_dir = self.legacy_cache_dir / "responses"
-        self.legacy_meta_dir = self.legacy_cache_dir / "meta"
         self.requests_dir.mkdir(parents=True, exist_ok=True)
         self.responses_dir.mkdir(parents=True, exist_ok=True)
         self.meta_dir.mkdir(parents=True, exist_ok=True)
@@ -52,29 +48,18 @@ class NBADataCacheStore:
     def _meta_path(self, key: str) -> Path:
         return self.meta_dir / f"{key}.json"
 
-    def _legacy_request_path(self, key: str) -> Path:
-        return self.legacy_requests_dir / f"{key}.json"
-
-    def _legacy_response_path(self, key: str) -> Path:
-        return self.legacy_responses_dir / f"{key}.json"
-
-    def _legacy_meta_path(self, key: str) -> Path:
-        return self.legacy_meta_dir / f"{key}.json"
-
     def has_response(self, key: str) -> bool:
-        return self._response_path(key).exists() or self._legacy_response_path(key).exists()
+        return self._response_path(key).exists()
 
     def load_response(self, key: str) -> Any | None:
-        for path in (self._response_path(key), self._legacy_response_path(key)):
-            if not path.exists():
-                continue
+        path = self._response_path(key)
+        if path.exists():
             return json.loads(path.read_text(encoding="utf-8"))
         return None
 
     def load_meta(self, key: str) -> dict[str, Any] | None:
-        for path in (self._meta_path(key), self._legacy_meta_path(key)):
-            if not path.exists():
-                continue
+        path = self._meta_path(key)
+        if path.exists():
             payload = json.loads(path.read_text(encoding="utf-8"))
             return payload if isinstance(payload, dict) else None
         return None

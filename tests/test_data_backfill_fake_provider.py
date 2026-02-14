@@ -18,7 +18,6 @@ def test_data_backfill_writes_day_snapshot_and_reuses_cache(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     data_root = tmp_path / "data" / "odds_api"
-    monkeypatch.setenv("PROP_EV_DATA_DIR", str(data_root))
     monkeypatch.setenv("ODDS_API_KEY", "odds-test")
 
     counts = {"events": 0, "event_odds": 0}
@@ -91,6 +90,8 @@ def test_data_backfill_writes_day_snapshot_and_reuses_cache(
 
     day = "2026-02-11"
     args = [
+        "--data-dir",
+        str(data_root),
         "data",
         "backfill",
         "--sport-key",
@@ -133,6 +134,8 @@ def test_data_backfill_writes_day_snapshot_and_reuses_cache(
 
     code = main(
         [
+            "--data-dir",
+            str(data_root),
             "data",
             "backfill",
             "--sport-key",
@@ -163,7 +166,6 @@ def test_data_backfill_no_spend_persists_typed_error_code(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     data_root = tmp_path / "data" / "odds_api"
-    monkeypatch.setenv("PROP_EV_DATA_DIR", str(data_root))
     monkeypatch.setenv("ODDS_API_KEY", "odds-test")
 
     class FakeOddsClient:
@@ -194,6 +196,8 @@ def test_data_backfill_no_spend_persists_typed_error_code(
     day = "2026-02-12"
     code = main(
         [
+            "--data-dir",
+            str(data_root),
             "data",
             "backfill",
             "--sport-key",
@@ -232,7 +236,6 @@ def test_data_backfill_historical_uses_pre_tip_dates(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     data_root = tmp_path / "data" / "odds_api"
-    monkeypatch.setenv("PROP_EV_DATA_DIR", str(data_root))
     monkeypatch.setenv("ODDS_API_KEY", "odds-test")
 
     captured: dict[str, str] = {}
@@ -306,6 +309,8 @@ def test_data_backfill_historical_uses_pre_tip_dates(
     day = "2026-02-11"
     code = main(
         [
+            "--data-dir",
+            str(data_root),
             "data",
             "backfill",
             "--sport-key",

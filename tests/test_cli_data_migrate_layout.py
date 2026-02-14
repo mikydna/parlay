@@ -12,13 +12,12 @@ from prop_ev.storage import SnapshotStore
 
 def test_data_migrate_layout_applies_p0_moves(
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     data_root = tmp_path / "data" / "odds_api"
     nba_root = tmp_path / "data" / "nba_data"
+    runtime_root = tmp_path / "data" / "runtime"
     nba_root.mkdir(parents=True, exist_ok=True)
-    monkeypatch.setenv("PROP_EV_DATA_DIR", str(data_root))
 
     store = SnapshotStore(data_root)
     snapshot_id = "snap-1"
@@ -49,7 +48,20 @@ def test_data_migrate_layout_applies_p0_moves(
     (data_root / "cache" / "requests").mkdir(parents=True, exist_ok=True)
     (data_root / "cache" / "requests" / "key-1.json").write_text("{}\n", encoding="utf-8")
 
-    code = main(["data", "migrate-layout", "--apply", "--json"])
+    code = main(
+        [
+            "--data-dir",
+            str(data_root),
+            "--nba-data-dir",
+            str(nba_root),
+            "--runtime-dir",
+            str(runtime_root),
+            "data",
+            "migrate-layout",
+            "--apply",
+            "--json",
+        ]
+    )
     assert code == 0
     payload = json.loads(capsys.readouterr().out)
     assert payload["dry_run"] is False
@@ -70,7 +82,7 @@ def test_data_migrate_layout_applies_p0_moves(
     assert not (legacy_reports / "strategy-report.json").exists()
 
     assert (nba_root / "reference" / "player_identity_map.json").exists()
-    assert (data_root.parent / "runtime" / "odds_cache" / "requests" / "key-1.json").exists()
+    assert (runtime_root / "odds_cache" / "requests" / "key-1.json").exists()
 
     guardrails = payload.get("guardrails", {})
     assert isinstance(guardrails, dict)

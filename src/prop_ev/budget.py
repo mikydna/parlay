@@ -85,12 +85,8 @@ def read_llm_usage(data_root: Path, month: str) -> dict[str, Any]:
     root = Path(data_root).resolve()
     if root.name == "runtime":
         path = root / "llm_usage" / f"usage-{month}.jsonl"
-        legacy_path = root.parent / "llm_usage" / f"usage-{month}.jsonl"
     else:
         path = resolve_runtime_root(root) / "llm_usage" / f"usage-{month}.jsonl"
-        legacy_path = root / "llm_usage" / f"usage-{month}.jsonl"
-    if not path.exists() and legacy_path.exists():
-        path = legacy_path
     rows = _load_jsonl(path)
     total_cost_usd = 0.0
     total_input_tokens = 0

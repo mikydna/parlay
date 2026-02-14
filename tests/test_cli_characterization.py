@@ -42,7 +42,6 @@ def test_playbook_run_characterizes_default_window_and_output_lines(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys
 ) -> None:
     data_dir = tmp_path / "data" / "odds_api"
-    monkeypatch.setenv("PROP_EV_DATA_DIR", str(data_dir))
     monkeypatch.setenv("ODDS_API_KEY", "odds-test")
 
     store = SnapshotStore(data_dir)
@@ -97,7 +96,9 @@ def test_playbook_run_characterizes_default_window_and_output_lines(
     monkeypatch.setattr(cli, "_run_strategy_for_playbook", fake_strategy)
     monkeypatch.setattr(cli, "generate_brief_for_snapshot", fake_generate)
 
-    code = main(["playbook", "run", "--block-paid", "--month", "2026-02"])
+    code = main(
+        ["--data-dir", str(data_dir), "playbook", "run", "--block-paid", "--month", "2026-02"]
+    )
     out = capsys.readouterr().out
 
     assert code == 0

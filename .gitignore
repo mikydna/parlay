@@ -24,6 +24,7 @@ htmlcov/
 
 # Local env
 .env
+config/runtime.local.toml
 
 # OS files
 .DS_Store

@@ -8,22 +8,21 @@ Cache-first NBA odds snapshot pipeline for The Odds API v4.
 uv sync --all-groups
 ```
 
-## Environment
+## Runtime Config
 
-```bash
-cp .env.example .env
-```
+All runtime settings now come from `config/runtime.toml` (hard cutover, no env configuration).
 
-Set `ODDS_API_KEY` in `.env` (or `PROP_EV_ODDS_API_KEY`).
-If env vars are missing, the CLI also checks key files at repo root:
-`ODDS_API_KEY` / `ODDS_API_KEY.ignore`.
-Set `OPENAI_API_KEY` for LLM summaries, or place the key in `OPENAI_KEY` /
-`OPENAI_KEY.ignore` at repo root.
-Set `ODDS_DATA_DIR` in your shell (or pass `--data-dir`) to the storage location,
-for example `/Users/$USER/Documents/Code/parlay-data/lakes/odds`.
-Set `NBA_DATA_DIR` via `PROP_EV_NBA_DATA_DIR`, for example
-`/Users/$USER/Documents/Code/parlay-data/lakes/nba`.
-Reports are written to `REPORTS_DIR` (default: sibling `reports/odds/` next to `ODDS_DATA_DIR`).
+- Canonical paths (`odds_data_dir`, `nba_data_dir`, `reports_dir`, `runtime_dir`) live under
+  `[paths]`.
+- API key discovery uses configured key files in:
+  - `[odds_api].key_files` (for Odds API keys)
+  - `[openai].key_files` (for OpenAI keys)
+- Per-run overrides are CLI-only:
+  - `--config`
+  - `--data-dir`
+  - `--nba-data-dir`
+  - `--reports-dir`
+  - `--runtime-dir`
 
 Bookmaker whitelist defaults are in `config/bookmakers.json` (currently DraftKings + FanDuel).
 When `--bookmakers` is omitted, snapshot/playbook commands use this whitelist automatically.
@@ -32,7 +31,7 @@ When `--bookmakers` is omitted, snapshot/playbook commands use this whitelist au
 
 ```bash
 uv run prop-ev --help
-uv run prop-ev --data-dir /Users/$USER/Documents/Code/parlay-data/lakes/odds snapshot ls
+uv run prop-ev --data-dir /Users/$USER/Documents/Code/parlay-data/odds_api snapshot ls
 uv run prop-ev snapshot slate --dry-run
 uv run prop-ev snapshot props --dry-run --max-events 10
 uv run prop-ev strategy health --offline
@@ -57,7 +56,8 @@ uv run nba-data export clean --data-dir data/nba_data --dst-data-dir ../parlay-d
 uv run nba-data export raw-archive --data-dir data/nba_data --dst-data-dir ../parlay-data/nba_data
 ```
 
-Artifacts are written under `data/nba_data`. Ingest is resume-safe and skips already valid raw mirrors.
+Artifacts are written under configured `paths.nba_data_dir`.
+Ingest is resume-safe and skips already valid raw mirrors.
 
 ## Unified NBA Handle
 
@@ -104,7 +104,7 @@ Bundle snapshots and convert JSONL -> Parquet:
 ```bash
 uv run prop-ev snapshot lake --snapshot-id <SNAPSHOT_ID>
 uv run prop-ev snapshot pack --snapshot-id <SNAPSHOT_ID>
-uv run prop-ev snapshot unpack --bundle <ODDS_DATA_DIR>/bundles/snapshots/<SNAPSHOT_ID>.tar.zst
+uv run prop-ev snapshot unpack --bundle <odds_data_dir>/bundles/snapshots/<SNAPSHOT_ID>.tar.zst
 ```
 
 Historical day backfill (paid key, per-event historical endpoints):
@@ -182,16 +182,16 @@ uv run prop-ev strategy backtest-summarize --snapshot-id <SNAPSHOT_ID> --strateg
 ```
 
 Strategy context caches are written to:
-- `<NBA_DATA_DIR>/context/snapshots/<SNAPSHOT_ID>/injuries.json`
-- `<NBA_DATA_DIR>/context/snapshots/<SNAPSHOT_ID>/roster.json`
-- `<NBA_DATA_DIR>/context/snapshots/<SNAPSHOT_ID>/results.json`
-- `<NBA_DATA_DIR>/context/snapshots/<SNAPSHOT_ID>/official_injury_pdf/latest.pdf`
-- `<ODDS_DATA_DIR>/snapshots/<SNAPSHOT_ID>/context_ref.json` (lightweight pointer only)
+- `<nba_data_dir>/context/snapshots/<SNAPSHOT_ID>/injuries.json`
+- `<nba_data_dir>/context/snapshots/<SNAPSHOT_ID>/roster.json`
+- `<nba_data_dir>/context/snapshots/<SNAPSHOT_ID>/results.json`
+- `<nba_data_dir>/context/snapshots/<SNAPSHOT_ID>/official_injury_pdf/latest.pdf`
+- `<odds_data_dir>/snapshots/<SNAPSHOT_ID>/context_ref.json` (lightweight pointer only)
 
 Global context mirrors (for fallback and reruns) are written to:
-- `<NBA_DATA_DIR>/reference/injuries/latest.json`
-- `<NBA_DATA_DIR>/reference/rosters/latest.json`
-- `<NBA_DATA_DIR>/reference/rosters/roster-YYYY-MM-DD.json`
+- `<nba_data_dir>/reference/injuries/latest.json`
+- `<nba_data_dir>/reference/rosters/latest.json`
+- `<nba_data_dir>/reference/rosters/roster-YYYY-MM-DD.json`
 
 ## Playbook Workflow (Reader-Friendly Briefs)
 
@@ -300,19 +300,19 @@ uv run prop-ev credits report --month 2026-02
   - if quote timestamps are stale, strategy mode becomes `watchlist_only`.
 - Explicit override (secondary injuries only):
   - `--allow-secondary-injuries`, or
-  - `PROP_EV_STRATEGY_ALLOW_SECONDARY_INJURIES=true`
+  - `strategy.allow_secondary_injuries=true` in `config/runtime.toml`
   - when enabled and secondary injuries are healthy, run continues in degraded mode.
 - Source health command:
   - `uv run prop-ev strategy health --snapshot-id <SNAPSHOT_ID> --offline`
   - returns strict exit codes: `0 healthy`, `1 degraded`, `2 broken`.
-- Tune via env vars:
-  - `PROP_EV_STRATEGY_REQUIRE_OFFICIAL_INJURIES=true|false`
-  - `PROP_EV_STRATEGY_ALLOW_SECONDARY_INJURIES=true|false`
-  - `PROP_EV_STRATEGY_REQUIRE_FRESH_CONTEXT=true|false`
-  - `PROP_EV_STRATEGY_STALE_QUOTE_MINUTES=20`
-  - `PROP_EV_STRATEGY_DEFAULT_ID=v0`
-  - `PROP_EV_CONTEXT_INJURIES_STALE_HOURS=6`
-  - `PROP_EV_CONTEXT_ROSTER_STALE_HOURS=24`
+- Tune via `config/runtime.toml`:
+  - `[strategy].require_official_injuries`
+  - `[strategy].allow_secondary_injuries`
+  - `[strategy].require_fresh_context`
+  - `[strategy].stale_quote_minutes`
+  - `[strategy].default_id`
+  - `[strategy].context_injuries_stale_hours`
+  - `[strategy].context_roster_stale_hours`
 
 Source policy details and fallback rules are documented in `docs/sources.md`.
 

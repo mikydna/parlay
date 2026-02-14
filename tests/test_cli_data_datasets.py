@@ -32,11 +32,9 @@ def _status_payload(
 
 def test_data_datasets_ls_json_reports_dataset_summaries(
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     data_root = tmp_path / "data" / "odds_api"
-    monkeypatch.setenv("PROP_EV_DATA_DIR", str(data_root))
 
     first_spec = DatasetSpec(
         sport_key="basketball_nba",
@@ -85,7 +83,7 @@ def test_data_datasets_ls_json_reports_dataset_summaries(
         _status_payload(day="2026-02-03", complete=True, missing_count=0, total_events=6),
     )
 
-    code = main(["data", "datasets", "ls", "--json"])
+    code = main(["--data-dir", str(data_root), "data", "datasets", "ls", "--json"])
     assert code == 0
     payload = json.loads(capsys.readouterr().out)
 
@@ -115,11 +113,9 @@ def test_data_datasets_ls_json_reports_dataset_summaries(
 
 def test_data_datasets_show_json_supports_day_filters(
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     data_root = tmp_path / "data" / "odds_api"
-    monkeypatch.setenv("PROP_EV_DATA_DIR", str(data_root))
 
     spec = DatasetSpec(
         sport_key="basketball_nba",
@@ -151,6 +147,8 @@ def test_data_datasets_show_json_supports_day_filters(
 
     code = main(
         [
+            "--data-dir",
+            str(data_root),
             "data",
             "datasets",
             "show",

@@ -174,7 +174,7 @@ def backfill_days(
     def _client() -> OddsAPIClient:
         nonlocal client
         if client is None:
-            client = OddsAPIClient(Settings.from_env())
+            client = OddsAPIClient(Settings.from_runtime())
         return client
 
     try:

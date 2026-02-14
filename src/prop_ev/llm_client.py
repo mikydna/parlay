@@ -299,7 +299,6 @@ class LLMClient:
         self.key_root = key_root or Path.cwd()
         self.cache_dir = self.runtime_root / "llm_cache"
         self.usage_dir = self.runtime_root / "llm_usage"
-        self.legacy_cache_dir = self.data_root / "llm_cache"
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self.usage_dir.mkdir(parents=True, exist_ok=True)
 
@@ -324,9 +323,6 @@ class LLMClient:
 
     def _cache_path(self, cache_key: str) -> Path:
         return self.cache_dir / f"{cache_key}.json"
-
-    def _legacy_cache_path(self, cache_key: str) -> Path:
-        return self.legacy_cache_dir / f"{cache_key}.json"
 
     def _usage_path(self, month: str) -> Path:
         return self.usage_dir / f"usage-{month}.jsonl"
@@ -390,35 +386,31 @@ class LLMClient:
         cache_path = self._cache_path(cache_key)
         month = current_month_utc()
 
-        if not refresh:
-            existing_path = (
-                cache_path if cache_path.exists() else self._legacy_cache_path(cache_key)
+        if not refresh and cache_path.exists():
+            cached_row = json.loads(cache_path.read_text(encoding="utf-8"))
+            result = {
+                "cache_key": cache_key,
+                "cached": True,
+                "model": model,
+                "text": str(cached_row.get("response_text", "")),
+                "usage": cached_row.get("usage", {}),
+                "source": "cache",
+                "web_sources": cached_row.get("web_sources", []),
+            }
+            self._append_usage(
+                month=month,
+                task=task,
+                prompt_version=prompt_version,
+                model=model,
+                cache_key=cache_key,
+                snapshot_id=snapshot_id,
+                cached=True,
+                input_tokens=0,
+                output_tokens=0,
+                total_tokens=0,
+                cost_usd=0.0,
             )
-            if existing_path.exists():
-                cached_row = json.loads(existing_path.read_text(encoding="utf-8"))
-                result = {
-                    "cache_key": cache_key,
-                    "cached": True,
-                    "model": model,
-                    "text": str(cached_row.get("response_text", "")),
-                    "usage": cached_row.get("usage", {}),
-                    "source": "cache",
-                    "web_sources": cached_row.get("web_sources", []),
-                }
-                self._append_usage(
-                    month=month,
-                    task=task,
-                    prompt_version=prompt_version,
-                    model=model,
-                    cache_key=cache_key,
-                    snapshot_id=snapshot_id,
-                    cached=True,
-                    input_tokens=0,
-                    output_tokens=0,
-                    total_tokens=0,
-                    cost_usd=0.0,
-                )
-                return result
+            return result
 
         if offline:
             raise LLMOfflineCacheMissError(f"offline cache miss for task={task}")
