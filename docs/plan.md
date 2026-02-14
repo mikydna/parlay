@@ -527,6 +527,7 @@ boundaries.
 ### Track D — Evaluation scoreboard + promotion policy (start after C baseline)
 
 - **Owner worktree**: `wt-eval-scoreboard` (branch prefix: `codex/eval-*`).
+- Detailed implementation spec: `docs/track-stage8-eval-scoreboard.md`.
 - **Stage coverage**: Stage 8.
 - **Goal**: unify settlement outputs into a promotion-ready scoreboard.
 - **Depends on**:
