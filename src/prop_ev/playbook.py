@@ -39,6 +39,7 @@ from prop_ev.brief_builder import (
     upsert_best_available_section,
 )
 from prop_ev.budget import current_month_utc, llm_budget_status, odds_budget_status
+from prop_ev.calibration_map import annotate_strategy_report_with_calibration_map
 from prop_ev.latex_renderer import cleanup_latex_artifacts, render_pdf_from_markdown
 from prop_ev.llm_client import (
     LLMBudgetExceededError,
@@ -279,6 +280,7 @@ def generate_brief_for_snapshot(
     game_card_min_ev: float = 0.01,
     month: str | None = None,
     strategy_report_path: Path | None = None,
+    calibration_map_path: Path | None = None,
     write_markdown: bool = False,
     keep_tex: bool = False,
 ) -> dict[str, Any]:
@@ -295,6 +297,23 @@ def generate_brief_for_snapshot(
         raise FileNotFoundError(f"missing strategy report: {strategy_json_path}")
 
     strategy_report = _load_json(strategy_json_path)
+    calibration_map_applied = False
+    resolved_calibration_map_path = (
+        Path(calibration_map_path).expanduser()
+        if calibration_map_path is not None
+        else (reports_dir / "backtest-calibration-map.json")
+    )
+    if resolved_calibration_map_path.exists():
+        try:
+            calibration_map_payload = _load_json(resolved_calibration_map_path)
+        except (OSError, ValueError, json.JSONDecodeError):
+            calibration_map_payload = {}
+        if calibration_map_payload:
+            strategy_report = annotate_strategy_report_with_calibration_map(
+                report=strategy_report,
+                calibration_map=calibration_map_payload,
+            )
+            calibration_map_applied = True
     brief_input = build_brief_input(
         strategy_report,
         top_n=top_n,
@@ -650,6 +669,10 @@ def generate_brief_for_snapshot(
         "generated_at_et": _format_et(generated_at_utc),
         "snapshot_id": snapshot_id,
         "strategy_report_path": str(strategy_json_path),
+        "calibration_map_path": (
+            str(resolved_calibration_map_path) if resolved_calibration_map_path.exists() else ""
+        ),
+        "calibration_map_applied": calibration_map_applied,
         "write_markdown": bool(write_markdown),
         "keep_tex": bool(keep_tex),
         "model": model,

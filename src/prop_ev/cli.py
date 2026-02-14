@@ -12,7 +12,7 @@ from collections.abc import Callable
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from shutil import copy2
-from typing import Any
+from typing import Any, cast
 from zoneinfo import ZoneInfo
 
 from prop_ev.backtest import ROW_SELECTIONS, build_backtest_seed_rows, write_backtest_artifacts
@@ -3049,6 +3049,7 @@ def _complete_day_snapshots(data_root: Path, dataset_id_value: str) -> list[tupl
 
 def _cmd_strategy_backtest_summarize(args: argparse.Namespace) -> int:
     from prop_ev.backtest_summary import load_backtest_csv, summarize_backtest_rows
+    from prop_ev.calibration_map import CalibrationMode, build_calibration_map
     from prop_ev.eval_scoreboard import (
         PromotionThresholds,
         build_promotion_gate,
@@ -3083,9 +3084,17 @@ def _cmd_strategy_backtest_summarize(args: argparse.Namespace) -> int:
     ece_slack = max(0.0, float(getattr(args, "ece_slack", 0.01)))
     brier_slack = max(0.0, float(getattr(args, "brier_slack", 0.01)))
     all_complete_days = bool(getattr(args, "all_complete_days", False))
+    write_calibration_map = bool(getattr(args, "write_calibration_map", False))
+    calibration_map_mode = (
+        str(getattr(args, "calibration_map_mode", "walk_forward")).strip().lower()
+    )
+    if calibration_map_mode not in {"walk_forward", "in_sample"}:
+        raise CLIError("--calibration-map-mode must be one of: walk_forward,in_sample")
     explicit_results = getattr(args, "results", None)
     computed = []
     day_coverage: dict[str, Any] = {}
+    rows_for_map: dict[str, list[dict[str, str]]] = {}
+    dataset_id_value = ""
     if all_complete_days:
         if isinstance(explicit_results, list) and explicit_results:
             raise CLIError("--all-complete-days cannot be combined with --results")
@@ -3131,6 +3140,7 @@ def _cmd_strategy_backtest_summarize(args: argparse.Namespace) -> int:
                 bin_size=bin_size,
             )
             computed.append(summary)
+        rows_for_map = rows_by_strategy
         day_coverage = {
             "all_complete_days": True,
             "dataset_id": dataset_id_value,
@@ -3165,6 +3175,7 @@ def _cmd_strategy_backtest_summarize(args: argparse.Namespace) -> int:
             if not path.exists():
                 raise CLIError(f"missing backtest CSV: {path}")
             rows = load_backtest_csv(path)
+            rows_for_map[strategy_id] = rows
             summary = summarize_backtest_rows(rows, strategy_id=strategy_id, bin_size=bin_size)
             computed.append(summary)
 
@@ -3215,12 +3226,32 @@ def _cmd_strategy_backtest_summarize(args: argparse.Namespace) -> int:
         "strategies": sorted(strategy_rows, key=lambda row: row.get("strategy_id", "")),
         "winner": winner if winner is not None else {},
     }
+    calibration_map_payload: dict[str, Any] | None = None
+    if write_calibration_map and rows_for_map:
+        calibration_map_payload = build_calibration_map(
+            rows_by_strategy=rows_for_map,
+            bin_size=bin_size,
+            mode=cast(CalibrationMode, calibration_map_mode),
+            dataset_id=dataset_id_value,
+        )
+        report["calibration_map"] = {
+            "mode": calibration_map_mode,
+            "strategy_count": len(calibration_map_payload.get("strategies", {})),
+        }
 
     reports_dir.mkdir(parents=True, exist_ok=True)
     write_markdown = bool(getattr(args, "write_markdown", False))
     json_path = reports_dir / "backtest-summary.json"
     md_path = reports_dir / "backtest-summary.md"
+    calibration_map_path = reports_dir / "backtest-calibration-map.json"
     json_path.write_text(json.dumps(report, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+    if calibration_map_payload is not None:
+        calibration_map_path.write_text(
+            json.dumps(calibration_map_payload, sort_keys=True, indent=2) + "\n",
+            encoding="utf-8",
+        )
+    elif calibration_map_path.exists():
+        calibration_map_path.unlink()
     if write_markdown:
         md_path.write_text(_render_backtest_summary_markdown(report), encoding="utf-8")
     elif md_path.exists():
@@ -3228,6 +3259,8 @@ def _cmd_strategy_backtest_summarize(args: argparse.Namespace) -> int:
 
     print(f"snapshot_id={snapshot_id}")
     print(f"summary_json={json_path}")
+    if calibration_map_payload is not None:
+        print(f"calibration_map_json={calibration_map_path}")
     if write_markdown:
         print(f"summary_md={md_path}")
     if winner is not None:
@@ -3860,6 +3893,14 @@ def _cmd_playbook_run(args: argparse.Namespace) -> int:
     )
     if strategy_code != 0:
         return strategy_code
+    run_reports_dir = snapshot_reports_dir(store, snapshot_id)
+    calibration_map_path: Path | None = None
+    calibration_map_file = str(getattr(args, "calibration_map_file", "")).strip()
+    if calibration_map_file:
+        candidate = Path(calibration_map_file).expanduser()
+        calibration_map_path = (
+            candidate if candidate.is_absolute() else (run_reports_dir / candidate)
+        )
 
     brief = generate_brief_for_snapshot(
         store=store,
@@ -3871,6 +3912,7 @@ def _cmd_playbook_run(args: argparse.Namespace) -> int:
         per_game_top_n=per_game_top_n,
         game_card_min_ev=max(0.0, args.min_ev),
         month=month,
+        calibration_map_path=calibration_map_path,
         write_markdown=bool(getattr(args, "write_markdown", False)),
         keep_tex=bool(getattr(args, "keep_tex", False)),
     )
@@ -3937,6 +3979,13 @@ def _cmd_playbook_render(args: argparse.Namespace) -> int:
     else:
         strategy_report_path = reports_dir / candidate_report_path
     canonical_strategy_path = reports_dir / "strategy-report.json"
+    calibration_map_path: Path | None = None
+    calibration_map_file = str(getattr(args, "calibration_map_file", "")).strip()
+    if calibration_map_file:
+        candidate_map = Path(calibration_map_file).expanduser()
+        calibration_map_path = (
+            candidate_map if candidate_map.is_absolute() else (reports_dir / candidate_map)
+        )
     is_canonical_strategy_report = strategy_report_path.resolve(
         strict=False
     ) == canonical_strategy_path.resolve(strict=False)
@@ -3988,6 +4037,7 @@ def _cmd_playbook_render(args: argparse.Namespace) -> int:
         game_card_min_ev=max(0.0, args.min_ev),
         month=month,
         strategy_report_path=strategy_report_path,
+        calibration_map_path=calibration_map_path,
         write_markdown=bool(getattr(args, "write_markdown", False)),
         keep_tex=bool(getattr(args, "keep_tex", False)),
     )
@@ -4241,6 +4291,16 @@ def _cmd_playbook_discover_execute(args: argparse.Namespace) -> int:
         report=compare_report,
         write_markdown=bool(getattr(args, "write_markdown", False)),
     )
+    execution_reports_dir = snapshot_reports_dir(store, execution_snapshot_id)
+    calibration_map_path: Path | None = None
+    calibration_map_file = str(getattr(args, "calibration_map_file", "")).strip()
+    if calibration_map_file:
+        candidate_map = Path(calibration_map_file).expanduser()
+        calibration_map_path = (
+            candidate_map
+            if candidate_map.is_absolute()
+            else (execution_reports_dir / candidate_map)
+        )
 
     brief = generate_brief_for_snapshot(
         store=store,
@@ -4252,6 +4312,7 @@ def _cmd_playbook_discover_execute(args: argparse.Namespace) -> int:
         per_game_top_n=max(1, getattr(args, "per_game_top_n", 5)),
         game_card_min_ev=max(0.0, args.min_ev),
         month=month,
+        calibration_map_path=calibration_map_path,
         write_markdown=bool(getattr(args, "write_markdown", False)),
         keep_tex=bool(getattr(args, "keep_tex", False)),
     )
@@ -4903,6 +4964,17 @@ def _build_parser() -> argparse.ArgumentParser:
     strategy_backtest_summarize.add_argument("--min-graded", type=int, default=200)
     strategy_backtest_summarize.add_argument("--bin-size", type=float, default=0.05)
     strategy_backtest_summarize.add_argument(
+        "--write-calibration-map",
+        action="store_true",
+        help="Write `backtest-calibration-map.json` for optional pick-level confidence annotation.",
+    )
+    strategy_backtest_summarize.add_argument(
+        "--calibration-map-mode",
+        choices=("walk_forward", "in_sample"),
+        default="walk_forward",
+        help="Calibration map build mode (walk_forward avoids same-day leakage).",
+    )
+    strategy_backtest_summarize.add_argument(
         "--write-markdown",
         action="store_true",
         help="Write backtest summary markdown artifact (disabled by default).",
@@ -4946,6 +5018,14 @@ def _build_parser() -> argparse.ArgumentParser:
     playbook_run.add_argument("--top-n", type=int, default=0)
     playbook_run.add_argument("--per-game-top-n", type=int, default=0)
     playbook_run.add_argument("--strategy-top-n", type=int, default=25)
+    playbook_run.add_argument(
+        "--calibration-map-file",
+        default="",
+        help=(
+            "Optional calibration map JSON (absolute or relative to snapshot reports dir). "
+            "When omitted, playbook auto-loads backtest-calibration-map.json if present."
+        ),
+    )
     playbook_run.add_argument("--min-ev", type=float, default=0.01)
     playbook_run.add_argument("--allow-tier-b", action="store_true")
     playbook_run.add_argument(
@@ -4989,6 +5069,14 @@ def _build_parser() -> argparse.ArgumentParser:
     playbook_render.add_argument("--top-n", type=int, default=0)
     playbook_render.add_argument("--per-game-top-n", type=int, default=0)
     playbook_render.add_argument("--strategy-top-n", type=int, default=25)
+    playbook_render.add_argument(
+        "--calibration-map-file",
+        default="",
+        help=(
+            "Optional calibration map JSON (absolute or relative to snapshot reports dir). "
+            "When omitted, playbook auto-loads backtest-calibration-map.json if present."
+        ),
+    )
     playbook_render.add_argument("--min-ev", type=float, default=0.01)
     playbook_render.add_argument("--allow-tier-b", action="store_true")
     playbook_render.add_argument(
@@ -5071,6 +5159,14 @@ def _build_parser() -> argparse.ArgumentParser:
     playbook_discover_execute.add_argument("--top-n", type=int, default=25)
     playbook_discover_execute.add_argument("--per-game-top-n", type=int, default=5)
     playbook_discover_execute.add_argument("--strategy-top-n", type=int, default=50)
+    playbook_discover_execute.add_argument(
+        "--calibration-map-file",
+        default="",
+        help=(
+            "Optional calibration map JSON (absolute or relative "
+            "to execution snapshot reports dir)."
+        ),
+    )
     playbook_discover_execute.add_argument("--min-ev", type=float, default=0.01)
     playbook_discover_execute.add_argument("--allow-tier-b", action="store_true")
     playbook_discover_execute.add_argument(

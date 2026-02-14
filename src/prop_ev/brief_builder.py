@@ -191,11 +191,32 @@ def _format_prob(value: Any) -> str:
     return f"{prob * 100.0:.1f}%"
 
 
+def _format_prob_with_calibration(
+    *,
+    conservative_probability: Any,
+    calibrated_probability: Any,
+    fallback_probability: Any,
+) -> str:
+    conservative = _to_float(conservative_probability)
+    if conservative is None:
+        conservative = _to_float(fallback_probability)
+    calibrated = _to_float(calibrated_probability)
+    conservative_text = _format_prob(conservative)
+    calibrated_text = _format_prob(calibrated)
+    if calibrated_text and conservative_text and calibrated_text != conservative_text:
+        return f"{conservative_text} → {calibrated_text}"
+    return conservative_text or calibrated_text
+
+
 def _p_hit_notes_block() -> list[str]:
     return [
         P_HIT_NOTES_HEADING,
         "",
         "- `p(hit)` = estimated chance the recommended side wins at that line.",
+        (
+            "- When shown as `X% → Y%`, it is conservative `p(hit)` "
+            "mapped through calibration history."
+        ),
         "- Built from no-vig odds + small injury/roster/spread adjustments (clamped 1%-99%).",
         "- Use it to rank EV, not as a guarantee; judge it by calibration over many bets.",
         "- Can be wrong when odds are stale, coverage is thin, or minutes/role are uncertain.",
@@ -318,14 +339,32 @@ def _render_action_plan_table_rows(top_plays: list[dict[str, Any]]) -> list[str]
         action = _md_cell(row.get("action_default", "NO-GO"))
         game = _md_cell(row.get("game", ""))
         ticket = _md_cell(row.get("ticket", ""))
-        p_hit = _md_cell(_format_prob(row.get("model_prob")) or "n/a")
+        p_hit = _md_cell(
+            _format_prob_with_calibration(
+                conservative_probability=row.get("p_conservative"),
+                calibrated_probability=row.get("p_calibrated"),
+                fallback_probability=row.get("model_prob"),
+            )
+            or "n/a"
+        )
         edge_note = _md_cell(row.get("edge_note", "n/a"))
+        confidence_tier = _to_str(row.get("confidence_tier", "")).strip().lower()
+        quality_score = _format_prob(row.get("quality_score"))
+        uncertainty = _format_prob(row.get("uncertainty_band"))
+        confidence_tokens: list[str] = []
+        if confidence_tier:
+            confidence_tokens.append(f"confidence={confidence_tier}")
+        if quality_score:
+            confidence_tokens.append(f"quality={quality_score}")
+        if uncertainty:
+            confidence_tokens.append(f"uncertainty={uncertainty}")
+        confidence_note = f"; {'; '.join(confidence_tokens)}" if confidence_tokens else ""
         why = _md_cell(row.get("plain_reason", ""))
         context = (
             f"{why} "
             f"(tier={_to_str(row.get('tier', ''))}; "
             f"injury={_to_str(row.get('injury_status', ''))}; "
-            f"roster={_to_str(row.get('roster_status', ''))})"
+            f"roster={_to_str(row.get('roster_status', ''))}{confidence_note})"
         )
         lines.append(
             f"| {action} | {game} | {_md_cell(row.get('tier', ''))} | {ticket} | {p_hit} | "
@@ -492,8 +531,21 @@ def build_brief_input(
                 "best_ev": _to_float(item.get("best_ev")),
                 "best_kelly": _to_float(item.get("best_kelly")),
                 "model_prob": side_fields["model_prob"],
+                "p_conservative": (
+                    _to_float(item.get("p_conservative"))
+                    or _to_float(item.get("p_hit_low"))
+                    or side_fields["model_prob"]
+                ),
+                "p_calibrated": (
+                    _to_float(item.get("p_calibrated"))
+                    or _to_float(item.get("p_hit_low_calibrated"))
+                    or _to_float(item.get("p_hit_calibrated"))
+                ),
                 "fair_prob": side_fields["fair_prob"],
                 "hold": _to_float(item.get("hold")),
+                "quality_score": _to_float(item.get("quality_score")),
+                "uncertainty_band": _to_float(item.get("uncertainty_band")),
+                "confidence_tier": _to_str(item.get("confidence_tier", "")),
                 "injury_status": injury_status,
                 "roster_status": roster_status,
                 "pre_bet_ready": _to_optional_bool(item.get("pre_bet_ready")),
@@ -582,6 +634,24 @@ def build_brief_input(
                 "tier": _to_str(item.get("tier", "")),
                 "reason": reason,
                 "best_ev": _to_float(item.get("best_ev")),
+                "model_prob": (
+                    _to_float(item.get("model_p_hit"))
+                    or _to_float(item.get("p_conservative"))
+                    or _to_float(item.get("p_hit_low"))
+                ),
+                "p_conservative": (
+                    _to_float(item.get("p_conservative"))
+                    or _to_float(item.get("p_hit_low"))
+                    or _to_float(item.get("model_p_hit"))
+                ),
+                "p_calibrated": (
+                    _to_float(item.get("p_calibrated"))
+                    or _to_float(item.get("p_hit_low_calibrated"))
+                    or _to_float(item.get("p_hit_calibrated"))
+                ),
+                "quality_score": _to_float(item.get("quality_score")),
+                "uncertainty_band": _to_float(item.get("uncertainty_band")),
+                "confidence_tier": _to_str(item.get("confidence_tier", "")),
                 "injury_status": injury_status,
                 "roster_status": roster_status,
                 "pre_bet_ready": _to_optional_bool(item.get("pre_bet_ready")),
@@ -1017,7 +1087,14 @@ def _render_game_cards_section(
                     _md_cell(row.get("action_default", "NO-GO")),
                     _md_cell(row.get("tier", "")),
                     _md_cell(row.get("ticket", "")),
-                    _md_cell(_format_prob(row.get("model_prob")) or "n/a"),
+                    _md_cell(
+                        _format_prob_with_calibration(
+                            conservative_probability=row.get("p_conservative"),
+                            calibrated_probability=row.get("p_calibrated"),
+                            fallback_probability=row.get("model_prob"),
+                        )
+                        or "n/a"
+                    ),
                     _md_cell(row.get("edge_note", "")),
                     _md_cell(row.get("plain_reason", "")),
                 )

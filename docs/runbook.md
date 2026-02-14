@@ -188,5 +188,20 @@ Cross-day backtest summary:
 uv run prop-ev strategy backtest-summarize \
   --strategies s008 \
   --all-complete-days \
-  --dataset-id <DATASET_ID>
+  --dataset-id <DATASET_ID> \
+  --write-calibration-map \
+  --calibration-map-mode walk_forward
+```
+
+Outputs:
+- `<REPORTS_DIR>/by-snapshot/<snapshot_id>/backtest-summary.json`
+- `<REPORTS_DIR>/by-snapshot/<snapshot_id>/backtest-calibration-map.json` (when `--write-calibration-map` is enabled)
+
+Use calibration map during brief render (optional):
+
+```bash
+uv run prop-ev playbook render \
+  --snapshot-id <SNAPSHOT_ID> \
+  --offline \
+  --calibration-map-file backtest-calibration-map.json
 ```

@@ -199,6 +199,63 @@ def test_generate_brief_includes_execution_books_in_markdown(
     assert "- execution_books: `draftkings, fanduel`" in markdown
 
 
+def test_generate_brief_applies_calibration_map_annotation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("ODDS_API_KEY", "odds-test")
+    monkeypatch.setenv("PROP_EV_DATA_DIR", str(tmp_path / "data" / "odds_api"))
+
+    store = SnapshotStore(tmp_path / "data" / "odds_api")
+    snapshot_id = "day-test-2026-02-11"
+    store.ensure_snapshot(snapshot_id)
+    reports_dir = snapshot_reports_dir(store, snapshot_id)
+    reports_dir.mkdir(parents=True, exist_ok=True)
+    report = _sample_strategy_report()
+    report["strategy_id"] = "s001"
+    (reports_dir / "strategy-report.json").write_text(
+        json.dumps(report, sort_keys=True, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    (reports_dir / "backtest-calibration-map.json").write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "mode": "in_sample",
+                "bin_size": 0.1,
+                "strategies": {
+                    "s001": {
+                        "rows_scored": 20,
+                        "bins": [
+                            {"low": 0.5, "high": 0.6, "count": 20, "avg_p": 0.54, "hit_rate": 0.58}
+                        ],
+                    }
+                },
+            },
+            sort_keys=True,
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    settings = Settings(_env_file=None)
+    result = generate_brief_for_snapshot(
+        store=store,
+        settings=settings,
+        snapshot_id=snapshot_id,
+        top_n=5,
+        llm_refresh=False,
+        llm_offline=True,
+        write_markdown=True,
+    )
+
+    brief_input = json.loads((reports_dir / "brief-input.json").read_text(encoding="utf-8"))
+    assert brief_input["top_plays"][0]["p_calibrated"] == 0.58
+    assert brief_input["top_plays"][0]["p_conservative"] == 0.52
+    markdown = Path(result["report_markdown"]).read_text(encoding="utf-8")
+    assert "52.0% → 58.0%" in markdown
+
+
 def test_generate_brief_keeps_tex_when_enabled(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
