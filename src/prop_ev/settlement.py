@@ -637,6 +637,8 @@ def settle_snapshot(
     results_source: str = "auto",
     write_markdown: bool = False,
     keep_tex: bool = False,
+    write_pdf: bool = True,
+    output_suffix: str = "",
     seed_rows_override: list[dict[str, Any]] | None = None,
     strategy_report_path: str = "",
 ) -> dict[str, Any]:
@@ -686,6 +688,14 @@ def settle_snapshot(
     pdf_path = reports_dir / "settlement.pdf"
     csv_path = reports_dir / "settlement.csv"
     meta_path = reports_dir / "settlement.meta.json"
+    suffix = output_suffix.strip()
+    if suffix:
+        json_path = json_path.with_name(f"{json_path.stem}.{suffix}{json_path.suffix}")
+        md_path = md_path.with_name(f"{md_path.stem}.{suffix}{md_path.suffix}")
+        tex_path = tex_path.with_name(f"{tex_path.stem}.{suffix}{tex_path.suffix}")
+        pdf_path = pdf_path.with_name(f"{pdf_path.stem}.{suffix}{pdf_path.suffix}")
+        csv_path = csv_path.with_name(f"{csv_path.stem}.{suffix}{csv_path.suffix}")
+        meta_path = meta_path.with_name(f"{meta_path.stem}.{suffix}{meta_path.suffix}")
 
     source_details: dict[str, Any] = {
         "source": resolved_source,
@@ -712,19 +722,26 @@ def settle_snapshot(
         "source_details": source_details,
         "rows": rows,
     }
-    markdown = render_settlement_markdown(report)
-    if write_markdown:
-        md_path.write_text(markdown, encoding="utf-8")
+    markdown = ""
+    if write_markdown or write_pdf:
+        markdown = render_settlement_markdown(report)
+        if write_markdown:
+            md_path.write_text(markdown, encoding="utf-8")
+        elif md_path.exists():
+            md_path.unlink()
     elif md_path.exists():
         md_path.unlink()
-    pdf_result = render_pdf_from_markdown(
-        markdown,
-        tex_path=tex_path,
-        pdf_path=pdf_path,
-        title="Settlement",
-        landscape=True,
-    )
-    cleanup_latex_artifacts(tex_path=tex_path, keep_tex=keep_tex)
+
+    pdf_result: dict[str, Any] = {"status": "skipped"}
+    if write_pdf:
+        pdf_result = render_pdf_from_markdown(
+            markdown,
+            tex_path=tex_path,
+            pdf_path=pdf_path,
+            title="Settlement",
+            landscape=True,
+        )
+        cleanup_latex_artifacts(tex_path=tex_path, keep_tex=keep_tex)
     if write_csv:
         _write_csv(csv_path, rows)
 
@@ -732,7 +749,7 @@ def settle_snapshot(
         "json": str(json_path),
         "md": str(md_path) if write_markdown else "",
         "tex": str(tex_path) if keep_tex else "",
-        "pdf": str(pdf_path),
+        "pdf": str(pdf_path) if write_pdf else "",
         "csv": str(csv_path) if write_csv else "",
         "meta": str(meta_path),
     }

@@ -7,7 +7,7 @@ Use the snapshot artifacts from strategy run, then grade outcomes tomorrow.
 Backtest artifacts are generated explicitly (to keep reports compact):
 
 ```bash
-uv run prop-ev strategy backtest-prep --snapshot-id <snapshot_id> --selection eligible
+uv run prop-ev strategy backtest-prep --snapshot-id <snapshot_id> --selection ranked
 ```
 
 Outputs:
@@ -22,10 +22,12 @@ Optional during strategy run (same outputs, noisier):
 uv run prop-ev strategy run --snapshot-id <snapshot_id> --write-backtest-artifacts
 ```
 
+Note: `--write-backtest-artifacts` writes a `ranked` seed by default (the executed portfolio picks).
+
 Selection modes:
 
-- `eligible` (default): all eligible candidate lines
-- `ranked`: ranked plays only
+- `ranked`: executed portfolio picks (bounded by `--max-picks`; recommended for backtests)
+- `eligible`: all eligible candidate lines (diagnostic; not a realistic execution backtest)
 - `top_ev`: Tier A top EV plays only
 - `one_source`: Tier B plays only
 - `all_candidates`: includes ineligible rows
@@ -63,14 +65,14 @@ uv run prop-ev strategy settle --snapshot-id <snapshot_id> --refresh-results --r
 Outputs:
 
 - `<REPORTS_DIR>/by-snapshot/<report_snapshot>/settlement.json`
-- `<REPORTS_DIR>/by-snapshot/<report_snapshot>/settlement.pdf`
+- `<REPORTS_DIR>/by-snapshot/<report_snapshot>/settlement.pdf` (omit with `--no-pdf`)
 - `<REPORTS_DIR>/by-snapshot/<report_snapshot>/settlement.meta.json`
 - optional markdown via `--write-markdown`:
   `<REPORTS_DIR>/by-snapshot/<report_snapshot>/settlement.md`
 - optional tex via `--keep-tex`:
   `<REPORTS_DIR>/by-snapshot/<report_snapshot>/settlement.tex`
 - optional CSV via `--write-csv`:
-  `<REPORTS_DIR>/by-snapshot/<report_snapshot>/settlement.csv`
+  `<REPORTS_DIR>/by-snapshot/<report_snapshot>/settlement.csv` (or `settlement.<strategy>.csv` when settling a non-canonical seed)
 
 Behavior:
 
@@ -83,6 +85,8 @@ Behavior:
   `strategy-brief.meta.json` (or `strategy-report.json` fallback), so settlement aligns with the
   brief. Use `--seed-path` to force a specific seed file.
 - `--offline` forces cache-only behavior and ignores `--refresh-results`.
+- When `--seed-path` points at a suffixed strategy seed (e.g. `backtest-seed.s008.jsonl`),
+  settlement outputs are written with the same suffix to avoid overwriting the canonical report.
 - Final games are graded `win|loss|push`.
 - In-progress and scheduled games remain `pending`.
 - Rows that cannot be resolved (missing player/game, unsupported market) are `unresolved`.

@@ -2498,11 +2498,14 @@ def _cmd_strategy_run(args: argparse.Namespace) -> int:
     resolved_max_picks = (
         requested_max_picks if requested_max_picks > 0 else max(0, int(max_picks_default))
     )
-    rolling_priors = _load_rolling_priors_for_strategy(
-        store=store,
-        strategy_id=strategy_id,
-        snapshot_id=snapshot_id,
-    )
+    rolling_priors: dict[str, Any] = {}
+    strategy_recipe = getattr(plugin, "recipe", None)
+    if bool(getattr(strategy_recipe, "use_rolling_priors", False)):
+        rolling_priors = _load_rolling_priors_for_strategy(
+            store=store,
+            strategy_id=strategy_id,
+            snapshot_id=snapshot_id,
+        )
     config = StrategyRunConfig(
         top_n=int(args.top_n),
         max_picks=resolved_max_picks,
@@ -2560,7 +2563,7 @@ def _cmd_strategy_run(args: argparse.Namespace) -> int:
             snapshot_dir=snapshot_dir,
             reports_dir=reports_dir,
             report=report,
-            selection="eligible",
+            selection="ranked",
             top_n=0,
             strategy_id=strategy_id,
             write_canonical=write_canonical,
@@ -2756,8 +2759,13 @@ def _cmd_strategy_compare(args: argparse.Namespace) -> int:
         raise CLIError("compare requires --strategies with at least 2 unique ids")
 
     require_official_injuries = _env_bool("PROP_EV_STRATEGY_REQUIRE_OFFICIAL_INJURIES", True)
-    stale_quote_minutes = _env_int("PROP_EV_STRATEGY_STALE_QUOTE_MINUTES", 20)
-    require_fresh_context = _env_bool("PROP_EV_STRATEGY_REQUIRE_FRESH_CONTEXT", True)
+    stale_quote_minutes_env = _env_int("PROP_EV_STRATEGY_STALE_QUOTE_MINUTES", 20)
+    require_fresh_context_env = _env_bool("PROP_EV_STRATEGY_REQUIRE_FRESH_CONTEXT", True)
+    _, stale_quote_minutes, require_fresh_context = _resolve_strategy_runtime_policy(
+        mode=str(getattr(args, "mode", "auto")),
+        stale_quote_minutes=stale_quote_minutes_env,
+        require_fresh_context=require_fresh_context_env,
+    )
 
     (
         snapshot_dir,
@@ -2794,11 +2802,14 @@ def _cmd_strategy_compare(args: argparse.Namespace) -> int:
     for requested in strategy_ids:
         plugin = get_strategy(requested)
         strategy_id = normalize_strategy_id(plugin.info.id)
-        rolling_priors = _load_rolling_priors_for_strategy(
-            store=store,
-            strategy_id=strategy_id,
-            snapshot_id=snapshot_id,
-        )
+        rolling_priors: dict[str, Any] = {}
+        strategy_recipe = getattr(plugin, "recipe", None)
+        if bool(getattr(strategy_recipe, "use_rolling_priors", False)):
+            rolling_priors = _load_rolling_priors_for_strategy(
+                store=store,
+                strategy_id=strategy_id,
+                snapshot_id=snapshot_id,
+            )
         inputs = StrategyInputs(
             snapshot_id=snapshot_id,
             manifest=manifest,
@@ -2834,7 +2845,7 @@ def _cmd_strategy_compare(args: argparse.Namespace) -> int:
             snapshot_dir=snapshot_dir,
             reports_dir=reports_dir,
             report=report,
-            selection="eligible",
+            selection="ranked",
             top_n=0,
             strategy_id=strategy_id,
             write_canonical=False,
@@ -2996,6 +3007,21 @@ def _cmd_strategy_backtest_summarize(args: argparse.Namespace) -> int:
     snapshot_id = args.snapshot_id or _latest_snapshot_id(store)
     reports_dir = snapshot_reports_dir(store, snapshot_id)
 
+    def _resolve_results_csv(reports_dir: Path, strategy_id: str) -> Path:
+        settlement_path = reports_dir / f"settlement.{strategy_id}.csv"
+        if settlement_path.exists():
+            return settlement_path
+        if strategy_id == "s001":
+            settlement_path = reports_dir / "settlement.csv"
+            if settlement_path.exists():
+                return settlement_path
+        template_path = reports_dir / f"backtest-results-template.{strategy_id}.csv"
+        if template_path.exists():
+            return template_path
+        if strategy_id == "s001":
+            template_path = reports_dir / "backtest-results-template.csv"
+        return template_path
+
     bin_size = float(getattr(args, "bin_size", 0.05))
     min_graded = int(getattr(args, "min_graded", 0))
     all_complete_days = bool(getattr(args, "all_complete_days", False))
@@ -3027,9 +3053,7 @@ def _cmd_strategy_backtest_summarize(args: argparse.Namespace) -> int:
         for day, day_snapshot_id in complete_days:
             day_reports_dir = snapshot_reports_dir(store, day_snapshot_id)
             for strategy_id in strategy_ids:
-                path = day_reports_dir / f"backtest-results-template.{strategy_id}.csv"
-                if strategy_id == "s001" and not path.exists():
-                    path = day_reports_dir / "backtest-results-template.csv"
+                path = _resolve_results_csv(day_reports_dir, strategy_id)
                 if not path.exists():
                     skipped_days.append(
                         {
@@ -3081,9 +3105,7 @@ def _cmd_strategy_backtest_summarize(args: argparse.Namespace) -> int:
             if not strategy_ids:
                 raise CLIError("backtest-summarize requires --strategies or --results")
             for strategy_id in strategy_ids:
-                path = reports_dir / f"backtest-results-template.{strategy_id}.csv"
-                if strategy_id == "s001" and not path.exists():
-                    path = reports_dir / "backtest-results-template.csv"
+                path = _resolve_results_csv(reports_dir, strategy_id)
                 paths.append((strategy_id, path))
 
         for strategy_id, path in paths:
@@ -3237,9 +3259,13 @@ def _cmd_strategy_settle(args: argparse.Namespace) -> int:
         except (OSError, json.JSONDecodeError) as exc:
             raise CLIError(f"invalid strategy report: {strategy_report_path}") from exc
         if isinstance(payload, dict):
+            selection = "eligible"
+            ranked = payload.get("ranked_plays")
+            if isinstance(ranked, list) and ranked:
+                selection = "ranked"
             seed_rows_override = build_backtest_seed_rows(
                 report=payload,
-                selection="eligible",
+                selection=selection,
                 top_n=0,
             )
             strategy_report_for_settlement = str(strategy_report_path)
@@ -3249,6 +3275,39 @@ def _cmd_strategy_settle(args: argparse.Namespace) -> int:
         raise CLIError(
             f"could not derive settlement rows from strategy report: {strategy_report_path}"
         )
+
+    def _resolve_settlement_suffix(
+        *,
+        seed_rows: list[dict[str, Any]] | None,
+        seed_path: Path,
+        using_default_seed_path: bool,
+        strategy_report_path: Path | None,
+    ) -> str:
+        if using_default_seed_path and (
+            strategy_report_path is None or strategy_report_path.name == "strategy-report.json"
+        ):
+            return ""
+        resolved_rows = seed_rows
+        if resolved_rows is None and seed_path.exists():
+            try:
+                resolved_rows = load_jsonl(seed_path)
+            except OSError:
+                resolved_rows = None
+        if resolved_rows:
+            for row in resolved_rows:
+                if not isinstance(row, dict):
+                    continue
+                candidate = str(row.get("strategy_id", "")).strip()
+                if candidate:
+                    return normalize_strategy_id(candidate)
+        return ""
+
+    output_suffix = _resolve_settlement_suffix(
+        seed_rows=seed_rows_override,
+        seed_path=seed_path,
+        using_default_seed_path=using_default_seed_path,
+        strategy_report_path=strategy_report_path,
+    )
 
     report = settle_snapshot(
         snapshot_dir=snapshot_dir,
@@ -3261,6 +3320,8 @@ def _cmd_strategy_settle(args: argparse.Namespace) -> int:
         results_source=str(getattr(args, "results_source", "auto")),
         write_markdown=bool(getattr(args, "write_markdown", False)),
         keep_tex=bool(getattr(args, "keep_tex", False)),
+        write_pdf=not bool(getattr(args, "no_pdf", False)),
+        output_suffix=output_suffix,
         seed_rows_override=seed_rows_override,
         strategy_report_path=strategy_report_for_settlement,
     )
@@ -4624,6 +4685,12 @@ def _build_parser() -> argparse.ArgumentParser:
         ),
     )
     strategy_compare.add_argument("--min-ev", type=float, default=0.01)
+    strategy_compare.add_argument(
+        "--mode",
+        choices=("auto", "live", "replay"),
+        default="auto",
+        help="Strategy runtime mode (replay relaxes freshness gates for historical reruns).",
+    )
     strategy_compare.add_argument("--allow-tier-b", action="store_true")
     strategy_compare.add_argument(
         "--write-markdown",
@@ -4676,6 +4743,11 @@ def _build_parser() -> argparse.ArgumentParser:
         "--write-markdown",
         action="store_true",
         help="Write settlement markdown artifact (disabled by default).",
+    )
+    strategy_settle.add_argument(
+        "--no-pdf",
+        action="store_true",
+        help="Skip settlement PDF generation (useful for bulk backtests).",
     )
     strategy_settle.add_argument(
         "--keep-tex",

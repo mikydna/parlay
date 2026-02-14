@@ -522,6 +522,10 @@ class NBARepository:
         mode: ResultsSourceMode,
     ) -> tuple[dict[str, Any], Path]:
         teams_in_scope = _seed_teams(seed_rows)
+        target_day = resolve_snapshot_date(self.snapshot_id)
+        today = datetime.now(UTC).date()
+        if target_day < today:
+            teams_in_scope = set()
         snapshot_day = resolve_snapshot_date_str(self.snapshot_id)
         cache_path = self._context_json_path("results")
         results = load_or_fetch_context(

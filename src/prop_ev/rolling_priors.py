@@ -116,9 +116,13 @@ def build_rolling_priors(
     key_counts: dict[str, dict[str, int]] = {}
     rows_used = 0
     for snapshot_dir in sorted(path for path in by_snapshot.iterdir() if path.is_dir()):
-        csv_path = snapshot_dir / f"backtest-results-template.{strategy_id}.csv"
+        csv_path = snapshot_dir / f"settlement.{strategy_id}.csv"
         if strategy_id == "s001" and not csv_path.exists():
-            csv_path = snapshot_dir / "backtest-results-template.csv"
+            csv_path = snapshot_dir / "settlement.csv"
+        if not csv_path.exists():
+            csv_path = snapshot_dir / f"backtest-results-template.{strategy_id}.csv"
+            if strategy_id == "s001" and not csv_path.exists():
+                csv_path = snapshot_dir / "backtest-results-template.csv"
         if not csv_path.exists():
             continue
 
