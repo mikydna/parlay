@@ -1,6 +1,7 @@
 from prop_ev.backtest_summary import summarize_backtest_rows
 from prop_ev.eval_scoreboard import (
     PromotionThresholds,
+    build_power_gate,
     build_promotion_gate,
     pick_promotion_winner,
     resolve_baseline_strategy_id,
@@ -143,3 +144,78 @@ def test_pick_promotion_winner_sorts_deterministically() -> None:
     )
     assert winner is not None
     assert winner["strategy_id"] == "s011"
+
+
+def test_build_power_gate_marks_underpowered_for_target() -> None:
+    summary = _summary(
+        "s010",
+        [
+            {
+                "selected_price_american": "100",
+                "stake_units": "1",
+                "model_p_hit": "0.6",
+                "result": "win",
+            }
+        ],
+    )
+    gate = build_power_gate(
+        summary=summary,
+        power_guidance={
+            "baseline_strategy_id": "s007",
+            "strategies": [
+                {
+                    "strategy_id": "s010",
+                    "overlap_days": 20,
+                    "insufficient_overlap": False,
+                    "required_days_by_target": [
+                        {
+                            "target_roi_uplift_per_bet": 0.02,
+                            "required_days": 100,
+                            "required_graded_rows": 500,
+                        }
+                    ],
+                }
+            ],
+        },
+        target_roi_uplift_per_bet=0.02,
+    )
+    assert gate["status"] == "fail"
+    assert "underpowered_for_target_uplift" in gate["reasons"]
+
+
+def test_build_power_gate_passes_when_rows_cover_required_floor() -> None:
+    summary = _summary(
+        "s010",
+        [
+            {
+                "selected_price_american": "100",
+                "stake_units": "1",
+                "model_p_hit": "0.6",
+                "result": "win",
+            }
+            for _ in range(5)
+        ],
+    )
+    gate = build_power_gate(
+        summary=summary,
+        power_guidance={
+            "baseline_strategy_id": "s007",
+            "strategies": [
+                {
+                    "strategy_id": "s010",
+                    "overlap_days": 20,
+                    "insufficient_overlap": False,
+                    "required_days_by_target": [
+                        {
+                            "target_roi_uplift_per_bet": 0.02,
+                            "required_days": 1,
+                            "required_graded_rows": 3,
+                        }
+                    ],
+                }
+            ],
+        },
+        target_roi_uplift_per_bet=0.02,
+    )
+    assert gate["status"] == "pass"
+    assert gate["reasons"] == []

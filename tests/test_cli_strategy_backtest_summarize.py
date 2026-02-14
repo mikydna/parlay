@@ -121,6 +121,7 @@ def test_strategy_backtest_summarize_all_complete_days_aggregates_rows(
             "--write-analysis-scoreboard",
             "--analysis-run-id",
             "eval-smoke",
+            "--require-power-gate",
         ]
     )
     out = capsys.readouterr().out
@@ -439,6 +440,7 @@ def test_strategy_backtest_summarize_writes_power_guidance_for_complete_days(
             "--write-analysis-scoreboard",
             "--analysis-run-id",
             "eval-smoke",
+            "--require-power-gate",
         ]
     )
     out = capsys.readouterr().out
@@ -468,6 +470,10 @@ def test_strategy_backtest_summarize_writes_power_guidance_for_complete_days(
     analysis_payload = json.loads(Path(analysis_path).read_text(encoding="utf-8"))
     assert analysis_payload["report_kind"] == "aggregate_scoreboard"
     assert analysis_payload["analysis_run_id"] == "eval-smoke"
+    by_strategy = {row["strategy_id"]: row for row in analysis_payload["strategies"]}
+    assert by_strategy["s007"]["power_gate"]["status"] == "baseline"
+    assert by_strategy["s010"]["power_gate"]["target_roi_uplift_per_bet"] == 0.02
+    assert "underpowered_for_target_uplift" in by_strategy["s010"]["promotion_gate"]["reasons"]
 
 
 def test_strategy_backtest_summarize_analysis_scoreboard_is_deterministic(

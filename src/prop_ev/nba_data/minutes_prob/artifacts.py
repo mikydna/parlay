@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+import shutil
 from pathlib import Path
 from typing import Any
 
@@ -66,6 +68,33 @@ def load_predictions_index(path: Path) -> dict[str, Any]:
     }
 
 
+def _latest_predictions_for_snapshot_day(*, root_dir: Path, snapshot_day: str) -> Path | None:
+    latest_predictions = root_dir / "latest" / "predictions.parquet"
+    latest_meta_path = root_dir / "latest" / "predictions.meta.json"
+    if not latest_predictions.exists() or not latest_meta_path.exists():
+        return None
+    try:
+        payload = json.loads(latest_meta_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not isinstance(payload, dict):
+        return None
+    as_of_date = str(payload.get("as_of_date", "")).strip()
+    if as_of_date != snapshot_day:
+        return None
+    return latest_predictions
+
+
+def _write_snapshot_cache_from_latest(*, latest_path: Path, snapshot_path: Path) -> None:
+    snapshot_path.parent.mkdir(parents=True, exist_ok=True)
+    if not snapshot_path.exists():
+        shutil.copy2(latest_path, snapshot_path)
+    latest_meta = latest_path.with_suffix(".meta.json")
+    snapshot_meta = snapshot_path.with_suffix(".meta.json")
+    if latest_meta.exists() and not snapshot_meta.exists():
+        shutil.copy2(latest_meta, snapshot_meta)
+
+
 def load_minutes_prob_index_for_snapshot(
     *,
     layout: NBADataLayout,
@@ -78,6 +107,7 @@ def load_minutes_prob_index_for_snapshot(
         return {"exact": {}, "player": {}, "meta": {"profile": "off"}}
     root = minutes_prob_root(layout)
     path = predictions_path_for_day(root_dir=root, snapshot_day=snapshot_day)
+    cache_mode = "snapshot_cache"
     if not path.exists() and auto_build:
         maybe_auto_build_predictions_for_day(
             layout=layout,
@@ -85,14 +115,22 @@ def load_minutes_prob_index_for_snapshot(
             snapshot_day=snapshot_day,
         )
     if not path.exists():
-        latest = root / "latest" / "predictions.parquet"
-        if latest.exists():
-            path = latest
+        latest_for_day = _latest_predictions_for_snapshot_day(
+            root_dir=root,
+            snapshot_day=snapshot_day,
+        )
+        if latest_for_day is not None:
+            _write_snapshot_cache_from_latest(
+                latest_path=latest_for_day,
+                snapshot_path=path,
+            )
+            cache_mode = "latest_write_through"
     payload = load_predictions_index(path)
     meta = payload.get("meta")
     if not isinstance(meta, dict):
         meta = {}
     meta["profile"] = profile
     meta["snapshot_day"] = snapshot_day
+    meta["cache_mode"] = cache_mode if path.exists() else "missing"
     payload["meta"] = meta
     return payload
