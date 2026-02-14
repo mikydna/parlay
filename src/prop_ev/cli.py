@@ -35,6 +35,8 @@ from prop_ev.discovery_execution import (
 )
 from prop_ev.execution_projection import ExecutionProjectionConfig, project_execution_report
 from prop_ev.identity_map import load_identity_map, update_identity_map
+from prop_ev.lake_guardrails import build_guardrail_report
+from prop_ev.lake_migration import migrate_layout
 from prop_ev.nba_data.repo import NBARepository
 from prop_ev.normalize import normalize_event_odds, normalize_featured_odds
 from prop_ev.odds_client import (
@@ -1536,6 +1538,73 @@ def _cmd_data_verify(args: argparse.Namespace) -> int:
     return 2 if issue_count else 0
 
 
+def _cmd_data_guardrails(args: argparse.Namespace) -> int:
+    store = SnapshotStore(os.environ.get("PROP_EV_DATA_DIR", "data/odds_api"))
+    report = build_guardrail_report(store.root)
+    violations = report.get("violations", [])
+    violation_count = int(report.get("violation_count", 0))
+    if bool(getattr(args, "json_output", False)):
+        print(json.dumps(report, sort_keys=True))
+    else:
+        print(f"odds_root={report.get('odds_root', '')}")
+        print(f"status={report.get('status', '')} violation_count={violation_count}")
+        for row in violations:
+            if not isinstance(row, dict):
+                continue
+            print(
+                "violation code={} path={} detail={}".format(
+                    str(row.get("code", "")),
+                    str(row.get("path", "")),
+                    str(row.get("detail", "")),
+                )
+            )
+    return 1 if violation_count > 0 else 0
+
+
+def _cmd_data_migrate_layout(args: argparse.Namespace) -> int:
+    store = SnapshotStore(os.environ.get("PROP_EV_DATA_DIR", "data/odds_api"))
+    snapshot_ids = [str(value) for value in getattr(args, "snapshot_id", []) if str(value).strip()]
+    report = migrate_layout(
+        odds_root=store.root,
+        snapshot_ids=snapshot_ids or None,
+        dry_run=not bool(getattr(args, "apply", False)),
+    )
+    if bool(getattr(args, "json_output", False)):
+        print(json.dumps(report, sort_keys=True))
+    else:
+        action_counts = report.get("action_counts", {})
+        print(f"odds_root={report.get('odds_root', '')}")
+        print(f"reports_root={report.get('reports_root', '')}")
+        print(f"runtime_root={report.get('runtime_root', '')}")
+        print(f"dry_run={str(bool(report.get('dry_run', True))).lower()}")
+        print(f"action_counts={json.dumps(action_counts, sort_keys=True)}")
+        for row in report.get("actions", []):
+            if not isinstance(row, dict):
+                continue
+            print(
+                "action={} status={} source={} destination={} reason={}".format(
+                    str(row.get("action", "")),
+                    str(row.get("status", "")),
+                    str(row.get("source", "")),
+                    str(row.get("destination", "")),
+                    str(row.get("reason", "")),
+                )
+            )
+        guardrails = report.get("guardrails")
+        if isinstance(guardrails, dict):
+            print(f"guardrails_status={guardrails.get('status', '')}")
+            print(f"guardrails_violation_count={guardrails.get('violation_count', 0)}")
+    action_counts = report.get("action_counts", {})
+    conflicts = int(action_counts.get("conflict", 0))
+    if conflicts > 0:
+        return 2
+    if bool(getattr(args, "apply", False)):
+        guardrails = report.get("guardrails", {})
+        if isinstance(guardrails, dict) and int(guardrails.get("violation_count", 0)) > 0:
+            return 1
+    return 0
+
+
 def _latest_snapshot_id(store: SnapshotStore) -> str:
     snapshots = sorted(path for path in store.snapshots_dir.iterdir() if path.is_dir())
     if not snapshots:
@@ -2097,8 +2166,8 @@ def _load_strategy_inputs(
 
     injuries_stale_hours = _env_float("PROP_EV_CONTEXT_INJURIES_STALE_HOURS", 6.0)
     roster_stale_hours = _env_float("PROP_EV_CONTEXT_ROSTER_STALE_HOURS", 24.0)
-    reference_dir = store.root / "reference"
-    identity_map_path = reference_dir / "player_identity_map.json"
+    context_repo = NBARepository.from_store(store=store, snapshot_id=snapshot_id)
+    identity_map_path = context_repo.identity_map_path()
     teams_in_scope = sorted(_teams_in_scope(event_context))
     injuries, roster, _, _ = _load_strategy_context(
         store=store,
@@ -2272,15 +2341,16 @@ def _cmd_strategy_run(args: argparse.Namespace) -> int:
         print(f"backtest_seed_jsonl={backtest['seed_jsonl']}")
         print(f"backtest_results_template_csv={backtest['results_template_csv']}")
         print(f"backtest_readiness_json={backtest['readiness_json']}")
-    reference_dir = store.root / "reference"
-    identity_map_path = reference_dir / "player_identity_map.json"
+    context_repo = NBARepository.from_store(store=store, snapshot_id=snapshot_id)
+    identity_map_path = context_repo.identity_map_path()
     identity_map = load_identity_map(identity_map_path)
     entries = (
         len(identity_map.get("players", {})) if isinstance(identity_map.get("players"), dict) else 0
     )
     print(f"identity_map={identity_map_path} entries={entries}")
-    print(f"injuries_context={snapshot_dir / 'context' / 'injuries.json'}")
-    print(f"roster_context={snapshot_dir / 'context' / 'roster.json'}")
+    injuries_context_path, roster_context_path, _results_context_path = context_repo.context_paths()
+    print(f"injuries_context={injuries_context_path}")
+    print(f"roster_context={roster_context_path}")
 
     execution_books = tuple(parse_csv(str(getattr(args, "execution_bookmakers", ""))))
     if execution_books:
@@ -3922,6 +3992,41 @@ def _build_parser() -> argparse.ArgumentParser:
     data_backfill.add_argument("--block-paid", action="store_true")
     data_backfill.add_argument("--force", action="store_true")
     data_backfill.add_argument("--dry-run", action="store_true")
+
+    data_guardrails = data_subparsers.add_parser(
+        "guardrails",
+        help="Check lake/report/runtime boundary guardrails",
+    )
+    data_guardrails.set_defaults(func=_cmd_data_guardrails)
+    data_guardrails.add_argument(
+        "--json",
+        dest="json_output",
+        action="store_true",
+        help="Emit machine-readable JSON payload",
+    )
+
+    data_migrate_layout = data_subparsers.add_parser(
+        "migrate-layout",
+        help="Migrate legacy layout into P0 lake/report/runtime contract",
+    )
+    data_migrate_layout.set_defaults(func=_cmd_data_migrate_layout)
+    data_migrate_layout.add_argument(
+        "--snapshot-id",
+        action="append",
+        default=[],
+        help="Restrict migration to one snapshot id (repeatable). Defaults to all snapshots.",
+    )
+    data_migrate_layout.add_argument(
+        "--apply",
+        action="store_true",
+        help="Apply filesystem mutations (default is dry-run planning only).",
+    )
+    data_migrate_layout.add_argument(
+        "--json",
+        dest="json_output",
+        action="store_true",
+        help="Emit machine-readable JSON payload",
+    )
 
     credits = subparsers.add_parser("credits", help="Credit tooling")
     credits_subparsers = credits.add_subparsers(dest="credits_command")

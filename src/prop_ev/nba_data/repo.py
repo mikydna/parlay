@@ -2,11 +2,19 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from prop_ev.data_paths import (
+    canonical_context_dir,
+    data_home_from_odds_root,
+)
+from prop_ev.data_paths import (
+    resolve_nba_data_root as resolve_nba_data_root_from_odds,
+)
 from prop_ev.nba_data.cache_store import NBADataCacheStore
 from prop_ev.nba_data.config import resolve_data_dir
 from prop_ev.nba_data.context_cache import load_or_fetch_context
@@ -108,13 +116,7 @@ def _seed_teams(seed_rows: list[dict[str, Any]]) -> set[str]:
 
 def _resolve_nba_data_root(odds_data_root: Path) -> Path:
     configured = resolve_data_dir(None).resolve()
-    default_root = Path("data/nba_data").resolve()
-    if configured != default_root:
-        return configured
-    sibling = odds_data_root.resolve().parent / "nba_data"
-    if sibling.exists():
-        return sibling
-    return configured
+    return resolve_nba_data_root_from_odds(odds_data_root, configured=configured)
 
 
 class NBARepository:
@@ -131,12 +133,16 @@ class NBARepository:
         self.odds_data_root = odds_data_root.resolve()
         self.snapshot_id = snapshot_id
         self.snapshot_dir = snapshot_dir.resolve()
-        self.context_dir = self.snapshot_dir / "context"
         self.nba_data_root = (
             nba_data_root.resolve()
             if nba_data_root is not None
             else _resolve_nba_data_root(self.odds_data_root)
         )
+        self.context_dir = canonical_context_dir(self.nba_data_root, self.snapshot_id)
+        self.legacy_context_dir = self.snapshot_dir / "context"
+        self.context_ref_path = self.snapshot_dir / "context_ref.json"
+        self.reference_dir = self.nba_data_root / "reference"
+        self.legacy_reference_dir = self.odds_data_root / "reference"
         self.cache = NBADataCacheStore(self.odds_data_root)
         self._boxscore_manifest_index: dict[str, Path] | None = None
 
@@ -148,6 +154,101 @@ class NBARepository:
             snapshot_dir=store.snapshot_dir(snapshot_id),
         )
 
+    def _context_json_path(self, name: str) -> Path:
+        return self.context_dir / f"{name}.json"
+
+    def _legacy_context_json_path(self, name: str) -> Path:
+        return self.legacy_context_dir / f"{name}.json"
+
+    def _context_ref_relpath(self, path: Path) -> str:
+        data_home = data_home_from_odds_root(self.odds_data_root)
+        resolved = path.resolve()
+        try:
+            return str(resolved.relative_to(data_home))
+        except ValueError:
+            return str(resolved)
+
+    def _sha256_file(self, path: Path) -> str:
+        hasher = hashlib.sha256()
+        with path.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                hasher.update(chunk)
+        return hasher.hexdigest()
+
+    def _load_context_ref(self) -> dict[str, Any]:
+        if not self.context_ref_path.exists():
+            return {"schema_version": 1, "snapshot_id": self.snapshot_id, "context": {}}
+        try:
+            payload = json.loads(self.context_ref_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return {"schema_version": 1, "snapshot_id": self.snapshot_id, "context": {}}
+        if not isinstance(payload, dict):
+            return {"schema_version": 1, "snapshot_id": self.snapshot_id, "context": {}}
+        context = payload.get("context")
+        if not isinstance(context, dict):
+            payload["context"] = {}
+        return payload
+
+    def _write_context_ref(self, *, updates: dict[str, Path]) -> None:
+        payload = self._load_context_ref()
+        payload["schema_version"] = 1
+        payload["snapshot_id"] = self.snapshot_id
+        payload["updated_at_utc"] = _now_utc()
+        context = payload.setdefault("context", {})
+        if not isinstance(context, dict):
+            context = {}
+            payload["context"] = context
+        for key, path in updates.items():
+            if not path.exists():
+                continue
+            context[key] = {
+                "path": self._context_ref_relpath(path),
+                "sha256": self._sha256_file(path),
+                "bytes": path.stat().st_size,
+            }
+        self.context_ref_path.parent.mkdir(parents=True, exist_ok=True)
+        self.context_ref_path.write_text(
+            json.dumps(payload, sort_keys=True, indent=2) + "\n",
+            encoding="utf-8",
+        )
+
+    def context_paths(self) -> tuple[Path, Path, Path]:
+        """Return injuries, roster, and results context cache paths."""
+        injuries = self._context_json_path("injuries")
+        roster = self._context_json_path("roster")
+        results = self._context_json_path("results")
+        if not injuries.exists():
+            legacy_injuries = self._legacy_context_json_path("injuries")
+            if legacy_injuries.exists():
+                injuries = legacy_injuries
+        if not roster.exists():
+            legacy_roster = self._legacy_context_json_path("roster")
+            if legacy_roster.exists():
+                roster = legacy_roster
+        if not results.exists():
+            legacy_results = self._legacy_context_json_path("results")
+            if legacy_results.exists():
+                results = legacy_results
+        return injuries, roster, results
+
+    def official_injury_pdf_dir(self) -> Path:
+        """Return canonical official injury PDF cache directory."""
+        return self.context_dir / "official_injury_pdf"
+
+    def identity_map_path(self) -> Path:
+        """Return canonical identity-map path owned by NBA lake."""
+        return self.reference_dir / "player_identity_map.json"
+
+    def refresh_context_ref(self) -> None:
+        """Write context reference manifest from existing canonical context files."""
+        updates: dict[str, Path] = {}
+        for key in ("injuries", "roster", "results"):
+            path = self._context_json_path(key)
+            if path.exists():
+                updates[key] = path
+        if updates:
+            self._write_context_ref(updates=updates)
+
     def load_strategy_context(
         self,
         *,
@@ -157,15 +258,21 @@ class NBARepository:
         injuries_stale_hours: float,
         roster_stale_hours: float,
     ) -> tuple[dict[str, Any], dict[str, Any], Path, Path]:
-        reference_dir = self.odds_data_root / "reference"
-        reference_injuries = reference_dir / "injuries" / "latest.json"
+        reference_injuries = self.reference_dir / "injuries" / "latest.json"
+        legacy_reference_injuries = self.legacy_reference_dir / "injuries" / "latest.json"
         today_key = datetime.now(UTC).strftime("%Y-%m-%d")
-        reference_roster_daily = reference_dir / "rosters" / f"roster-{today_key}.json"
-        reference_roster_latest = reference_dir / "rosters" / "latest.json"
+        reference_roster_daily = self.reference_dir / "rosters" / f"roster-{today_key}.json"
+        reference_roster_latest = self.reference_dir / "rosters" / "latest.json"
+        legacy_reference_roster_daily = (
+            self.legacy_reference_dir / "rosters" / f"roster-{today_key}.json"
+        )
+        legacy_reference_roster_latest = self.legacy_reference_dir / "rosters" / "latest.json"
 
-        injuries_path = self.context_dir / "injuries.json"
-        roster_path = self.context_dir / "roster.json"
-        official_pdf_dir = self.context_dir / "official_injury_pdf"
+        injuries_path = self._context_json_path("injuries")
+        roster_path = self._context_json_path("roster")
+        legacy_injuries_path = self._legacy_context_json_path("injuries")
+        legacy_roster_path = self._legacy_context_json_path("roster")
+        official_pdf_dir = self.official_injury_pdf_dir()
 
         injuries = load_or_fetch_context(
             cache_path=injuries_path,
@@ -176,7 +283,7 @@ class NBARepository:
                 "official": fetch_official_injury_links(pdf_cache_dir=official_pdf_dir),
                 "secondary": fetch_secondary_injuries(),
             },
-            fallback_paths=[reference_injuries],
+            fallback_paths=[legacy_injuries_path, reference_injuries, legacy_reference_injuries],
             write_through_paths=[reference_injuries],
             stale_after_hours=injuries_stale_hours,
         )
@@ -185,10 +292,17 @@ class NBARepository:
             offline=offline,
             refresh=refresh,
             fetcher=lambda: fetch_roster_context(teams_in_scope=teams_in_scope),
-            fallback_paths=[reference_roster_daily, reference_roster_latest],
+            fallback_paths=[
+                legacy_roster_path,
+                reference_roster_daily,
+                reference_roster_latest,
+                legacy_reference_roster_daily,
+                legacy_reference_roster_latest,
+            ],
             write_through_paths=[reference_roster_daily, reference_roster_latest],
             stale_after_hours=roster_stale_hours,
         )
+        self._write_context_ref(updates={"injuries": injuries_path, "roster": roster_path})
         return injuries, roster, injuries_path, roster_path
 
     def load_results_for_settlement(
@@ -201,11 +315,13 @@ class NBARepository:
     ) -> tuple[dict[str, Any], Path]:
         teams_in_scope = _seed_teams(seed_rows)
         snapshot_day = resolve_snapshot_date_str(self.snapshot_id)
-        cache_path = self.context_dir / "results.json"
+        cache_path = self._context_json_path("results")
+        legacy_results_path = self._legacy_context_json_path("results")
         results = load_or_fetch_context(
             cache_path=cache_path,
             offline=offline,
             refresh=refresh,
+            fallback_paths=[legacy_results_path],
             fetcher=lambda: self._fetch_results(
                 mode=mode,
                 teams_in_scope=teams_in_scope,
@@ -213,6 +329,7 @@ class NBARepository:
                 refresh=refresh,
             ),
         )
+        self._write_context_ref(updates={"results": cache_path})
         return results, cache_path
 
     def _fetch_results(

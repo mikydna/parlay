@@ -8,6 +8,7 @@ import re
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+from prop_ev.data_paths import canonical_reports_root, data_home_from_odds_root
 from prop_ev.storage import SnapshotStore
 from prop_ev.time_utils import parse_iso_z
 
@@ -15,10 +16,17 @@ ET_ZONE = ZoneInfo("America/New_York")
 
 
 def canonical_report_outputs_root(store: SnapshotStore) -> Path:
-    """Return report root derived only from data root (ignores env override)."""
+    """Return canonical odds report root derived from odds data root."""
+    return canonical_reports_root(store.root)
+
+
+def legacy_report_outputs_root(store: SnapshotStore) -> Path:
+    """Return legacy report root used before `reports/odds/**` split."""
     root = store.root.resolve()
     if root.name == "odds_api":
         return root.parent / "reports"
+    if root.name == "odds" and root.parent.name == "lakes":
+        return data_home_from_odds_root(root) / "reports"
     return root / "reports"
 
 
@@ -63,7 +71,14 @@ def snapshot_reports_dir(
 ) -> Path:
     """Canonical report directory for one snapshot."""
     root = reports_root or report_outputs_root(store)
-    return root / "snapshots" / snapshot_report_label(store, snapshot_id)
+    return root / "by-snapshot" / snapshot_report_label(store, snapshot_id)
+
+
+def legacy_snapshot_reports_dir(store: SnapshotStore, snapshot_id: str) -> Path:
+    """Legacy per-snapshot reports directory path."""
+    return (
+        legacy_report_outputs_root(store) / "snapshots" / snapshot_report_label(store, snapshot_id)
+    )
 
 
 def latest_reports_dir(store: SnapshotStore) -> Path:

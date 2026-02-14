@@ -6,7 +6,7 @@ For operator policy and contract references, see:
 - `docs/runbook.md`
 - `docs/contracts.md`
 
-`REPORTS_DIR` defaults to sibling `reports/` next to `ODDS_DATA_DIR`.
+`REPORTS_DIR` defaults to sibling `reports/odds/` next to `ODDS_DATA_DIR`.
 
 ## Hourly Schedule Command
 
@@ -61,22 +61,22 @@ uv run prop-ev data status --dataset-id <DATASET_ID> --from 2026-01-22 --to 2026
 
 ## What You Get Per Run
 
-- Raw request/response/meta cache under `data/odds_api/snapshots/<snapshot_id>/`
+- Raw request/response/meta cache under `lakes/odds/snapshots/<snapshot_id>/`
 - Normalized props table:
-  - `data/odds_api/snapshots/<snapshot_id>/derived/event_props.jsonl`
+  - `lakes/odds/snapshots/<snapshot_id>/derived/event_props.jsonl`
 - Strategy outputs:
-  - `<REPORTS_DIR>/snapshots/<report_snapshot>/strategy-report.json`
-  - `<REPORTS_DIR>/snapshots/<report_snapshot>/strategy-report.md`
-  - `<REPORTS_DIR>/snapshots/<report_snapshot>/backtest-seed.jsonl`
-  - `<REPORTS_DIR>/snapshots/<report_snapshot>/backtest-results-template.csv`
-  - `<REPORTS_DIR>/snapshots/<report_snapshot>/backtest-readiness.json`
+  - `<REPORTS_DIR>/by-snapshot/<report_snapshot>/strategy-report.json`
+  - `<REPORTS_DIR>/by-snapshot/<report_snapshot>/strategy-report.md`
+  - `<REPORTS_DIR>/by-snapshot/<report_snapshot>/backtest-seed.jsonl`
+  - `<REPORTS_DIR>/by-snapshot/<report_snapshot>/backtest-results-template.csv`
+  - `<REPORTS_DIR>/by-snapshot/<report_snapshot>/backtest-readiness.json`
 - Playbook outputs:
-  - `<REPORTS_DIR>/snapshots/<report_snapshot>/brief-input.json`
-  - `<REPORTS_DIR>/snapshots/<report_snapshot>/brief-pass1.json`
-  - `<REPORTS_DIR>/snapshots/<report_snapshot>/strategy-brief.md` (only with `--write-markdown`)
-  - `<REPORTS_DIR>/snapshots/<report_snapshot>/strategy-brief.tex`
-  - `<REPORTS_DIR>/snapshots/<report_snapshot>/strategy-brief.pdf` (if `tectonic` installed)
-  - `<REPORTS_DIR>/snapshots/<report_snapshot>/strategy-brief.meta.json`
+  - `<REPORTS_DIR>/by-snapshot/<report_snapshot>/brief-input.json`
+  - `<REPORTS_DIR>/by-snapshot/<report_snapshot>/brief-pass1.json`
+  - `<REPORTS_DIR>/by-snapshot/<report_snapshot>/strategy-brief.md` (only with `--write-markdown`)
+  - `<REPORTS_DIR>/by-snapshot/<report_snapshot>/strategy-brief.tex`
+  - `<REPORTS_DIR>/by-snapshot/<report_snapshot>/strategy-brief.pdf` (if `tectonic` installed)
+  - `<REPORTS_DIR>/by-snapshot/<report_snapshot>/strategy-brief.meta.json`
 - Latest mirrors:
   - `<REPORTS_DIR>/latest/strategy-report.json`
   - `<REPORTS_DIR>/latest/strategy-brief.meta.json`

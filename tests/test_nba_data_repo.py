@@ -166,8 +166,15 @@ def test_load_strategy_context_uses_repository_fetchers(
     )
     assert injuries_path.exists()
     assert roster_path.exists()
+    assert repo.nba_data_root in injuries_path.parents
+    assert repo.nba_data_root in roster_path.parents
     assert injuries.get("official", {}).get("status") == "ok"
     assert roster.get("status") == "ok"
+    context_ref = repo.snapshot_dir / "context_ref.json"
+    assert context_ref.exists()
+    context_payload = json.loads(context_ref.read_text(encoding="utf-8"))
+    assert "injuries" in context_payload.get("context", {})
+    assert "roster" in context_payload.get("context", {})
 
 
 def test_repo_uses_configured_nba_data_dir_env(

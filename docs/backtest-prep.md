@@ -12,9 +12,9 @@ uv run prop-ev strategy backtest-prep --snapshot-id <snapshot_id> --selection el
 
 Outputs:
 
-- `<REPORTS_DIR>/snapshots/<report_snapshot>/backtest-seed.jsonl`
-- `<REPORTS_DIR>/snapshots/<report_snapshot>/backtest-results-template.csv`
-- `<REPORTS_DIR>/snapshots/<report_snapshot>/backtest-readiness.json`
+- `<REPORTS_DIR>/by-snapshot/<report_snapshot>/backtest-seed.jsonl`
+- `<REPORTS_DIR>/by-snapshot/<report_snapshot>/backtest-results-template.csv`
+- `<REPORTS_DIR>/by-snapshot/<report_snapshot>/backtest-readiness.json`
 
 Optional during strategy run (same outputs, noisier):
 
@@ -47,7 +47,7 @@ In `backtest-results-template.csv`, fill:
 Check:
 
 ```bash
-jq . <REPORTS_DIR>/snapshots/<report_snapshot>/backtest-readiness.json
+jq . <REPORTS_DIR>/by-snapshot/<report_snapshot>/backtest-readiness.json
 ```
 
 `ready_for_backtest_seed=true` means snapshot inputs are complete enough for grading prep.
@@ -62,15 +62,15 @@ uv run prop-ev strategy settle --snapshot-id <snapshot_id> --refresh-results --r
 
 Outputs:
 
-- `<REPORTS_DIR>/snapshots/<report_snapshot>/settlement.json`
-- `<REPORTS_DIR>/snapshots/<report_snapshot>/settlement.pdf`
-- `<REPORTS_DIR>/snapshots/<report_snapshot>/settlement.meta.json`
+- `<REPORTS_DIR>/by-snapshot/<report_snapshot>/settlement.json`
+- `<REPORTS_DIR>/by-snapshot/<report_snapshot>/settlement.pdf`
+- `<REPORTS_DIR>/by-snapshot/<report_snapshot>/settlement.meta.json`
 - optional markdown via `--write-markdown`:
-  `<REPORTS_DIR>/snapshots/<report_snapshot>/settlement.md`
+  `<REPORTS_DIR>/by-snapshot/<report_snapshot>/settlement.md`
 - optional tex via `--keep-tex`:
-  `<REPORTS_DIR>/snapshots/<report_snapshot>/settlement.tex`
+  `<REPORTS_DIR>/by-snapshot/<report_snapshot>/settlement.tex`
 - optional CSV via `--write-csv`:
-  `<REPORTS_DIR>/snapshots/<report_snapshot>/settlement.csv`
+  `<REPORTS_DIR>/by-snapshot/<report_snapshot>/settlement.csv`
 
 Behavior:
 

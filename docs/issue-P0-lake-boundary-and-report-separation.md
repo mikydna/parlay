@@ -90,7 +90,7 @@ parlay-data/
 - [ ] Fresh runs produce no `snapshots/*/reports/*` directories.
 - [ ] No NBA context blobs remain under odds lake roots.
 - [ ] Report publish/read commands resolve against `reports/odds/**`.
-- [ ] Guardrail checks are enforced in CI and local validation.
+- [ ] Guardrail checks are enforced in local validation.
 - [ ] Existing backtest/settlement/playbook workflows pass on migrated data.
 
 ## Non-Goals
@@ -104,6 +104,5 @@ parlay-data/
 1. Contract + path constants update.
 2. Writer migration (new writes only).
 3. Data migrator for existing `parlay-data`.
-4. Guardrails + CI enforcement.
+4. Guardrails + local enforcement.
 5. Remove legacy read shim after stable window.
-

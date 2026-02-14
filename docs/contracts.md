@@ -5,7 +5,7 @@ This document defines stable artifact shapes and gate reason codes used by CLI f
 ## Strategy Report Contract
 
 Path:
-- `<REPORTS_DIR>/snapshots/<report_snapshot>/strategy-report.json`
+- `<REPORTS_DIR>/by-snapshot/<report_snapshot>/strategy-report.json`
 
 Required top-level keys:
 - `snapshot_id`
@@ -54,7 +54,7 @@ Paths:
 ## Backtest Readiness Contract
 
 Path:
-- `<REPORTS_DIR>/snapshots/<report_snapshot>/backtest-readiness.json`
+- `<REPORTS_DIR>/by-snapshot/<report_snapshot>/backtest-readiness.json`
 
 Required keys:
 - `snapshot_id`
@@ -67,7 +67,7 @@ Required keys:
 ## Settlement Contract
 
 Path:
-- `<REPORTS_DIR>/snapshots/<report_snapshot>/settlement.json`
+- `<REPORTS_DIR>/by-snapshot/<report_snapshot>/settlement.json`
 
 Required top-level keys:
 - `snapshot_id`
@@ -107,7 +107,7 @@ Strategy health command degraded/broken gates:
 ## Odds Day-Index Contract
 
 Path:
-- `data/odds_api/datasets/<dataset_id>/days/<YYYY-MM-DD>.json`
+- `lakes/odds/datasets/<dataset_id>/days/<YYYY-MM-DD>.json`
 
 Required operational keys:
 - `day`
@@ -139,8 +139,8 @@ Primary incomplete reasons currently emitted:
 ## QuoteTable Contract (Derived Odds)
 
 Canonical derived paths:
-- `data/odds_api/snapshots/<snapshot_id>/derived/event_props.jsonl`
-- `data/odds_api/snapshots/<snapshot_id>/derived/featured_odds.jsonl`
+- `lakes/odds/snapshots/<snapshot_id>/derived/event_props.jsonl`
+- `lakes/odds/snapshots/<snapshot_id>/derived/featured_odds.jsonl`
 
 `event_props` required columns:
 - `provider`

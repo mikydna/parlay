@@ -13,6 +13,7 @@ from typing import Any
 import httpx
 
 from prop_ev.budget import current_month_utc, llm_budget_status
+from prop_ev.data_paths import resolve_runtime_root
 from prop_ev.odds_client import parse_csv
 from prop_ev.settings import Settings
 from prop_ev.time_utils import utc_now_str
@@ -292,11 +293,13 @@ class LLMClient:
         key_root: Path | None = None,
     ) -> None:
         self.settings = settings
-        self.data_root = data_root
+        self.data_root = data_root.resolve()
+        self.runtime_root = resolve_runtime_root(self.data_root)
         self.post_fn = post_fn or _default_post
         self.key_root = key_root or Path.cwd()
-        self.cache_dir = self.data_root / "llm_cache"
-        self.usage_dir = self.data_root / "llm_usage"
+        self.cache_dir = self.runtime_root / "llm_cache"
+        self.usage_dir = self.runtime_root / "llm_usage"
+        self.legacy_cache_dir = self.data_root / "llm_cache"
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self.usage_dir.mkdir(parents=True, exist_ok=True)
 
@@ -321,6 +324,9 @@ class LLMClient:
 
     def _cache_path(self, cache_key: str) -> Path:
         return self.cache_dir / f"{cache_key}.json"
+
+    def _legacy_cache_path(self, cache_key: str) -> Path:
+        return self.legacy_cache_dir / f"{cache_key}.json"
 
     def _usage_path(self, month: str) -> Path:
         return self.usage_dir / f"usage-{month}.jsonl"
@@ -384,36 +390,40 @@ class LLMClient:
         cache_path = self._cache_path(cache_key)
         month = current_month_utc()
 
-        if cache_path.exists() and not refresh:
-            cached_row = json.loads(cache_path.read_text(encoding="utf-8"))
-            result = {
-                "cache_key": cache_key,
-                "cached": True,
-                "model": model,
-                "text": str(cached_row.get("response_text", "")),
-                "usage": cached_row.get("usage", {}),
-                "source": "cache",
-                "web_sources": cached_row.get("web_sources", []),
-            }
-            self._append_usage(
-                month=month,
-                task=task,
-                prompt_version=prompt_version,
-                model=model,
-                cache_key=cache_key,
-                snapshot_id=snapshot_id,
-                cached=True,
-                input_tokens=0,
-                output_tokens=0,
-                total_tokens=0,
-                cost_usd=0.0,
+        if not refresh:
+            existing_path = (
+                cache_path if cache_path.exists() else self._legacy_cache_path(cache_key)
             )
-            return result
+            if existing_path.exists():
+                cached_row = json.loads(existing_path.read_text(encoding="utf-8"))
+                result = {
+                    "cache_key": cache_key,
+                    "cached": True,
+                    "model": model,
+                    "text": str(cached_row.get("response_text", "")),
+                    "usage": cached_row.get("usage", {}),
+                    "source": "cache",
+                    "web_sources": cached_row.get("web_sources", []),
+                }
+                self._append_usage(
+                    month=month,
+                    task=task,
+                    prompt_version=prompt_version,
+                    model=model,
+                    cache_key=cache_key,
+                    snapshot_id=snapshot_id,
+                    cached=True,
+                    input_tokens=0,
+                    output_tokens=0,
+                    total_tokens=0,
+                    cost_usd=0.0,
+                )
+                return result
 
         if offline:
             raise LLMOfflineCacheMissError(f"offline cache miss for task={task}")
 
-        budget = llm_budget_status(self.data_root, month, self.settings.llm_monthly_cap_usd)
+        budget = llm_budget_status(self.runtime_root, month, self.settings.llm_monthly_cap_usd)
         if bool(budget.get("cap_reached", False)):
             raise LLMBudgetExceededError(
                 f"llm monthly cap reached: used={budget['used_usd']} cap={budget['cap_usd']}"

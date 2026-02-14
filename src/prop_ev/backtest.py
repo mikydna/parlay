@@ -8,6 +8,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from prop_ev.nba_data.repo import NBARepository
 from prop_ev.time_utils import utc_now_str
 
 ROW_SELECTIONS = {"eligible", "ranked", "top_ev", "one_source", "all_candidates"}
@@ -273,14 +274,18 @@ def build_backtest_readiness(
         health.get("health_gates", []) if isinstance(health.get("health_gates"), list) else []
     )
     summary = report.get("summary", {}) if isinstance(report.get("summary"), dict) else {}
-    context_dir = snapshot_dir / "context"
     derived_dir = snapshot_dir / "derived"
     event_props_path = derived_dir / "event_props.jsonl"
     featured_path = derived_dir / "featured_odds.jsonl"
     strategy_path = strategy_report_path or (reports_dir / "strategy-report.json")
-    injuries_path = context_dir / "injuries.json"
-    roster_path = context_dir / "roster.json"
-    official_pdf_dir = context_dir / "official_injury_pdf"
+    odds_data_root = snapshot_dir.parent.parent
+    context_repo = NBARepository(
+        odds_data_root=odds_data_root,
+        snapshot_id=str(report.get("snapshot_id", "")).strip() or snapshot_dir.name,
+        snapshot_dir=snapshot_dir,
+    )
+    injuries_path, roster_path, _results_path = context_repo.context_paths()
+    official_pdf_dir = context_repo.official_injury_pdf_dir()
 
     injuries = _context_status(injuries_path)
     roster = _context_status(roster_path)

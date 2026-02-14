@@ -2,9 +2,9 @@
 
 Operator-focused flow for daily execution, offline replay, and health triage.
 
-Assume `ODDS_DATA_DIR=/Users/$USER/Documents/Code/parlay-data/odds_api`
+Assume `ODDS_DATA_DIR=/Users/$USER/Documents/Code/parlay-data/lakes/odds`
 or pass `--data-dir` explicitly on commands.
-`REPORTS_DIR` defaults to `/Users/$USER/Documents/Code/parlay-data/reports`
+`REPORTS_DIR` defaults to `/Users/$USER/Documents/Code/parlay-data/reports/odds`
 unless overridden via `--reports-dir` / `PROP_EV_REPORTS_DIR`.
 
 ## Standard Run (Auto-gated Live/Offline)
@@ -63,6 +63,7 @@ uv run prop-ev data datasets ls --json
 uv run prop-ev data datasets show --dataset-id <DATASET_ID> --json
 uv run prop-ev data status --dataset-id <DATASET_ID> --from 2026-01-22 --to 2026-02-12 --json-summary
 uv run prop-ev data verify --dataset-id <DATASET_ID> --from 2026-01-22 --to 2026-02-12 --json
+uv run prop-ev data guardrails --json
 ```
 
 Check known cache misses without spending:
@@ -83,6 +84,13 @@ Expected behavior:
 - `actual_paid_credits=0` on every day row,
 - unresolved paid misses are reported as `spend_blocked` in no-spend mode,
 - no paid odds calls are executed.
+
+Legacy-path migration (run once per storage root):
+
+```bash
+uv run prop-ev data migrate-layout --apply --json
+uv run prop-ev data guardrails --json
+```
 
 Derived quote-table contract verification (snapshot-level):
 
@@ -144,17 +152,17 @@ Implementation model:
 ## Key Artifacts
 
 Per snapshot:
-- `<REPORTS_DIR>/snapshots/<report_snapshot>/strategy-report.json`
-- `<REPORTS_DIR>/snapshots/<report_snapshot>/strategy-report.md`
-- `<REPORTS_DIR>/snapshots/<report_snapshot>/backtest-seed.jsonl`
-- `<REPORTS_DIR>/snapshots/<report_snapshot>/backtest-results-template.csv`
-- `<REPORTS_DIR>/snapshots/<report_snapshot>/backtest-readiness.json`
-- `<REPORTS_DIR>/snapshots/<report_snapshot>/brief-input.json`
-- `<REPORTS_DIR>/snapshots/<report_snapshot>/brief-pass1.json`
-- `<REPORTS_DIR>/snapshots/<report_snapshot>/strategy-brief.md` (only with `--write-markdown`)
-- `<REPORTS_DIR>/snapshots/<report_snapshot>/strategy-brief.tex`
-- `<REPORTS_DIR>/snapshots/<report_snapshot>/strategy-brief.pdf` (when PDF tooling is installed)
-- `<REPORTS_DIR>/snapshots/<report_snapshot>/strategy-brief.meta.json`
+- `<REPORTS_DIR>/by-snapshot/<report_snapshot>/strategy-report.json`
+- `<REPORTS_DIR>/by-snapshot/<report_snapshot>/strategy-report.md`
+- `<REPORTS_DIR>/by-snapshot/<report_snapshot>/backtest-seed.jsonl`
+- `<REPORTS_DIR>/by-snapshot/<report_snapshot>/backtest-results-template.csv`
+- `<REPORTS_DIR>/by-snapshot/<report_snapshot>/backtest-readiness.json`
+- `<REPORTS_DIR>/by-snapshot/<report_snapshot>/brief-input.json`
+- `<REPORTS_DIR>/by-snapshot/<report_snapshot>/brief-pass1.json`
+- `<REPORTS_DIR>/by-snapshot/<report_snapshot>/strategy-brief.md` (only with `--write-markdown`)
+- `<REPORTS_DIR>/by-snapshot/<report_snapshot>/strategy-brief.tex`
+- `<REPORTS_DIR>/by-snapshot/<report_snapshot>/strategy-brief.pdf` (when PDF tooling is installed)
+- `<REPORTS_DIR>/by-snapshot/<report_snapshot>/strategy-brief.meta.json`
 
 Latest mirrors:
 - `<REPORTS_DIR>/latest/strategy-report.json`

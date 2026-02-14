@@ -65,7 +65,7 @@ def test_llm_cache_hit_prevents_repeat_call(
     assert first["cached"] is False
     assert second["cached"] is True
 
-    usage_files = sorted((tmp_path / "data" / "llm_usage").glob("usage-*.jsonl"))
+    usage_files = sorted((tmp_path / "data" / "runtime" / "llm_usage").glob("usage-*.jsonl"))
     assert usage_files
     rows = [json.loads(line) for line in usage_files[0].read_text(encoding="utf-8").splitlines()]
     assert len(rows) == 2
