@@ -12,6 +12,7 @@ This folder is split into two groups:
 - `backtest-prep.md` — next-day grading workflow.
 - `nba-data.md` and `nba-data-schemas.md` — NBA lake module + schema docs.
 - `plan.md` — canonical engineering/product roadmap and milestone plan.
+- `track-stage2-pricing-fixed-point.md` — detailed execution plan for Stage 2 pricing metrics and `s008`.
 - `strat-odds-api-integration.md` — source-policy rationale and integration context.
 - `issue-P0-lake-boundary-and-report-separation.md` — blocking storage-contract issue for strict lake/report separation.
 

@@ -36,7 +36,7 @@ Build a production-ready NBA props pipeline that is:
   - typed day-index error/status semantics (`error_code`, `reason_codes`, `status_code`),
   - canonical QuoteTable module + validation,
   - contract verification commands (`snapshot verify --check-derived`, `data verify`).
-- Strategy plugin framework exists (`s001`–`s007`) with compare + backtest summarization.
+- Strategy plugin framework exists (`s001`–`s008`) with compare + backtest summarization.
 - `nba-data` historical lake is available with clean parquet + verify.
 - `parlay-data` contains live datasets used by this repo:
   - NBA lake (clean/manifests/raw archives),
@@ -444,6 +444,8 @@ These tracks are intended to be independently plannable by Codex with clear inte
 boundaries.
 
 ### Track A — Pricing core + neutralize-vig (start now)
+
+- Detailed implementation spec: `docs/track-stage2-pricing-fixed-point.md`.
 
 - **Owner worktree**: `wt-pricing-neutralize-vig` (branch prefix: `codex/pricing-*`).
 - **Stage coverage**: Stage 1, 2, 3, and Stage 4 pricing primitives.
