@@ -268,6 +268,23 @@ No data migration and no odds re-download required.
 This is an optional follow-on that makes the calibration work visible at the **pick** level
 (not only at the strategy level).
 
+### 10.0 Current implementation status (2026-02-14)
+
+Implemented:
+- `strategy backtest-summarize` can emit
+  `backtest-calibration-map.json` via `--write-calibration-map`.
+- Calibration map mode supports `walk_forward` (default) and `in_sample`.
+- Pure calibration-map application utilities exist in
+  `src/prop_ev/calibration_map.py`.
+- `generate_brief_for_snapshot` auto-loads sibling
+  `backtest-calibration-map.json` (or explicit path) and annotates rows with:
+  - `p_conservative`,
+  - `p_calibrated`,
+  - `calibration_bin`,
+  - `confidence_tier`.
+- Brief rendering surfaces calibrated probability in `p(hit)` as
+  `X% → Y%` when calibration adjustment is available.
+
 ### 10.1 Goal
 
 For every selected play (and optionally for every eligible candidate), surface:
@@ -359,4 +376,3 @@ Policy parameters must be recorded in `audit` so results are replayable.
   - pick annotations are deterministic,
   - walk-forward mode reproduces the same values across reruns.
 - Brief shows confidence fields without increasing report noise (no extra temp files tracked).
-

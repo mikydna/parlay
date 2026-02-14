@@ -169,3 +169,108 @@ def test_strategy_backtest_summarize_all_complete_days_requires_dataset_when_amb
 
     assert code == 2
     assert "multiple datasets found" in err
+
+
+def test_strategy_backtest_summarize_writes_walk_forward_calibration_map(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    data_root = tmp_path / "data" / "odds_api"
+    store = SnapshotStore(data_root)
+    spec = DatasetSpec(
+        sport_key="basketball_nba",
+        markets=["player_points"],
+        regions="us",
+        bookmakers="draftkings,fanduel",
+        include_links=False,
+        include_sids=False,
+        historical=True,
+        historical_anchor_hour_local=12,
+        historical_pre_tip_minutes=60,
+    )
+    save_dataset_spec(data_root, spec)
+
+    snapshot_day_one = "day-a-2026-02-01"
+    snapshot_day_two = "day-b-2026-02-02"
+    store.ensure_snapshot(snapshot_day_one)
+    store.ensure_snapshot(snapshot_day_two)
+    save_day_status(
+        data_root,
+        spec,
+        "2026-02-01",
+        _complete_day_status(day="2026-02-01", snapshot_id_for_day=snapshot_day_one),
+    )
+    save_day_status(
+        data_root,
+        spec,
+        "2026-02-02",
+        _complete_day_status(day="2026-02-02", snapshot_id_for_day=snapshot_day_two),
+    )
+
+    _write_backtest_csv(
+        snapshot_reports_dir(store, snapshot_day_one) / "backtest-results-template.s008.csv",
+        [
+            {
+                "snapshot_id": snapshot_day_one,
+                "strategy_id": "s008",
+                "market": "player_points",
+                "recommended_side": "over",
+                "selected_price_american": 100,
+                "stake_units": 1,
+                "model_p_hit": 0.55,
+                "result": "win",
+            }
+        ],
+    )
+    _write_backtest_csv(
+        snapshot_reports_dir(store, snapshot_day_two) / "backtest-results-template.s008.csv",
+        [
+            {
+                "snapshot_id": snapshot_day_two,
+                "strategy_id": "s008",
+                "market": "player_points",
+                "recommended_side": "over",
+                "selected_price_american": 100,
+                "stake_units": 1,
+                "model_p_hit": 0.56,
+                "result": "loss",
+            }
+        ],
+    )
+
+    code = main(
+        [
+            "--data-dir",
+            str(data_root),
+            "strategy",
+            "backtest-summarize",
+            "--snapshot-id",
+            snapshot_day_two,
+            "--strategies",
+            "s008",
+            "--all-complete-days",
+            "--dataset-id",
+            dataset_id(spec),
+            "--min-graded",
+            "1",
+            "--write-calibration-map",
+            "--calibration-map-mode",
+            "walk_forward",
+        ]
+    )
+    out = capsys.readouterr().out
+
+    assert code == 0
+    calibration_map_path = ""
+    for line in out.splitlines():
+        if line.startswith("calibration_map_json="):
+            calibration_map_path = line.split("=", 1)[1].strip()
+            break
+    assert calibration_map_path
+    payload = json.loads(Path(calibration_map_path).read_text(encoding="utf-8"))
+    assert payload["schema_version"] == 1
+    assert payload["mode"] == "walk_forward"
+    strategy_payload = payload["strategies"]["s008"]
+    assert strategy_payload["rows_scored"] == 2
+    assert strategy_payload["by_day"]["2026-02-01"]["rows_scored"] == 0
+    assert strategy_payload["by_day"]["2026-02-02"]["rows_scored"] == 1
