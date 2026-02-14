@@ -147,6 +147,8 @@ Strategy IDs:
 - `s007` — Quality Composite Gate (s003 + s004 + s005)
 - `s008` — Conservative Quality Floor (s007 + dispersion + quality/uncertainty/EV-low gates)
 - `s009` — Conservative Quality + Rolling Priors (s008 + rolling settled-outcome ranking tilt)
+- `s010` — Tier B + Quality Floor (s002 + conservative quality/uncertainty gates)
+- `s011` — Tier B + Quality + Rolling Priors (s010 + rolling settled-outcome ranking tilt)
 
 Legacy IDs are not accepted.
 

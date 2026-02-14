@@ -52,6 +52,8 @@ STRATEGY_TITLE_KEY = {
     "s007": "Quality Composite Gate",
     "s008": "Conservative Quality Floor",
     "s009": "Conservative Quality + Rolling Priors",
+    "s010": "Tier B + Quality Floor",
+    "s011": "Tier B + Quality + Rolling Priors",
 }
 
 STRATEGY_DESCRIPTION_KEY = {
@@ -75,6 +77,14 @@ STRATEGY_DESCRIPTION_KEY = {
     ),
     "s009": (
         "Extends s008 with rolling settled-outcome prior tilt for ranking while keeping "
+        "the same conservative gates."
+    ),
+    "s010": (
+        "Extends baseline with tier-B single-book edges while enforcing conservative "
+        "quality/uncertainty gates (best-sides baseline)."
+    ),
+    "s011": (
+        "Extends s010 with rolling settled-outcome prior tilt for ranking while keeping "
         "the same conservative gates."
     ),
 }

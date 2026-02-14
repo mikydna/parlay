@@ -12,6 +12,8 @@ from prop_ev.strategies.s006_dispersion_iqr_gate import S006
 from prop_ev.strategies.s007_quality_composite_gate import S007
 from prop_ev.strategies.s008_conservative_quality_floor import S008
 from prop_ev.strategies.s009_conservative_quality_floor_rolling import S009
+from prop_ev.strategies.s010_tier_b_quality_floor import S010
+from prop_ev.strategies.s011_tier_b_quality_floor_rolling import S011
 
 
 def _registry() -> dict[str, StrategyPlugin]:
@@ -25,6 +27,8 @@ def _registry() -> dict[str, StrategyPlugin]:
         S007(),
         S008(),
         S009(),
+        S010(),
+        S011(),
     ]
     out: dict[str, StrategyPlugin] = {}
     for plugin in plugins:
