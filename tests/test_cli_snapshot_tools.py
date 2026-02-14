@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+from prop_ev import runtime_config
 from prop_ev.cli import _run_strategy_for_playbook, main
 from prop_ev.playbook import report_outputs_root
 from prop_ev.report_paths import snapshot_reports_dir
@@ -14,14 +15,43 @@ from prop_ev.storage import SnapshotStore
 @pytest.fixture
 def local_data_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     data_dir = tmp_path / "data" / "odds_api"
-    monkeypatch.setenv("PROP_EV_DATA_DIR", str(data_dir))
+    nba_dir = tmp_path / "data" / "nba_data"
+    reports_dir = tmp_path / "data" / "reports" / "odds"
+    runtime_dir = tmp_path / "data" / "runtime"
+    config_path = tmp_path / "runtime.toml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "[paths]",
+                f'odds_data_dir = "{data_dir}"',
+                f'nba_data_dir = "{nba_dir}"',
+                f'reports_dir = "{reports_dir}"',
+                f'runtime_dir = "{runtime_dir}"',
+                'bookmakers_config_path = "config/bookmakers.json"',
+                "",
+                "[odds_api]",
+                'key_files = ["ODDS_API_KEY.ignore"]',
+                "",
+                "[openai]",
+                'key_files = ["OPENAI_KEY.ignore"]',
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(runtime_config, "DEFAULT_CONFIG_PATH", config_path)
+    monkeypatch.setattr(
+        runtime_config,
+        "DEFAULT_LOCAL_OVERRIDE_PATH",
+        tmp_path / "runtime.local.toml",
+    )
     return data_dir
 
 
 def _seed_strategy_snapshot(store: SnapshotStore, snapshot_id: str) -> Path:
     snapshot_dir = store.ensure_snapshot(snapshot_id)
     now_utc = datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
-    context_dir = snapshot_dir / "context"
+    context_dir = store.root.parent / "nba_data" / "context" / "snapshots" / snapshot_id
     context_dir.mkdir(parents=True, exist_ok=True)
     (context_dir / "injuries.json").write_text(
         json.dumps(
@@ -163,7 +193,7 @@ def test_strategy_run_from_snapshot(local_data_dir: Path) -> None:
     store = SnapshotStore(local_data_dir)
     snapshot_id = "2026-02-11T10-10-00Z"
     snapshot_dir = store.ensure_snapshot(snapshot_id)
-    context_dir = snapshot_dir / "context"
+    context_dir = store.root.parent / "nba_data" / "context" / "snapshots" / snapshot_id
     context_dir.mkdir(parents=True, exist_ok=True)
     (context_dir / "injuries.json").write_text(
         json.dumps(
@@ -299,11 +329,7 @@ def test_strategy_run_from_snapshot(local_data_dir: Path) -> None:
     assert (reports_dir / "backtest-readiness.json").exists()
 
 
-def test_strategy_run_writes_backtest_artifacts_when_enabled(
-    local_data_dir: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setenv("PROP_EV_STRATEGY_REQUIRE_OFFICIAL_INJURIES", "false")
-    monkeypatch.setenv("PROP_EV_STRATEGY_REQUIRE_FRESH_CONTEXT", "false")
+def test_strategy_run_writes_backtest_artifacts_when_enabled(local_data_dir: Path) -> None:
     store = SnapshotStore(local_data_dir)
     snapshot_id = "2026-02-11T10-10-30Z"
     _seed_strategy_snapshot(store, snapshot_id)
@@ -329,11 +355,7 @@ def test_strategy_run_writes_backtest_artifacts_when_enabled(
     assert (reports_dir / "backtest-readiness.json").exists()
 
 
-def test_strategy_compare_writes_suffixed_outputs(
-    local_data_dir: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setenv("PROP_EV_STRATEGY_REQUIRE_OFFICIAL_INJURIES", "false")
-    monkeypatch.setenv("PROP_EV_STRATEGY_REQUIRE_FRESH_CONTEXT", "false")
+def test_strategy_compare_writes_suffixed_outputs(local_data_dir: Path) -> None:
     store = SnapshotStore(local_data_dir)
     snapshot_id = "2026-02-11T10-11-00Z"
     snapshot_dir = store.ensure_snapshot(snapshot_id)
@@ -530,10 +552,7 @@ def test_playbook_render_non_canonical_strategy_report_skips_refresh(
     assert "strategy_brief_md=" not in out
 
 
-def test_global_data_dir_override_from_subcommand_position(
-    local_data_dir: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys
-) -> None:
-    monkeypatch.setenv("PROP_EV_DATA_DIR", str(tmp_path / "other" / "odds_api"))
+def test_global_data_dir_override_from_subcommand_position(local_data_dir: Path, capsys) -> None:
     store = SnapshotStore(local_data_dir)
     snapshot_id = "2026-02-11T11-11-11Z"
     store.ensure_snapshot(snapshot_id)

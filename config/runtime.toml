@@ -1,0 +1,36 @@
+[paths]
+odds_data_dir = "../../parlay-data/odds_api"
+nba_data_dir = "../../parlay-data/nba_data"
+reports_dir = "../../parlay-data/reports/odds"
+runtime_dir = "../../parlay-data/runtime"
+bookmakers_config_path = "bookmakers.json"
+
+[odds_api]
+base_url = "https://api.the-odds-api.com/v4"
+timeout_s = 10.0
+sport_key = "basketball_nba"
+default_regions = "us"
+default_max_credits = 20
+monthly_cap_credits = 450
+key_files = ["ODDS_API_KEY_PAID.ignore", "ODDS_API_KEY.ignore", "ODDS_API_KEY"]
+
+[openai]
+model = "gpt-5-mini"
+timeout_s = 60.0
+monthly_cap_usd = 5.0
+key_files = ["OPENAI_KEY.ignore", "OPENAI_KEY"]
+
+[playbook]
+live_window_pre_tip_h = 3
+live_window_post_tip_h = 1
+top_n = 5
+per_game_top_n = 5
+
+[strategy]
+default_id = "s001"
+require_official_injuries = true
+allow_secondary_injuries = false
+require_fresh_context = true
+stale_quote_minutes = 20
+context_injuries_stale_hours = 6.0
+context_roster_stale_hours = 24.0

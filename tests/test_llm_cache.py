@@ -4,7 +4,13 @@ from pathlib import Path
 import httpx
 import pytest
 
-from prop_ev.llm_client import LLMClient, LLMClientError, LLMResponseFormatError, _default_post
+from prop_ev.llm_client import (
+    LLMClient,
+    LLMClientError,
+    LLMOfflineCacheMissError,
+    LLMResponseFormatError,
+    _default_post,
+)
 from prop_ev.settings import Settings
 
 
@@ -71,6 +77,44 @@ def test_llm_cache_hit_prevents_repeat_call(
     assert len(rows) == 2
     assert rows[0]["cached"] is False
     assert rows[1]["cached"] is True
+
+
+def test_llm_cache_does_not_read_legacy_data_root_cache(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("ODDS_API_KEY", "odds-test")
+    monkeypatch.setenv("OPENAI_API_KEY", "openai-test")
+    settings = Settings(_env_file=None)
+
+    data_root = tmp_path / "data"
+    legacy_cache_dir = data_root / "llm_cache"
+    legacy_cache_dir.mkdir(parents=True, exist_ok=True)
+
+    client = LLMClient(settings=settings, data_root=data_root)
+    cache_key = client._cache_key(
+        task="playbook_pass1",
+        prompt_version="v1",
+        model="gpt-5-mini",
+        payload={"x": 1},
+    )
+    (legacy_cache_dir / f"{cache_key}.json").write_text(
+        '{"response_text":"legacy-only","usage":{"input_tokens":1,"output_tokens":1}}\n',
+        encoding="utf-8",
+    )
+
+    with pytest.raises(LLMOfflineCacheMissError):
+        client.cached_completion(
+            task="playbook_pass1",
+            prompt_version="v1",
+            prompt="hello",
+            payload={"x": 1},
+            snapshot_id="snap-1",
+            model="gpt-5-mini",
+            max_output_tokens=120,
+            temperature=0.1,
+            refresh=False,
+            offline=True,
+        )
 
 
 def test_default_post_wraps_http_status_errors(monkeypatch: pytest.MonkeyPatch) -> None:

@@ -177,6 +177,20 @@ def test_load_strategy_context_uses_repository_fetchers(
     assert "roster" in context_payload.get("context", {})
 
 
+def test_context_paths_use_canonical_nba_root_only(tmp_path: Path) -> None:
+    repo = _make_repo(tmp_path, snapshot_id="daily-20260212T000000Z")
+    legacy_context = repo.snapshot_dir / "context"
+    legacy_context.mkdir(parents=True, exist_ok=True)
+    (legacy_context / "injuries.json").write_text('{"status":"legacy"}\n', encoding="utf-8")
+    (legacy_context / "roster.json").write_text('{"status":"legacy"}\n', encoding="utf-8")
+    (legacy_context / "results.json").write_text('{"status":"legacy"}\n', encoding="utf-8")
+
+    injuries_path, roster_path, results_path = repo.context_paths()
+    assert injuries_path == repo.context_dir / "injuries.json"
+    assert roster_path == repo.context_dir / "roster.json"
+    assert results_path == repo.context_dir / "results.json"
+
+
 def test_repo_uses_configured_nba_data_dir_env(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

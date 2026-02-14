@@ -107,7 +107,7 @@ Strategy health command degraded/broken gates:
 ## Odds Day-Index Contract
 
 Path:
-- `<ODDS_DATA_DIR>/datasets/<dataset_id>/days/<YYYY-MM-DD>.json`
+- `<odds_data_dir>/datasets/<dataset_id>/days/<YYYY-MM-DD>.json`
 
 Required operational keys:
 - `day`
@@ -139,8 +139,8 @@ Primary incomplete reasons currently emitted:
 ## QuoteTable Contract (Derived Odds)
 
 Canonical derived paths:
-- `<ODDS_DATA_DIR>/snapshots/<snapshot_id>/derived/event_props.jsonl`
-- `<ODDS_DATA_DIR>/snapshots/<snapshot_id>/derived/featured_odds.jsonl`
+- `<odds_data_dir>/snapshots/<snapshot_id>/derived/event_props.jsonl`
+- `<odds_data_dir>/snapshots/<snapshot_id>/derived/featured_odds.jsonl`
 
 `event_props` required columns:
 - `provider`

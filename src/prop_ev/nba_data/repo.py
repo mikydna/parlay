@@ -139,10 +139,8 @@ class NBARepository:
             else _resolve_nba_data_root(self.odds_data_root)
         )
         self.context_dir = canonical_context_dir(self.nba_data_root, self.snapshot_id)
-        self.legacy_context_dir = self.snapshot_dir / "context"
         self.context_ref_path = self.snapshot_dir / "context_ref.json"
         self.reference_dir = self.nba_data_root / "reference"
-        self.legacy_reference_dir = self.odds_data_root / "reference"
         self.cache = NBADataCacheStore(self.odds_data_root)
         self._boxscore_manifest_index: dict[str, Path] | None = None
 
@@ -156,9 +154,6 @@ class NBARepository:
 
     def _context_json_path(self, name: str) -> Path:
         return self.context_dir / f"{name}.json"
-
-    def _legacy_context_json_path(self, name: str) -> Path:
-        return self.legacy_context_dir / f"{name}.json"
 
     def _context_ref_relpath(self, path: Path) -> str:
         data_home = data_home_from_odds_root(self.odds_data_root)
@@ -217,18 +212,6 @@ class NBARepository:
         injuries = self._context_json_path("injuries")
         roster = self._context_json_path("roster")
         results = self._context_json_path("results")
-        if not injuries.exists():
-            legacy_injuries = self._legacy_context_json_path("injuries")
-            if legacy_injuries.exists():
-                injuries = legacy_injuries
-        if not roster.exists():
-            legacy_roster = self._legacy_context_json_path("roster")
-            if legacy_roster.exists():
-                roster = legacy_roster
-        if not results.exists():
-            legacy_results = self._legacy_context_json_path("results")
-            if legacy_results.exists():
-                results = legacy_results
         return injuries, roster, results
 
     def official_injury_pdf_dir(self) -> Path:
@@ -259,19 +242,12 @@ class NBARepository:
         roster_stale_hours: float,
     ) -> tuple[dict[str, Any], dict[str, Any], Path, Path]:
         reference_injuries = self.reference_dir / "injuries" / "latest.json"
-        legacy_reference_injuries = self.legacy_reference_dir / "injuries" / "latest.json"
         today_key = datetime.now(UTC).strftime("%Y-%m-%d")
         reference_roster_daily = self.reference_dir / "rosters" / f"roster-{today_key}.json"
         reference_roster_latest = self.reference_dir / "rosters" / "latest.json"
-        legacy_reference_roster_daily = (
-            self.legacy_reference_dir / "rosters" / f"roster-{today_key}.json"
-        )
-        legacy_reference_roster_latest = self.legacy_reference_dir / "rosters" / "latest.json"
 
         injuries_path = self._context_json_path("injuries")
         roster_path = self._context_json_path("roster")
-        legacy_injuries_path = self._legacy_context_json_path("injuries")
-        legacy_roster_path = self._legacy_context_json_path("roster")
         official_pdf_dir = self.official_injury_pdf_dir()
 
         injuries = load_or_fetch_context(
@@ -283,7 +259,7 @@ class NBARepository:
                 "official": fetch_official_injury_links(pdf_cache_dir=official_pdf_dir),
                 "secondary": fetch_secondary_injuries(),
             },
-            fallback_paths=[legacy_injuries_path, reference_injuries, legacy_reference_injuries],
+            fallback_paths=[reference_injuries],
             write_through_paths=[reference_injuries],
             stale_after_hours=injuries_stale_hours,
         )
@@ -292,13 +268,7 @@ class NBARepository:
             offline=offline,
             refresh=refresh,
             fetcher=lambda: fetch_roster_context(teams_in_scope=teams_in_scope),
-            fallback_paths=[
-                legacy_roster_path,
-                reference_roster_daily,
-                reference_roster_latest,
-                legacy_reference_roster_daily,
-                legacy_reference_roster_latest,
-            ],
+            fallback_paths=[reference_roster_daily, reference_roster_latest],
             write_through_paths=[reference_roster_daily, reference_roster_latest],
             stale_after_hours=roster_stale_hours,
         )
@@ -316,12 +286,10 @@ class NBARepository:
         teams_in_scope = _seed_teams(seed_rows)
         snapshot_day = resolve_snapshot_date_str(self.snapshot_id)
         cache_path = self._context_json_path("results")
-        legacy_results_path = self._legacy_context_json_path("results")
         results = load_or_fetch_context(
             cache_path=cache_path,
             offline=offline,
             refresh=refresh,
-            fallback_paths=[legacy_results_path],
             fetcher=lambda: self._fetch_results(
                 mode=mode,
                 teams_in_scope=teams_in_scope,

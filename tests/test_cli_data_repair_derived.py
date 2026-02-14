@@ -50,11 +50,9 @@ def _build_spec() -> DatasetSpec:
 
 def test_data_repair_derived_repairs_canonical_jsonl_and_parquet(
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     data_root = tmp_path / "data" / "odds_api"
-    monkeypatch.setenv("PROP_EV_DATA_DIR", str(data_root))
     spec = _build_spec()
     save_dataset_spec(data_root, spec)
 
@@ -99,6 +97,8 @@ def test_data_repair_derived_repairs_canonical_jsonl_and_parquet(
 
     code = main(
         [
+            "--data-dir",
+            str(data_root),
             "data",
             "repair-derived",
             "--dataset-id",
@@ -119,6 +119,8 @@ def test_data_repair_derived_repairs_canonical_jsonl_and_parquet(
 
     verify_code = main(
         [
+            "--data-dir",
+            str(data_root),
             "data",
             "verify",
             "--dataset-id",
@@ -140,11 +142,9 @@ def test_data_repair_derived_repairs_canonical_jsonl_and_parquet(
 
 def test_data_repair_derived_skips_incomplete_day(
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     data_root = tmp_path / "data" / "odds_api"
-    monkeypatch.setenv("PROP_EV_DATA_DIR", str(data_root))
     spec = _build_spec()
     save_dataset_spec(data_root, spec)
 
@@ -154,6 +154,8 @@ def test_data_repair_derived_skips_incomplete_day(
 
     code = main(
         [
+            "--data-dir",
+            str(data_root),
             "data",
             "repair-derived",
             "--dataset-id",

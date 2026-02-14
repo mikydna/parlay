@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+from prop_ev import runtime_config
 from prop_ev.cli import main
 from prop_ev.storage import SnapshotStore, request_hash
 
@@ -75,7 +76,7 @@ def _seed_strategy_snapshot(
         quota={"remaining": "", "used": "", "last": ""},
     )
 
-    context_dir = snapshot_dir / "context"
+    context_dir = store.root.parent / "nba_data" / "context" / "snapshots" / snapshot_id
     context_dir.mkdir(parents=True, exist_ok=True)
     (context_dir / "injuries.json").write_text(
         json.dumps(injuries_payload, sort_keys=True, indent=2) + "\n",
@@ -110,7 +111,33 @@ def _seed_strategy_snapshot(
 @pytest.fixture
 def local_data_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     data_dir = tmp_path / "data" / "odds_api"
-    monkeypatch.setenv("PROP_EV_DATA_DIR", str(data_dir))
+    config_path = tmp_path / "runtime.toml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "[paths]",
+                f'odds_data_dir = "{data_dir}"',
+                f'nba_data_dir = "{tmp_path / "data" / "nba_data"}"',
+                f'reports_dir = "{tmp_path / "data" / "reports" / "odds"}"',
+                f'runtime_dir = "{tmp_path / "data" / "runtime"}"',
+                'bookmakers_config_path = "config/bookmakers.json"',
+                "",
+                "[odds_api]",
+                'key_files = ["ODDS_API_KEY.ignore"]',
+                "",
+                "[openai]",
+                'key_files = ["OPENAI_KEY.ignore"]',
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(runtime_config, "DEFAULT_CONFIG_PATH", config_path)
+    monkeypatch.setattr(
+        runtime_config,
+        "DEFAULT_LOCAL_OVERRIDE_PATH",
+        tmp_path / "runtime.local.toml",
+    )
     return data_dir
 
 

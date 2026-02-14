@@ -68,6 +68,12 @@ from prop_ev.report_paths import (
     report_outputs_root,
     snapshot_reports_dir,
 )
+from prop_ev.runtime_config import (
+    MANAGED_ENV_KEYS,
+    load_runtime_config,
+    runtime_env_overrides,
+    set_current_runtime_config,
+)
 from prop_ev.settings import Settings
 from prop_ev.settlement import settle_snapshot
 from prop_ev.snapshot_artifacts import (
@@ -372,7 +378,7 @@ def _cmd_snapshot_slate(args: argparse.Namespace) -> int:
         print(f"bookmakers_source={bookmakers_source} bookmakers={bookmakers}")
         return 0
 
-    settings = Settings.from_env()
+    settings = Settings.from_runtime()
     run_config = {
         "mode": "snapshot_slate",
         "sport_key": args.sport_key,
@@ -463,7 +469,7 @@ def _cmd_snapshot_props(args: argparse.Namespace) -> int:
 
         counters: Counter[str] = Counter()
         all_rows: list[dict[str, Any]] = []
-        settings = Settings.from_env()
+        settings = Settings.from_runtime()
         with OddsAPIClient(settings) as client:
             events_path = f"/sports/{args.sport_key}/events"
             events_params: dict[str, Any] = {
@@ -1873,7 +1879,7 @@ def _official_injury_hard_fail_message() -> str:
     return (
         "official injury report unavailable; refusing to continue without override. "
         "Use --allow-secondary-injuries or set "
-        "PROP_EV_STRATEGY_ALLOW_SECONDARY_INJURIES=true to allow secondary fallback."
+        "`strategy.allow_secondary_injuries=true` in runtime config."
     )
 
 
@@ -3341,7 +3347,7 @@ def _run_strategy_for_playbook(
 
 def _cmd_playbook_run(args: argparse.Namespace) -> int:
     store = SnapshotStore(os.environ.get("PROP_EV_DATA_DIR", "data/odds_api"))
-    settings = Settings.from_env()
+    settings = Settings.from_runtime()
     month = args.month or current_month_utc()
     strategy_id = _resolve_strategy_id(
         str(getattr(args, "strategy", "")),
@@ -3583,7 +3589,7 @@ def _cmd_playbook_run(args: argparse.Namespace) -> int:
 
 def _cmd_playbook_render(args: argparse.Namespace) -> int:
     store = SnapshotStore(os.environ.get("PROP_EV_DATA_DIR", "data/odds_api"))
-    settings = Settings.from_env()
+    settings = Settings.from_runtime()
     month = args.month or current_month_utc()
     strategy_id = _resolve_strategy_id(
         str(getattr(args, "strategy", "")),
@@ -3762,7 +3768,7 @@ def _cmd_playbook_publish(args: argparse.Namespace) -> int:
 
 def _cmd_playbook_budget(args: argparse.Namespace) -> int:
     store = SnapshotStore(os.environ.get("PROP_EV_DATA_DIR", "data/odds_api"))
-    settings = Settings.from_env()
+    settings = Settings.from_runtime()
     month = args.month or current_month_utc()
     payload = budget_snapshot(store=store, settings=settings, month=month)
     print(json.dumps(payload, sort_keys=True, indent=2))
@@ -3771,7 +3777,7 @@ def _cmd_playbook_budget(args: argparse.Namespace) -> int:
 
 def _cmd_playbook_discover_execute(args: argparse.Namespace) -> int:
     store = SnapshotStore(os.environ.get("PROP_EV_DATA_DIR", "data/odds_api"))
-    settings = Settings.from_env()
+    settings = Settings.from_runtime()
     month = args.month or current_month_utc()
     strategy_id = _resolve_strategy_id(
         str(getattr(args, "strategy", "")),
@@ -3963,13 +3969,26 @@ def _cmd_playbook_discover_execute(args: argparse.Namespace) -> int:
     return 0
 
 
-def _extract_global_overrides(argv: list[str]) -> tuple[list[str], str, str]:
+def _extract_global_overrides(argv: list[str]) -> tuple[list[str], str, str, str, str, str]:
     cleaned: list[str] = []
+    config_path = ""
     data_dir = ""
     reports_dir = ""
+    nba_data_dir = ""
+    runtime_dir = ""
     idx = 0
     while idx < len(argv):
         token = argv[idx]
+        if token == "--config":
+            if idx + 1 >= len(argv):
+                raise CLIError("--config requires a value")
+            config_path = str(argv[idx + 1]).strip()
+            idx += 2
+            continue
+        if token.startswith("--config="):
+            config_path = token.split("=", 1)[1].strip()
+            idx += 1
+            continue
         if token == "--data-dir":
             if idx + 1 >= len(argv):
                 raise CLIError("--data-dir requires a value")
@@ -3990,25 +4009,60 @@ def _extract_global_overrides(argv: list[str]) -> tuple[list[str], str, str]:
             reports_dir = token.split("=", 1)[1].strip()
             idx += 1
             continue
+        if token == "--nba-data-dir":
+            if idx + 1 >= len(argv):
+                raise CLIError("--nba-data-dir requires a value")
+            nba_data_dir = str(argv[idx + 1]).strip()
+            idx += 2
+            continue
+        if token.startswith("--nba-data-dir="):
+            nba_data_dir = token.split("=", 1)[1].strip()
+            idx += 1
+            continue
+        if token == "--runtime-dir":
+            if idx + 1 >= len(argv):
+                raise CLIError("--runtime-dir requires a value")
+            runtime_dir = str(argv[idx + 1]).strip()
+            idx += 2
+            continue
+        if token.startswith("--runtime-dir="):
+            runtime_dir = token.split("=", 1)[1].strip()
+            idx += 1
+            continue
         cleaned.append(token)
         idx += 1
-    return cleaned, data_dir, reports_dir
+    return cleaned, config_path, data_dir, reports_dir, nba_data_dir, runtime_dir
 
 
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="prop-ev")
     parser.add_argument(
+        "--config",
+        default="",
+        help="Path to runtime config TOML (default: config/runtime.toml).",
+    )
+    parser.add_argument(
         "--data-dir",
         default="",
-        help="Override PROP_EV_DATA_DIR for this command invocation.",
+        help="Override odds data dir for this command invocation.",
     )
     parser.add_argument(
         "--reports-dir",
         default="",
         help=(
-            "Override PROP_EV_REPORTS_DIR for report publishing/output. "
-            "Default is sibling reports dir of the odds-api data dir."
+            "Override reports output dir for this command invocation. "
+            "Default comes from runtime config."
         ),
+    )
+    parser.add_argument(
+        "--nba-data-dir",
+        default="",
+        help="Override NBA data dir for this command invocation.",
+    )
+    parser.add_argument(
+        "--runtime-dir",
+        default="",
+        help="Override runtime/cache dir for this command invocation.",
     )
     subparsers = parser.add_subparsers(dest="command")
 
@@ -4668,24 +4722,43 @@ def _build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     """Run the CLI."""
     raw_argv = list(argv) if isinstance(argv, list) else sys.argv[1:]
-    parsed_argv, data_dir_override, reports_dir_override = _extract_global_overrides(raw_argv)
-    prev_data_dir = os.environ.get("PROP_EV_DATA_DIR")
-    prev_reports_dir = os.environ.get("PROP_EV_REPORTS_DIR")
+    (
+        parsed_argv,
+        config_override,
+        data_dir_override,
+        reports_dir_override,
+        nba_data_dir_override,
+        runtime_dir_override,
+    ) = _extract_global_overrides(raw_argv)
+    config_path = Path(config_override).expanduser() if config_override else None
+    try:
+        runtime_config = load_runtime_config(config_path)
+    except RuntimeError as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
+    runtime_config = runtime_config.with_path_overrides(
+        odds_data_dir=Path(data_dir_override).expanduser().resolve() if data_dir_override else None,
+        nba_data_dir=(
+            Path(nba_data_dir_override).expanduser().resolve() if nba_data_dir_override else None
+        ),
+        reports_dir=Path(reports_dir_override).expanduser().resolve()
+        if reports_dir_override
+        else None,
+        runtime_dir=Path(runtime_dir_override).expanduser().resolve()
+        if runtime_dir_override
+        else None,
+    )
+    prev_managed_env = {key: os.environ.get(key) for key in MANAGED_ENV_KEYS}
 
     try:
-        if data_dir_override:
-            os.environ["PROP_EV_DATA_DIR"] = str(Path(data_dir_override).expanduser())
-        if reports_dir_override:
-            os.environ["PROP_EV_REPORTS_DIR"] = str(Path(reports_dir_override).expanduser())
+        for key in MANAGED_ENV_KEYS:
+            os.environ.pop(key, None)
+        for key, value in runtime_env_overrides(runtime_config).items():
+            os.environ[key] = value
+        set_current_runtime_config(runtime_config)
 
         parser = _build_parser()
         args = parser.parse_args(parsed_argv)
-        explicit_data_dir = str(getattr(args, "data_dir", "")).strip()
-        if explicit_data_dir:
-            os.environ["PROP_EV_DATA_DIR"] = str(Path(explicit_data_dir).expanduser())
-        explicit_reports_dir = str(getattr(args, "reports_dir", "")).strip()
-        if explicit_reports_dir:
-            os.environ["PROP_EV_REPORTS_DIR"] = str(Path(explicit_reports_dir).expanduser())
         func = getattr(args, "func", None)
         if func is None:
             parser.print_help()
@@ -4704,14 +4777,12 @@ def main(argv: list[str] | None = None) -> int:
             print(str(exc), file=sys.stderr)
             return 2
     finally:
-        if prev_data_dir is None:
-            os.environ.pop("PROP_EV_DATA_DIR", None)
-        else:
-            os.environ["PROP_EV_DATA_DIR"] = prev_data_dir
-        if prev_reports_dir is None:
-            os.environ.pop("PROP_EV_REPORTS_DIR", None)
-        else:
-            os.environ["PROP_EV_REPORTS_DIR"] = prev_reports_dir
+        set_current_runtime_config(None)
+        for key, value in prev_managed_env.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
 
 
 if __name__ == "__main__":

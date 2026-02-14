@@ -39,11 +39,9 @@ def _incomplete_status(*, day: str, snapshot_id: str) -> dict[str, object]:
 
 def test_data_verify_json_succeeds_for_complete_contract_days(
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     data_root = tmp_path / "data" / "odds_api"
-    monkeypatch.setenv("PROP_EV_DATA_DIR", str(data_root))
 
     spec = DatasetSpec(
         sport_key="basketball_nba",
@@ -78,13 +76,17 @@ def test_data_verify_json_succeeds_for_complete_contract_days(
             }
         ],
     )
-    assert main(["snapshot", "lake", "--snapshot-id", snapshot_id]) == 0
+    assert (
+        main(["--data-dir", str(data_root), "snapshot", "lake", "--snapshot-id", snapshot_id]) == 0
+    )
     _ = capsys.readouterr()
 
     save_day_status(data_root, spec, day, _complete_status(day=day, snapshot_id=snapshot_id))
 
     code = main(
         [
+            "--data-dir",
+            str(data_root),
             "data",
             "verify",
             "--dataset-id",
@@ -107,11 +109,9 @@ def test_data_verify_json_succeeds_for_complete_contract_days(
 
 def test_data_verify_require_complete_fails_on_incomplete_day(
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     data_root = tmp_path / "data" / "odds_api"
-    monkeypatch.setenv("PROP_EV_DATA_DIR", str(data_root))
 
     spec = DatasetSpec(
         sport_key="basketball_nba",
@@ -129,6 +129,8 @@ def test_data_verify_require_complete_fails_on_incomplete_day(
 
     code = main(
         [
+            "--data-dir",
+            str(data_root),
             "data",
             "verify",
             "--dataset-id",
@@ -155,11 +157,9 @@ def test_data_verify_require_complete_fails_on_incomplete_day(
 
 def test_data_verify_allowlists_incomplete_day_and_reason(
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     data_root = tmp_path / "data" / "odds_api"
-    monkeypatch.setenv("PROP_EV_DATA_DIR", str(data_root))
 
     spec = DatasetSpec(
         sport_key="basketball_nba",
@@ -177,6 +177,8 @@ def test_data_verify_allowlists_incomplete_day_and_reason(
 
     code_by_day = main(
         [
+            "--data-dir",
+            str(data_root),
             "data",
             "verify",
             "--dataset-id",
@@ -197,6 +199,8 @@ def test_data_verify_allowlists_incomplete_day_and_reason(
 
     code_by_reason = main(
         [
+            "--data-dir",
+            str(data_root),
             "data",
             "verify",
             "--dataset-id",
@@ -218,11 +222,9 @@ def test_data_verify_allowlists_incomplete_day_and_reason(
 
 def test_data_verify_require_canonical_jsonl_is_opt_in(
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     data_root = tmp_path / "data" / "odds_api"
-    monkeypatch.setenv("PROP_EV_DATA_DIR", str(data_root))
 
     spec = DatasetSpec(
         sport_key="basketball_nba",
@@ -271,12 +273,16 @@ def test_data_verify_require_canonical_jsonl_is_opt_in(
             },
         ],
     )
-    assert main(["snapshot", "lake", "--snapshot-id", snapshot_id]) == 0
+    assert (
+        main(["--data-dir", str(data_root), "snapshot", "lake", "--snapshot-id", snapshot_id]) == 0
+    )
     _ = capsys.readouterr()
     save_day_status(data_root, spec, day, _complete_status(day=day, snapshot_id=snapshot_id))
 
     code_without_flag = main(
         [
+            "--data-dir",
+            str(data_root),
             "data",
             "verify",
             "--dataset-id",
@@ -296,6 +302,8 @@ def test_data_verify_require_canonical_jsonl_is_opt_in(
 
     code_with_flag = main(
         [
+            "--data-dir",
+            str(data_root),
             "data",
             "verify",
             "--dataset-id",

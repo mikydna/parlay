@@ -413,7 +413,7 @@ def render_settlement_markdown(report: dict[str, Any]) -> str:
     )
 
     lines: list[str] = []
-    lines.append("# Backtest Settlement")
+    lines.append("# Settlement")
     lines.append("")
     lines.append(f"- snapshot_id: `{report.get('snapshot_id', '')}`")
     lines.append(f"- generated_at_utc: `{report.get('generated_at_utc', '')}`")
@@ -634,18 +634,6 @@ def settle_snapshot(
     csv_path = reports_dir / "settlement.csv"
     meta_path = reports_dir / "settlement.meta.json"
 
-    legacy_paths = (
-        reports_dir / "backtest-settlement.json",
-        reports_dir / "backtest-settlement.md",
-        reports_dir / "backtest-settlement.tex",
-        reports_dir / "backtest-settlement.pdf",
-        reports_dir / "backtest-settlement.csv",
-        reports_dir / "backtest-settlement.meta.json",
-    )
-    for path in legacy_paths:
-        if path.exists():
-            path.unlink()
-
     source_details: dict[str, Any] = {
         "source": resolved_source,
         "results_source_mode": effective_source,
@@ -680,7 +668,7 @@ def settle_snapshot(
         markdown,
         tex_path=tex_path,
         pdf_path=pdf_path,
-        title="Backtest Settlement",
+        title="Settlement",
         landscape=True,
     )
     cleanup_latex_artifacts(tex_path=tex_path, keep_tex=keep_tex)

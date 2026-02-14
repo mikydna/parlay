@@ -30,7 +30,7 @@
 - If official injuries are unavailable, default behavior is hard-fail.
 - Secondary injury continuation is allowed only with explicit override:
   - CLI flag: `--allow-secondary-injuries`
-  - Env var: `PROP_EV_STRATEGY_ALLOW_SECONDARY_INJURIES=true`
+  - Runtime config: `[strategy].allow_secondary_injuries = true`
 - Secondary injury feeds are fallbacks only and must be labeled as fallback provenance.
 - LLM/web search output is never an authoritative injury status source.
 
@@ -51,7 +51,7 @@
 ## Fallback Triggers and Escalation
 
 - Injury fallback trigger: official source unavailable or invalid.
-- Injury fallback continuation requires explicit override flag/env.
+- Injury fallback continuation requires explicit override flag/config.
 - Roster fallback trigger: teams missing from primary roster coverage.
 - Degraded mode:
   - stale inputs,

@@ -6,7 +6,7 @@ For operator policy and contract references, see:
 - `docs/runbook.md`
 - `docs/contracts.md`
 
-`REPORTS_DIR` defaults to sibling `reports/odds/` next to `ODDS_DATA_DIR`.
+`REPORTS_DIR` defaults to `paths.reports_dir` from `config/runtime.toml`.
 
 ## Hourly Schedule Command
 
@@ -61,9 +61,9 @@ uv run prop-ev data status --dataset-id <DATASET_ID> --from 2026-01-22 --to 2026
 
 ## What You Get Per Run
 
-- Raw request/response/meta cache under `<ODDS_DATA_DIR>/snapshots/<snapshot_id>/`
+- Raw request/response/meta cache under `<odds_data_dir>/snapshots/<snapshot_id>/`
 - Normalized props table:
-  - `<ODDS_DATA_DIR>/snapshots/<snapshot_id>/derived/event_props.jsonl`
+  - `<odds_data_dir>/snapshots/<snapshot_id>/derived/event_props.jsonl`
 - Strategy outputs:
   - `<REPORTS_DIR>/by-snapshot/<report_snapshot>/strategy-report.json`
   - `<REPORTS_DIR>/by-snapshot/<report_snapshot>/backtest-seed.jsonl`

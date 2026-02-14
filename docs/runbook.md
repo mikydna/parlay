@@ -2,10 +2,10 @@
 
 Operator-focused flow for daily execution, offline replay, and health triage.
 
-Assume `ODDS_DATA_DIR=/Users/$USER/Documents/Code/parlay-data/odds_api`
-or pass `--data-dir` explicitly on commands.
-`REPORTS_DIR` defaults to `/Users/$USER/Documents/Code/parlay-data/reports/odds`
-unless overridden via `--reports-dir` / `PROP_EV_REPORTS_DIR`.
+Assume `config/runtime.toml` points at
+`/Users/$USER/Documents/Code/parlay-data/{odds_api,nba_data,reports,runtime}`.
+Use CLI flags (`--config`, `--data-dir`, `--nba-data-dir`, `--reports-dir`, `--runtime-dir`)
+for per-run overrides.
 
 ## Standard Run (Auto-gated Live/Offline)
 
@@ -124,7 +124,7 @@ Exit codes:
 
 Defaults:
 - official injury source required by default,
-- secondary injury source is override-only (`--allow-secondary-injuries` or env),
+- secondary injury source is override-only (`--allow-secondary-injuries` or config),
 - stale context gates strategy/playbook into degraded or blocked paths depending on command.
 
 ## Threshold Semantics
