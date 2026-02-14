@@ -3454,6 +3454,13 @@ def _cmd_strategy_backtest_summarize(args: argparse.Namespace) -> int:
                 bin_size=bin_size,
             )
             computed.append(summary)
+
+        if not any(item.rows_total > 0 for item in computed):
+            raise CLIError(
+                "no backtest rows found for selected complete days/strategies; "
+                "run `prop-ev strategy backtest-prep` and "
+                "`prop-ev strategy settle --write-csv` first"
+            )
         rows_for_map = rows_by_strategy
         day_coverage = {
             "all_complete_days": True,

@@ -189,6 +189,63 @@ def test_strategy_backtest_summarize_all_complete_days_requires_dataset_when_amb
     assert "multiple datasets found" in err
 
 
+def test_strategy_backtest_summarize_all_complete_days_fails_when_no_backtest_rows(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    data_root = tmp_path / "data" / "odds_api"
+    store = SnapshotStore(data_root)
+    spec = DatasetSpec(
+        sport_key="basketball_nba",
+        markets=["player_points"],
+        regions="us",
+        bookmakers="draftkings,fanduel",
+        include_links=False,
+        include_sids=False,
+        historical=True,
+        historical_anchor_hour_local=12,
+        historical_pre_tip_minutes=60,
+    )
+    save_dataset_spec(data_root, spec)
+
+    snapshot_day_one = "day-a-2026-02-01"
+    snapshot_day_two = "day-b-2026-02-02"
+    store.ensure_snapshot(snapshot_day_one)
+    store.ensure_snapshot(snapshot_day_two)
+    save_day_status(
+        data_root,
+        spec,
+        "2026-02-01",
+        _complete_day_status(day="2026-02-01", snapshot_id_for_day=snapshot_day_one),
+    )
+    save_day_status(
+        data_root,
+        spec,
+        "2026-02-02",
+        _complete_day_status(day="2026-02-02", snapshot_id_for_day=snapshot_day_two),
+    )
+
+    code = main(
+        [
+            "--data-dir",
+            str(data_root),
+            "strategy",
+            "backtest-summarize",
+            "--snapshot-id",
+            snapshot_day_two,
+            "--strategies",
+            "s008",
+            "--all-complete-days",
+            "--dataset-id",
+            dataset_id(spec),
+        ]
+    )
+    err = capsys.readouterr().err
+
+    assert code == 2
+    assert "no backtest rows found for selected complete days/strategies" in err
+
+
 def test_strategy_backtest_summarize_writes_walk_forward_calibration_map(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
