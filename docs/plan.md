@@ -650,10 +650,33 @@ For each track, Codex should generate:
 
 ## 10) Immediate Next Execution Sequence
 
-1. Merge active integration PRs (currently strategy-integrity ablation pack) and rerun full gates.
-2. Run offline ablation comparisons (`s016`–`s020`) across complete indexed days and refresh aggregate scoreboards.
+1. Run offline ablation comparisons (`s016`–`s020`) across complete indexed days.
+2. Refresh aggregate scoreboards/calibration maps (`max_picks=1,2,5`) and publish comparison packet.
 3. Keep IM5 deferred until a dedicated default-flip packet clears promotion gates with rollback documented.
 4. Continue Track E hygiene improvements (data/layout/report guardrails) without changing strategy defaults.
+
+### Execution Update (2026-02-14)
+
+Items 1 and 2 are complete on branch `codex/ablation-scoreboard-refresh`.
+
+- Dataset window: `bdfa890a...`, complete indexed days from `2026-01-22` to `2026-02-12` (20 snapshots).
+- Run profile: offline replay + settle for `s016,s017,s018,s019,s020`, with `max_picks=1,2,5`.
+- Comparison artifacts:
+  - `/Users/andy/Documents/Code/parlay-data/reports/odds/analysis/ablation-s016-s020-max1-2026-02-14/aggregate-scoreboard.json`
+  - `/Users/andy/Documents/Code/parlay-data/reports/odds/analysis/ablation-s016-s020-max2-2026-02-14/aggregate-scoreboard.json`
+  - `/Users/andy/Documents/Code/parlay-data/reports/odds/analysis/ablation-s016-s020-max5-2026-02-14/aggregate-scoreboard.json`
+- Winners by cap:
+  - `max_picks=1`: `s016` (`roi=0.69217`, `rows_graded=20`).
+  - `max_picks=2`: `s017` (`roi=0.585`, `rows_graded=40`).
+  - `max_picks=5`: `s017` (`roi=0.240731`, `rows_graded=100`).
+- Promotion-gate status snapshot:
+  - `max_picks=1`: pass=`s016`; fail=`s017,s018,s019,s020`.
+  - `max_picks=2`: pass=`s016,s017,s020`; fail=`s018,s019`.
+  - `max_picks=5`: pass=`s016,s017,s018,s020`; fail=`s019`.
+- Observed data condition:
+  - `day-bdfa890a-2026-02-08` emitted `no seed rows found` for `s018` and `s020` (no candidate rows for those runs).
+
+Immediate next action remains item 3 (IM5 stays deferred until dedicated promotion packet).
 
 ## 11) Out of Scope (current horizon)
 
