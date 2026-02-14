@@ -152,6 +152,7 @@ Strategy IDs:
 - `s012` — Tier B + Aggressive Best EV (s002 + best-EV portfolio ranking)
 - `s013` — Tier B + Quality-Weighted EV Low (s002 + quality-weighted conservative EV-low ranking)
 - `s014` — Median No-Vig + Tier B (s003 + tier-B edges)
+- `s015` — Tier B + Calibrated EV Low (s010 + rolling calibration feedback ranking)
 
 Legacy IDs are not accepted.
 

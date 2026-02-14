@@ -24,6 +24,7 @@ from prop_ev.odds_math import (
     normalize_prob_pair,
 )
 from prop_ev.portfolio import PortfolioConstraints, PortfolioRanking, select_portfolio_candidates
+from prop_ev.rolling_priors import calibration_feedback
 from prop_ev.state_keys import strategy_report_state_key
 from prop_ev.time_utils import parse_iso_z, utc_now_str
 
@@ -1712,6 +1713,25 @@ def build_strategy_report(
                 ev_low = ev_under_low
                 ev_high = ev_under_high
 
+        calibration_hit = calibration_feedback(
+            rolling_priors=rolling_priors,
+            market=market,
+            side=side,
+            model_probability=model_p_hit,
+        )
+        calibration_low = calibration_feedback(
+            rolling_priors=rolling_priors,
+            market=market,
+            side=side,
+            model_probability=p_hit_low,
+        )
+        p_hit_calibrated = _safe_float(calibration_hit.get("p_calibrated"))
+        p_hit_low_calibrated = _safe_float(calibration_low.get("p_calibrated"))
+        if p_hit_low_calibrated is None:
+            p_hit_low_calibrated = p_hit_calibrated
+        ev_calibrated, _ = _ev_and_kelly(p_hit_calibrated, selected_price)
+        ev_low_calibrated, _ = _ev_and_kelly(p_hit_low_calibrated, selected_price)
+
         min_ev_for_line = tier_a_min_ev if tier == "A" else tier_b_min_ev
         if best_ev is None or best_ev < min_ev_for_line:
             if eligible:
@@ -1826,6 +1846,8 @@ def build_strategy_report(
                 "model_p_hit": model_p_hit,
                 "p_hit_low": p_hit_low,
                 "p_hit_high": p_hit_high,
+                "p_hit_calibrated": p_hit_calibrated,
+                "p_hit_low_calibrated": p_hit_low_calibrated,
                 "fair_p_hit": fair_p_hit,
                 "fair_decimal": fair_decimal,
                 "fair_american": fair_american,
@@ -1833,6 +1855,15 @@ def build_strategy_report(
                 "ev_per_100": round((best_ev or 0.0) * 100.0, 3) if best_ev is not None else None,
                 "ev_low": ev_low,
                 "ev_high": ev_high,
+                "ev_calibrated": ev_calibrated,
+                "ev_low_calibrated": ev_low_calibrated,
+                "calibration_source": str(calibration_hit.get("source", "")),
+                "calibration_sample_size": int(calibration_hit.get("sample_size", 0) or 0),
+                "calibration_confidence": _safe_float(calibration_hit.get("confidence")) or 0.0,
+                "calibration_delta": _safe_float(calibration_hit.get("delta")),
+                "calibration_bucket_index": calibration_hit.get("bucket_index"),
+                "calibration_bucket_low": calibration_hit.get("bucket_low"),
+                "calibration_bucket_high": calibration_hit.get("bucket_high"),
                 "play_to_decimal": play_to_decimal,
                 "play_to_american": play_to_american,
                 "breakeven_decimal": breakeven_decimal,

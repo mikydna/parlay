@@ -17,8 +17,10 @@ def _row(
     best_ev: float,
     quality_score: float,
     prior_delta: float = 0.0,
+    ev_low_calibrated: float | None = None,
+    calibration_confidence: float | None = None,
 ) -> dict[str, object]:
-    return {
+    row: dict[str, object] = {
         "event_id": event_id,
         "player": player,
         "market": market,
@@ -29,6 +31,11 @@ def _row(
         "quality_score": quality_score,
         "historical_prior_delta": prior_delta,
     }
+    if ev_low_calibrated is not None:
+        row["ev_low_calibrated"] = ev_low_calibrated
+    if calibration_confidence is not None:
+        row["calibration_confidence"] = calibration_confidence
+    return row
 
 
 def test_select_portfolio_enforces_player_and_game_caps() -> None:
@@ -96,3 +103,33 @@ def test_select_portfolio_uses_historical_prior_in_tie_break() -> None:
 
     assert len(selected) == 1
     assert selected[0]["player"] == "Player A"
+
+
+def test_select_portfolio_calibrated_ev_low_ranks_by_calibrated_value() -> None:
+    selected, _excluded = select_portfolio_candidates(
+        eligible_rows=[
+            _row(
+                event_id="g1",
+                player="Player A",
+                ev_low=0.041,
+                best_ev=0.041,
+                quality_score=0.7,
+                ev_low_calibrated=0.01,
+                calibration_confidence=1.0,
+            ),
+            _row(
+                event_id="g2",
+                player="Player B",
+                ev_low=0.04,
+                best_ev=0.04,
+                quality_score=0.7,
+                ev_low_calibrated=0.03,
+                calibration_confidence=1.0,
+            ),
+        ],
+        constraints=PortfolioConstraints(max_picks=1, max_per_player=1, max_per_game=2),
+        ranking="calibrated_ev_low",
+    )
+
+    assert len(selected) == 1
+    assert selected[0]["player"] == "Player B"

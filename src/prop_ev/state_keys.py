@@ -57,6 +57,7 @@ STRATEGY_TITLE_KEY = {
     "s012": "Tier B + Aggressive Best EV",
     "s013": "Tier B + Quality-Weighted EV Low",
     "s014": "Median No-Vig + Tier B",
+    "s015": "Tier B + Calibrated EV Low",
 }
 
 STRATEGY_DESCRIPTION_KEY = {
@@ -101,6 +102,10 @@ STRATEGY_DESCRIPTION_KEY = {
     "s014": (
         "Extends s003 median no-vig baseline to include tier-B single-book edges "
         "with the same stricter EV floor."
+    ),
+    "s015": (
+        "Extends s010 with rolling historical calibration feedback and ranks picks by "
+        "calibrated conservative EV-low."
     ),
 }
 

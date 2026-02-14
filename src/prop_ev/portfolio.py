@@ -11,7 +11,7 @@ PORTFOLIO_REASON_DAILY_CAP = "portfolio_cap_daily"
 PORTFOLIO_REASON_PLAYER_CAP = "portfolio_cap_player"
 PORTFOLIO_REASON_GAME_CAP = "portfolio_cap_game"
 
-PortfolioRanking = Literal["default", "best_ev", "ev_low_quality_weighted"]
+PortfolioRanking = Literal["default", "best_ev", "ev_low_quality_weighted", "calibrated_ev_low"]
 
 
 @dataclass(frozen=True)
@@ -41,7 +41,9 @@ def _safe_float(value: Any) -> float | None:
 
 def _selection_sort_key(row: dict[str, Any], ranking: PortfolioRanking) -> tuple[Any, ...]:
     ev_low = _safe_float(row.get("ev_low"))
+    ev_low_calibrated = _safe_float(row.get("ev_low_calibrated"))
     prior_delta = _safe_float(row.get("historical_prior_delta")) or 0.0
+    calibration_confidence = _safe_float(row.get("calibration_confidence"))
     quality = _safe_float(row.get("quality_score"))
     best_ev = _safe_float(row.get("best_ev"))
     quote_age_minutes = _safe_float(row.get("quote_age_minutes"))
@@ -50,6 +52,17 @@ def _selection_sort_key(row: dict[str, Any], ranking: PortfolioRanking) -> tuple
     base_prior_weight = 0.25
     if ranking == "best_ev":
         ev_primary = (best_ev if best_ev is not None else -1.0) + (prior_delta * base_prior_weight)
+    elif ranking == "calibrated_ev_low":
+        confidence = max(0.0, min(1.0, calibration_confidence or 0.0))
+        base_component = ev_low if ev_low is not None else -1.0
+        calibrated_component = (
+            ev_low_calibrated if ev_low_calibrated is not None else base_component
+        )
+        calibration_weight = 0.3 * confidence
+        ev_component = ((1.0 - calibration_weight) * base_component) + (
+            calibration_weight * calibrated_component
+        )
+        ev_primary = ev_component + (prior_delta * base_prior_weight)
     elif ranking == "ev_low_quality_weighted":
         quality_factor = quality if quality is not None else 0.0
         ev_component = ev_low if ev_low is not None else -1.0
@@ -83,7 +96,7 @@ def select_portfolio_candidates(
     max_per_player = max(0, int(constraints.max_per_player))
     max_per_game = max(0, int(constraints.max_per_game))
 
-    if ranking not in {"default", "best_ev", "ev_low_quality_weighted"}:
+    if ranking not in {"default", "best_ev", "ev_low_quality_weighted", "calibrated_ev_low"}:
         raise ValueError(f"invalid portfolio ranking: {ranking}")
     sorted_rows = sorted(eligible_rows, key=lambda row: _selection_sort_key(row, ranking))
     selected: list[dict[str, Any]] = []
