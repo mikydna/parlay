@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+from collections import Counter
 from datetime import UTC, datetime
 from pathlib import Path
 from statistics import median
@@ -13,6 +14,7 @@ from zoneinfo import ZoneInfo
 
 from prop_ev.brief_builder import TEAM_ABBREVIATIONS
 from prop_ev.context_health import official_rows_count
+from prop_ev.execution_plan_contract import EXECUTION_PLAN_SCHEMA_VERSION, assert_execution_plan
 from prop_ev.identity_map import name_aliases
 from prop_ev.models.core_minutes_usage import market_side_adjustment_core, minutes_usage_core
 from prop_ev.nba_data.normalize import canonical_team_name, normalize_person_name
@@ -2258,7 +2260,13 @@ def build_strategy_report(
         str(rolling_priors.get("as_of_day", "")) if isinstance(rolling_priors, dict) else ""
     )
     generated_at_utc = _now_utc()
+    exclusion_reason_counts = Counter(
+        str(row.get("portfolio_reason", "")).strip()
+        for row in portfolio_exclusions
+        if str(row.get("portfolio_reason", "")).strip()
+    )
     execution_plan = {
+        "schema_version": EXECUTION_PLAN_SCHEMA_VERSION,
         "snapshot_id": snapshot_id,
         "strategy_id": "",
         "generated_at_utc": generated_at_utc,
@@ -2275,7 +2283,9 @@ def build_strategy_report(
         },
         "selected": [_execution_plan_row(row) for row in ranked],
         "excluded": [_execution_plan_row(row) for row in portfolio_exclusions],
+        "exclusion_reason_counts": dict(sorted(exclusion_reason_counts.items())),
     }
+    assert_execution_plan(execution_plan)
 
     return {
         "generated_at_utc": generated_at_utc,
@@ -2928,6 +2938,7 @@ def write_execution_plan(
     payload = report.get("execution_plan")
     if not isinstance(payload, dict):
         raise ValueError("strategy report missing execution_plan object")
+    assert_execution_plan(payload)
 
     reports_dir.mkdir(parents=True, exist_ok=True)
     canonical_path = reports_dir / "execution-plan.json"

@@ -540,9 +540,11 @@ def test_build_strategy_report_applies_max_picks_and_emits_execution_plan() -> N
     assert report["summary"]["max_picks"] == 1
     assert len(report["ranked_plays"]) == 1
     execution_plan = report["execution_plan"]
+    assert execution_plan["schema_version"] == 1
     assert execution_plan["counts"]["selected_lines"] == 1
     assert execution_plan["counts"]["excluded_lines"] >= 1
     assert execution_plan["constraints"]["max_picks"] == 1
+    assert execution_plan["exclusion_reason_counts"]["portfolio_cap_daily"] >= 1
     assert len(report["portfolio_watchlist"]) == 1
     assert report["portfolio_watchlist"][0]["portfolio_reason"] == "portfolio_cap_daily"
 
