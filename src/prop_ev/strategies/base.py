@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, replace
 from typing import Any, Protocol
 
+from prop_ev.portfolio import PortfolioRanking
 from prop_ev.state_keys import (
     attach_strategy_description_key,
     attach_strategy_title_key,
@@ -61,6 +62,7 @@ class StrategyResult:
 class StrategyRecipe:
     force_allow_tier_b: bool = False
     use_rolling_priors: bool = False
+    portfolio_ranking: PortfolioRanking | None = None
     market_baseline_method: str | None = None
     market_baseline_fallback: str | None = None
     min_book_pairs: int | None = None
@@ -84,6 +86,11 @@ def compose_strategy_recipes(*recipes: StrategyRecipe) -> StrategyRecipe:
         merged = StrategyRecipe(
             force_allow_tier_b=merged.force_allow_tier_b or bool(recipe.force_allow_tier_b),
             use_rolling_priors=merged.use_rolling_priors or bool(recipe.use_rolling_priors),
+            portfolio_ranking=(
+                recipe.portfolio_ranking
+                if recipe.portfolio_ranking is not None
+                else merged.portfolio_ranking
+            ),
             market_baseline_method=(
                 recipe.market_baseline_method
                 if recipe.market_baseline_method is not None
@@ -148,6 +155,9 @@ def run_strategy_recipe(
         require_official_injuries=effective_config.require_official_injuries,
         stale_quote_minutes=effective_config.stale_quote_minutes,
         require_fresh_context=effective_config.require_fresh_context,
+        portfolio_ranking=recipe.portfolio_ranking
+        if recipe.portfolio_ranking is not None
+        else "default",
         market_baseline_method=recipe.market_baseline_method or "best_sides",
         market_baseline_fallback=recipe.market_baseline_fallback or "best_sides",
         min_book_pairs=recipe.min_book_pairs if recipe.min_book_pairs is not None else 0,

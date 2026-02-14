@@ -54,6 +54,8 @@ STRATEGY_TITLE_KEY = {
     "s009": "Conservative Quality + Rolling Priors",
     "s010": "Tier B + Quality Floor",
     "s011": "Tier B + Quality + Rolling Priors",
+    "s012": "Tier B + Aggressive Best EV",
+    "s013": "Tier B + Quality-Weighted EV Low",
 }
 
 STRATEGY_DESCRIPTION_KEY = {
@@ -86,6 +88,14 @@ STRATEGY_DESCRIPTION_KEY = {
     "s011": (
         "Extends s010 with rolling settled-outcome prior tilt for ranking while keeping "
         "the same conservative gates."
+    ),
+    "s012": (
+        "Extends s002 but ranks portfolio candidates primarily by best-EV "
+        "(more aggressive than conservative EV-low selection)."
+    ),
+    "s013": (
+        "Extends s002 but ranks portfolio candidates by EV-low weighted by quote quality, "
+        "favoring deeper/cleaner markets when edges are similar."
     ),
 }
 

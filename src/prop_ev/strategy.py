@@ -23,7 +23,7 @@ from prop_ev.odds_math import (
     implied_prob_from_american,
     normalize_prob_pair,
 )
-from prop_ev.portfolio import PortfolioConstraints, select_portfolio_candidates
+from prop_ev.portfolio import PortfolioConstraints, PortfolioRanking, select_portfolio_candidates
 from prop_ev.state_keys import strategy_report_state_key
 from prop_ev.time_utils import parse_iso_z, utc_now_str
 
@@ -1331,6 +1331,7 @@ def build_strategy_report(
     require_official_injuries: bool = True,
     stale_quote_minutes: int = 20,
     require_fresh_context: bool = True,
+    portfolio_ranking: PortfolioRanking = "default",
     market_baseline_method: str = "best_sides",
     market_baseline_fallback: str = "best_sides",
     min_book_pairs: int = 0,
@@ -1963,6 +1964,7 @@ def build_strategy_report(
     ranked, portfolio_exclusions = select_portfolio_candidates(
         eligible_rows=eligible_rows,
         constraints=portfolio_constraints,
+        ranking=portfolio_ranking,
     )
     watchlist = [item for item in candidates if not item.get("eligible")][: max(0, top_n)]
     portfolio_watchlist = portfolio_exclusions[: max(0, top_n)]
@@ -2279,6 +2281,7 @@ def build_strategy_report(
             "tier_a_min_ev": tier_a_min_ev,
             "tier_b_min_ev": tier_b_min_ev,
             "allow_tier_b": allow_tier_b,
+            "portfolio_ranking": portfolio_ranking,
             "market_baseline_method": baseline_method,
             "market_baseline_fallback": baseline_fallback,
             "min_book_pairs": min_book_pairs,

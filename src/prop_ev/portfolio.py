@@ -3,13 +3,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal
 
 from prop_ev.nba_data.normalize import normalize_person_name
 
 PORTFOLIO_REASON_DAILY_CAP = "portfolio_cap_daily"
 PORTFOLIO_REASON_PLAYER_CAP = "portfolio_cap_player"
 PORTFOLIO_REASON_GAME_CAP = "portfolio_cap_game"
+
+PortfolioRanking = Literal["default", "best_ev", "ev_low_quality_weighted"]
 
 
 @dataclass(frozen=True)
@@ -37,16 +39,28 @@ def _safe_float(value: Any) -> float | None:
     return None
 
 
-def _selection_sort_key(row: dict[str, Any]) -> tuple[Any, ...]:
+def _selection_sort_key(row: dict[str, Any], ranking: PortfolioRanking) -> tuple[Any, ...]:
     ev_low = _safe_float(row.get("ev_low"))
     prior_delta = _safe_float(row.get("historical_prior_delta")) or 0.0
-    ev_blended = (ev_low if ev_low is not None else -1.0) + (prior_delta * 0.25)
     quality = _safe_float(row.get("quality_score"))
     best_ev = _safe_float(row.get("best_ev"))
     quote_age_minutes = _safe_float(row.get("quote_age_minutes"))
     point = _safe_float(row.get("point")) or 0.0
+
+    base_prior_weight = 0.25
+    if ranking == "best_ev":
+        ev_primary = (best_ev if best_ev is not None else -1.0) + (prior_delta * base_prior_weight)
+    elif ranking == "ev_low_quality_weighted":
+        quality_factor = quality if quality is not None else 0.0
+        ev_component = ev_low if ev_low is not None else -1.0
+        ev_primary = (ev_component * (0.5 + (0.5 * quality_factor))) + (
+            prior_delta * base_prior_weight
+        )
+    else:
+        ev_primary = (ev_low if ev_low is not None else -1.0) + (prior_delta * base_prior_weight)
+
     return (
-        -ev_blended,
+        -ev_primary,
         -(quality if quality is not None else -1.0),
         -(best_ev if best_ev is not None else -1.0),
         quote_age_minutes if quote_age_minutes is not None else 1_000_000.0,
@@ -62,13 +76,16 @@ def select_portfolio_candidates(
     *,
     eligible_rows: list[dict[str, Any]],
     constraints: PortfolioConstraints,
+    ranking: PortfolioRanking = "default",
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Select one deterministic portfolio and track excluded eligible rows."""
     max_picks = max(0, int(constraints.max_picks))
     max_per_player = max(0, int(constraints.max_per_player))
     max_per_game = max(0, int(constraints.max_per_game))
 
-    sorted_rows = sorted(eligible_rows, key=_selection_sort_key)
+    if ranking not in {"default", "best_ev", "ev_low_quality_weighted"}:
+        raise ValueError(f"invalid portfolio ranking: {ranking}")
+    sorted_rows = sorted(eligible_rows, key=lambda row: _selection_sort_key(row, ranking))
     selected: list[dict[str, Any]] = []
     excluded: list[dict[str, Any]] = []
     player_counts: dict[str, int] = {}

@@ -16,6 +16,8 @@ def test_get_strategy_accepts_s00x_ids() -> None:
     assert get_strategy("s009").info.id == "s009"
     assert get_strategy("s010").info.id == "s010"
     assert get_strategy("s011").info.id == "s011"
+    assert get_strategy("s012").info.id == "s012"
+    assert get_strategy("s013").info.id == "s013"
 
 
 def test_get_strategy_rejects_legacy_ids() -> None:
@@ -39,3 +41,5 @@ def test_strategy_registry_has_titles_and_descriptions() -> None:
     assert by_id["s009"].name == "Conservative Quality + Rolling Priors"
     assert by_id["s010"].name == "Tier B + Quality Floor"
     assert by_id["s011"].name == "Tier B + Quality + Rolling Priors"
+    assert by_id["s012"].name == "Tier B + Aggressive Best EV"
+    assert by_id["s013"].name == "Tier B + Quality-Weighted EV Low"
