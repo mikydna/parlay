@@ -220,3 +220,49 @@ def test_strategy_run_allows_secondary_with_explicit_flag(
 
     assert code == 0
     assert "note=official_injury_missing_using_secondary_override" in out
+
+
+def test_strategy_run_writes_execution_plan_and_uses_default_max_picks(
+    local_data_dir: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    store = SnapshotStore(local_data_dir)
+    snapshot_id = "2026-02-11T11-10-00Z"
+    now_utc = _iso(datetime.now(UTC))
+    _seed_strategy_snapshot(
+        store=store,
+        snapshot_id=snapshot_id,
+        injuries_payload={
+            "fetched_at_utc": now_utc,
+            "official": {
+                "status": "ok",
+                "parse_status": "ok",
+                "rows_count": 1,
+                "rows": [
+                    {
+                        "player": "Player A",
+                        "player_norm": "playera",
+                        "team": "Boston Celtics",
+                        "team_norm": "boston celtics",
+                        "status": "available",
+                        "note": "",
+                    }
+                ],
+            },
+            "secondary": {"status": "ok", "rows": []},
+        },
+    )
+
+    code = main(["strategy", "run", "--snapshot-id", snapshot_id, "--offline"])
+    out = capsys.readouterr().out
+
+    assert code == 0
+    assert "strategy_max_picks=5" in out
+    execution_path = ""
+    for line in out.splitlines():
+        if line.startswith("execution_plan_json="):
+            execution_path = line.split("=", 1)[1].strip()
+            break
+    assert execution_path
+    payload = json.loads(Path(execution_path).read_text(encoding="utf-8"))
+    assert payload["counts"]["selected_lines"] <= 5
+    assert payload["constraints"]["max_picks"] == 5

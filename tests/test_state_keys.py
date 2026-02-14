@@ -54,6 +54,7 @@ def test_decorate_report_adds_strategy_id_map() -> None:
     )
     config = StrategyRunConfig(
         top_n=5,
+        max_picks=5,
         min_ev=0.01,
         allow_tier_b=False,
         require_official_injuries=True,

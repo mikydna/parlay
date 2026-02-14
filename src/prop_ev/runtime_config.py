@@ -35,6 +35,7 @@ MANAGED_ENV_KEYS: tuple[str, ...] = (
     "PROP_EV_STRATEGY_ALLOW_SECONDARY_INJURIES",
     "PROP_EV_STRATEGY_REQUIRE_FRESH_CONTEXT",
     "PROP_EV_STRATEGY_STALE_QUOTE_MINUTES",
+    "PROP_EV_STRATEGY_MAX_PICKS_DEFAULT",
     "PROP_EV_STRATEGY_DEFAULT_ID",
     "PROP_EV_CONTEXT_INJURIES_STALE_HOURS",
     "PROP_EV_CONTEXT_ROSTER_STALE_HOURS",
@@ -71,6 +72,7 @@ class RuntimeConfig:
     strategy_allow_secondary_injuries: bool
     strategy_require_fresh_context: bool
     strategy_stale_quote_minutes: int
+    strategy_max_picks_default: int
     context_injuries_stale_hours: float
     context_roster_stale_hours: float
 
@@ -305,6 +307,7 @@ def load_runtime_config(config_path: Path | None = None) -> RuntimeConfig:
             strategy.get("require_fresh_context"), default=True
         ),
         strategy_stale_quote_minutes=_as_int(strategy.get("stale_quote_minutes"), default=20),
+        strategy_max_picks_default=_as_int(strategy.get("max_picks_default"), default=5),
         context_injuries_stale_hours=_as_float(
             strategy.get("context_injuries_stale_hours"),
             default=6.0,
@@ -350,6 +353,7 @@ def runtime_env_overrides(config: RuntimeConfig) -> dict[str, str]:
             config.strategy_require_fresh_context
         ).lower(),
         "PROP_EV_STRATEGY_STALE_QUOTE_MINUTES": str(config.strategy_stale_quote_minutes),
+        "PROP_EV_STRATEGY_MAX_PICKS_DEFAULT": str(config.strategy_max_picks_default),
         "PROP_EV_CONTEXT_INJURIES_STALE_HOURS": str(config.context_injuries_stale_hours),
         "PROP_EV_CONTEXT_ROSTER_STALE_HOURS": str(config.context_roster_stale_hours),
     }

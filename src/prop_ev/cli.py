@@ -68,6 +68,7 @@ from prop_ev.report_paths import (
     report_outputs_root,
     snapshot_reports_dir,
 )
+from prop_ev.rolling_priors import build_rolling_priors
 from prop_ev.runtime_config import (
     MANAGED_ENV_KEYS,
     load_runtime_config,
@@ -99,6 +100,7 @@ from prop_ev.strategies.base import (
 from prop_ev.strategy import (
     build_strategy_report,
     load_jsonl,
+    write_execution_plan,
     write_strategy_reports,
     write_tagged_strategy_reports,
 )
@@ -1971,6 +1973,22 @@ def _execution_projection_tag(bookmakers: tuple[str, ...]) -> str:
     return f"execution-{'-'.join(cleaned)}"
 
 
+def _load_rolling_priors_for_strategy(
+    *,
+    store: SnapshotStore,
+    strategy_id: str,
+    snapshot_id: str,
+) -> dict[str, Any]:
+    return build_rolling_priors(
+        reports_root=report_outputs_root(store),
+        strategy_id=strategy_id,
+        as_of_day=_snapshot_date(snapshot_id),
+        window_days=max(1, _env_int("PROP_EV_STRATEGY_ROLLING_PRIOR_WINDOW_DAYS", 21)),
+        min_samples=max(1, _env_int("PROP_EV_STRATEGY_ROLLING_PRIOR_MIN_SAMPLES", 25)),
+        max_abs_delta=max(0.0, _env_float("PROP_EV_STRATEGY_ROLLING_PRIOR_MAX_DELTA", 0.02)),
+    )
+
+
 def _load_strategy_context(
     *,
     store: SnapshotStore,
@@ -2473,8 +2491,20 @@ def _cmd_strategy_run(args: argparse.Namespace) -> int:
 
     strategy_requested = str(getattr(args, "strategy", "s001"))
     plugin = get_strategy(strategy_requested)
+    strategy_id = normalize_strategy_id(plugin.info.id)
+    max_picks_default = _env_int("PROP_EV_STRATEGY_MAX_PICKS_DEFAULT", 5)
+    requested_max_picks = int(getattr(args, "max_picks", 0))
+    resolved_max_picks = (
+        requested_max_picks if requested_max_picks > 0 else max(0, int(max_picks_default))
+    )
+    rolling_priors = _load_rolling_priors_for_strategy(
+        store=store,
+        strategy_id=strategy_id,
+        snapshot_id=snapshot_id,
+    )
     config = StrategyRunConfig(
         top_n=int(args.top_n),
+        max_picks=resolved_max_picks,
         min_ev=float(args.min_ev),
         allow_tier_b=bool(args.allow_tier_b),
         require_official_injuries=bool(effective_require_official),
@@ -2490,10 +2520,10 @@ def _cmd_strategy_run(args: argparse.Namespace) -> int:
         event_context=event_context if isinstance(event_context, dict) else None,
         slate_rows=slate_rows,
         player_identity_map=player_identity_map if isinstance(player_identity_map, dict) else None,
+        rolling_priors=rolling_priors,
     )
     result = plugin.run(inputs=inputs, config=config)
     report = decorate_report(result.report, strategy=plugin.info, config=result.config)
-    strategy_id = normalize_strategy_id(plugin.info.id)
     reports_dir = snapshot_reports_dir(store, snapshot_id)
     write_markdown = bool(getattr(args, "write_markdown", False))
     write_canonical_raw = getattr(args, "write_canonical", None)
@@ -2509,6 +2539,12 @@ def _cmd_strategy_run(args: argparse.Namespace) -> int:
         strategy_id=strategy_id,
         write_canonical=write_canonical,
         write_markdown=write_markdown,
+    )
+    execution_plan_path = write_execution_plan(
+        reports_dir=reports_dir,
+        report=report,
+        strategy_id=strategy_id,
+        write_canonical=write_canonical,
     )
     write_backtest_artifacts_flag = bool(getattr(args, "write_backtest_artifacts", False))
     backtest: dict[str, Any] = {
@@ -2555,10 +2591,18 @@ def _cmd_strategy_run(args: argparse.Namespace) -> int:
     if title:
         print(f"strategy_title={title}")
     print(f"strategy_run_mode={strategy_run_mode}")
+    print(f"strategy_max_picks={resolved_max_picks}")
+    print(
+        "rolling_priors_window_days={} rolling_priors_rows_used={}".format(
+            int(rolling_priors.get("window_days", 0)),
+            int(rolling_priors.get("rows_used", 0)),
+        )
+    )
     print(f"stale_quote_minutes={stale_quote_minutes}")
     print(f"require_fresh_context={str(bool(require_fresh_context)).lower()}")
     print(f"health_gates={','.join(health_gates) if health_gates else 'none'}")
     print(f"report_json={json_path}")
+    print(f"execution_plan_json={execution_plan_path}")
     if write_markdown:
         print(f"report_md={md_path}")
     card = reports_dir / "strategy-card.md"
@@ -2670,6 +2714,7 @@ def _render_strategy_compare_markdown(report: dict[str, Any]) -> str:
     lines.append(f"- snapshot_id: `{summary.get('snapshot_id', '')}`")
     lines.append(f"- strategies: `{summary.get('strategy_count', 0)}`")
     lines.append(f"- ranked_top_n: `{summary.get('top_n', 0)}`")
+    lines.append(f"- max_picks: `{summary.get('max_picks', 0)}`")
     lines.append("")
 
     if rows:
@@ -2732,30 +2777,43 @@ def _cmd_strategy_compare(args: argparse.Namespace) -> int:
 
     base_config = StrategyRunConfig(
         top_n=int(args.top_n),
+        max_picks=(
+            int(args.max_picks)
+            if int(args.max_picks) > 0
+            else _env_int("PROP_EV_STRATEGY_MAX_PICKS_DEFAULT", 5)
+        ),
         min_ev=float(args.min_ev),
         allow_tier_b=bool(args.allow_tier_b),
         require_official_injuries=bool(require_official_injuries),
         stale_quote_minutes=int(stale_quote_minutes),
         require_fresh_context=bool(require_fresh_context),
     )
-    inputs = StrategyInputs(
-        snapshot_id=snapshot_id,
-        manifest=manifest,
-        rows=rows,
-        injuries=injuries if isinstance(injuries, dict) else None,
-        roster=roster if isinstance(roster, dict) else None,
-        event_context=event_context if isinstance(event_context, dict) else None,
-        slate_rows=slate_rows,
-        player_identity_map=player_identity_map if isinstance(player_identity_map, dict) else None,
-    )
-
     compare_rows: list[dict[str, Any]] = []
     ranked_sets: dict[str, set[tuple[str, str, str, float, str]]] = {}
     for requested in strategy_ids:
         plugin = get_strategy(requested)
+        strategy_id = normalize_strategy_id(plugin.info.id)
+        rolling_priors = _load_rolling_priors_for_strategy(
+            store=store,
+            strategy_id=strategy_id,
+            snapshot_id=snapshot_id,
+        )
+        inputs = StrategyInputs(
+            snapshot_id=snapshot_id,
+            manifest=manifest,
+            rows=rows,
+            injuries=injuries if isinstance(injuries, dict) else None,
+            roster=roster if isinstance(roster, dict) else None,
+            event_context=event_context if isinstance(event_context, dict) else None,
+            slate_rows=slate_rows,
+            player_identity_map=(
+                player_identity_map if isinstance(player_identity_map, dict) else None
+            ),
+            rolling_priors=rolling_priors,
+        )
         result = plugin.run(inputs=inputs, config=base_config)
         report = decorate_report(result.report, strategy=plugin.info, config=result.config)
-        strategy_id = normalize_strategy_id(report.get("strategy_id", plugin.info.id))
+        strategy_id = normalize_strategy_id(report.get("strategy_id", strategy_id))
 
         write_strategy_reports(
             reports_dir=reports_dir,
@@ -2764,6 +2822,12 @@ def _cmd_strategy_compare(args: argparse.Namespace) -> int:
             strategy_id=strategy_id,
             write_canonical=False,
             write_markdown=write_markdown,
+        )
+        write_execution_plan(
+            reports_dir=reports_dir,
+            report=report,
+            strategy_id=strategy_id,
+            write_canonical=False,
         )
         write_backtest_artifacts(
             snapshot_dir=snapshot_dir,
@@ -2785,6 +2849,7 @@ def _cmd_strategy_compare(args: argparse.Namespace) -> int:
                 "tier_a_lines": int(summary.get("tier_a_lines", 0)),
                 "tier_b_lines": int(summary.get("tier_b_lines", 0)),
                 "health_gate_count": int(summary.get("health_gate_count", 0)),
+                "rolling_priors_rows_used": int(summary.get("rolling_priors_rows_used", 0)),
             }
         )
 
@@ -2810,6 +2875,7 @@ def _cmd_strategy_compare(args: argparse.Namespace) -> int:
             "snapshot_id": snapshot_id,
             "strategy_count": len(strategy_ids),
             "top_n": int(args.top_n),
+            "max_picks": int(base_config.max_picks),
         },
         "strategies": sorted(compare_rows, key=lambda row: row.get("strategy_id", "")),
         "ranked_overlap": {
@@ -2827,6 +2893,7 @@ def _cmd_strategy_compare(args: argparse.Namespace) -> int:
 
     print(f"snapshot_id={snapshot_id}")
     print(f"strategies={','.join(strategy_ids)}")
+    print(f"strategy_max_picks={int(base_config.max_picks)}")
     print(f"compare_json={json_path}")
     print(f"compare_md={md_path}")
     return 0
@@ -2844,6 +2911,10 @@ def _render_backtest_summary_markdown(report: dict[str, Any]) -> str:
     lines.append(f"- strategies: `{summary.get('strategy_count', 0)}`")
     lines.append(f"- min_graded: `{summary.get('min_graded', 0)}`")
     lines.append(f"- bin_size: `{summary.get('bin_size', '')}`")
+    if bool(summary.get("all_complete_days", False)):
+        lines.append(f"- dataset_id: `{summary.get('dataset_id', '')}`")
+        lines.append(f"- complete_days: `{summary.get('complete_days', 0)}`")
+        lines.append(f"- days_with_any_results: `{summary.get('days_with_any_results', 0)}`")
     lines.append("")
 
     if rows:
@@ -2883,6 +2954,40 @@ def _render_backtest_summary_markdown(report: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
+def _resolve_complete_day_dataset_id(data_root: Path, requested: str) -> str:
+    dataset_id_value = requested.strip()
+    if dataset_id_value:
+        _load_dataset_spec_or_error(data_root, dataset_id_value)
+        return dataset_id_value
+
+    discovered = _discover_dataset_ids(data_root)
+    if not discovered:
+        raise CLIError("no datasets found under data root; run data backfill first")
+    if len(discovered) == 1:
+        return discovered[0]
+    choices = ",".join(discovered[:6])
+    raise CLIError(
+        f"multiple datasets found; pass --dataset-id with --all-complete-days (examples: {choices})"
+    )
+
+
+def _complete_day_snapshots(data_root: Path, dataset_id_value: str) -> list[tuple[str, str]]:
+    complete_rows: list[tuple[str, str]] = []
+    for day in _dataset_day_names(data_root, dataset_id_value):
+        status = _load_day_status_for_dataset(data_root, dataset_id_value=dataset_id_value, day=day)
+        if not isinstance(status, dict):
+            continue
+        row = _day_row_from_status(day, status)
+        if not bool(row.get("complete", False)):
+            continue
+        snapshot_id = str(row.get("snapshot_id", "")).strip()
+        if not snapshot_id:
+            continue
+        complete_rows.append((day, snapshot_id))
+    complete_rows.sort(key=lambda item: item[0])
+    return complete_rows
+
+
 def _cmd_strategy_backtest_summarize(args: argparse.Namespace) -> int:
     from prop_ev.backtest_summary import load_backtest_csv, pick_winner, summarize_backtest_rows
 
@@ -2892,41 +2997,101 @@ def _cmd_strategy_backtest_summarize(args: argparse.Namespace) -> int:
 
     bin_size = float(getattr(args, "bin_size", 0.05))
     min_graded = int(getattr(args, "min_graded", 0))
-
-    paths: list[tuple[str, Path]] = []
+    all_complete_days = bool(getattr(args, "all_complete_days", False))
     explicit_results = getattr(args, "results", None)
-    if isinstance(explicit_results, list) and explicit_results:
-        for raw in explicit_results:
-            path = Path(str(raw))
-            rows = load_backtest_csv(path)
-            strategy = ""
-            for row in rows:
-                candidate = str(row.get("strategy_id", "")).strip()
-                if candidate:
-                    strategy = normalize_strategy_id(candidate)
-                    break
-            if not strategy:
-                strategy = normalize_strategy_id(path.stem.replace(".", "_"))
-            paths.append((strategy, path))
-    else:
-        strategy_ids = _parse_strategy_ids(getattr(args, "strategies", ""))
-        if not strategy_ids:
-            raise CLIError("backtest-summarize requires --strategies or --results")
-        for strategy_id in strategy_ids:
-            path = reports_dir / f"backtest-results-template.{strategy_id}.csv"
-            if strategy_id == "s001" and not path.exists():
-                path = reports_dir / "backtest-results-template.csv"
-            paths.append((strategy_id, path))
+    strategy_ids = _parse_strategy_ids(getattr(args, "strategies", ""))
 
     summaries: list[dict[str, Any]] = []
     computed = []
-    for strategy_id, path in paths:
-        if not path.exists():
-            raise CLIError(f"missing backtest CSV: {path}")
-        rows = load_backtest_csv(path)
-        summary = summarize_backtest_rows(rows, strategy_id=strategy_id, bin_size=bin_size)
-        computed.append(summary)
-        summaries.append(summary.to_dict())
+    day_coverage: dict[str, Any] = {}
+
+    if all_complete_days:
+        if isinstance(explicit_results, list) and explicit_results:
+            raise CLIError("--all-complete-days cannot be combined with --results")
+        if not strategy_ids:
+            raise CLIError("--all-complete-days requires --strategies")
+
+        data_root = store.root
+        dataset_id_value = _resolve_complete_day_dataset_id(
+            data_root,
+            str(getattr(args, "dataset_id", "")),
+        )
+        complete_days = _complete_day_snapshots(data_root, dataset_id_value)
+        if not complete_days:
+            raise CLIError(f"dataset has no complete indexed days: {dataset_id_value}")
+
+        rows_by_strategy: dict[str, list[dict[str, str]]] = {sid: [] for sid in strategy_ids}
+        skipped_days: list[dict[str, str]] = []
+        days_with_any_results: set[str] = set()
+        for day, day_snapshot_id in complete_days:
+            day_reports_dir = snapshot_reports_dir(store, day_snapshot_id)
+            for strategy_id in strategy_ids:
+                path = day_reports_dir / f"backtest-results-template.{strategy_id}.csv"
+                if strategy_id == "s001" and not path.exists():
+                    path = day_reports_dir / "backtest-results-template.csv"
+                if not path.exists():
+                    skipped_days.append(
+                        {
+                            "day": day,
+                            "snapshot_id": day_snapshot_id,
+                            "strategy_id": strategy_id,
+                            "reason": "missing_backtest_csv",
+                        }
+                    )
+                    continue
+                rows = load_backtest_csv(path)
+                if rows:
+                    rows_by_strategy[strategy_id].extend(rows)
+                    days_with_any_results.add(day)
+
+        for strategy_id in strategy_ids:
+            summary = summarize_backtest_rows(
+                rows_by_strategy[strategy_id],
+                strategy_id=strategy_id,
+                bin_size=bin_size,
+            )
+            computed.append(summary)
+            summaries.append(summary.to_dict())
+
+        day_coverage = {
+            "all_complete_days": True,
+            "dataset_id": dataset_id_value,
+            "complete_days": len(complete_days),
+            "days_with_any_results": len(days_with_any_results),
+            "skipped_rows": len(skipped_days),
+            "skipped": skipped_days[:200],
+        }
+    else:
+        paths: list[tuple[str, Path]] = []
+        if isinstance(explicit_results, list) and explicit_results:
+            for raw in explicit_results:
+                path = Path(str(raw))
+                rows = load_backtest_csv(path)
+                strategy = ""
+                for row in rows:
+                    candidate = str(row.get("strategy_id", "")).strip()
+                    if candidate:
+                        strategy = normalize_strategy_id(candidate)
+                        break
+                if not strategy:
+                    strategy = normalize_strategy_id(path.stem.replace(".", "_"))
+                paths.append((strategy, path))
+        else:
+            if not strategy_ids:
+                raise CLIError("backtest-summarize requires --strategies or --results")
+            for strategy_id in strategy_ids:
+                path = reports_dir / f"backtest-results-template.{strategy_id}.csv"
+                if strategy_id == "s001" and not path.exists():
+                    path = reports_dir / "backtest-results-template.csv"
+                paths.append((strategy_id, path))
+
+        for strategy_id, path in paths:
+            if not path.exists():
+                raise CLIError(f"missing backtest CSV: {path}")
+            rows = load_backtest_csv(path)
+            summary = summarize_backtest_rows(rows, strategy_id=strategy_id, bin_size=bin_size)
+            computed.append(summary)
+            summaries.append(summary.to_dict())
 
     winner = pick_winner(computed, min_graded=min_graded)
     report = {
@@ -2936,6 +3101,7 @@ def _cmd_strategy_backtest_summarize(args: argparse.Namespace) -> int:
             "strategy_count": len(summaries),
             "min_graded": min_graded,
             "bin_size": bin_size,
+            **day_coverage,
         },
         "strategies": sorted(summaries, key=lambda row: row.get("strategy_id", "")),
         "winner": winner.to_dict() if winner is not None else {},
@@ -3334,6 +3500,7 @@ def _run_strategy_for_playbook(
         snapshot_id=snapshot_id,
         strategy=strategy_id,
         top_n=top_n,
+        max_picks=0,
         min_ev=min_ev,
         allow_tier_b=allow_tier_b,
         offline=offline,
@@ -4370,6 +4537,15 @@ def _build_parser() -> argparse.ArgumentParser:
     strategy_run.add_argument("--snapshot-id", default="")
     strategy_run.add_argument("--strategy", default="s001")
     strategy_run.add_argument("--top-n", type=int, default=25)
+    strategy_run.add_argument(
+        "--max-picks",
+        type=int,
+        default=0,
+        help=(
+            "Daily ranked pick cap (<=top-n). "
+            "When omitted, uses runtime config strategy.max_picks_default."
+        ),
+    )
     strategy_run.add_argument("--min-ev", type=float, default=0.01)
     strategy_run.add_argument(
         "--mode",
@@ -4453,6 +4629,15 @@ def _build_parser() -> argparse.ArgumentParser:
     strategy_compare.add_argument("--snapshot-id", default="")
     strategy_compare.add_argument("--strategies", required=True)
     strategy_compare.add_argument("--top-n", type=int, default=25)
+    strategy_compare.add_argument(
+        "--max-picks",
+        type=int,
+        default=0,
+        help=(
+            "Daily ranked pick cap per strategy (<=top-n). "
+            "When omitted, uses runtime config strategy.max_picks_default."
+        ),
+    )
     strategy_compare.add_argument("--min-ev", type=float, default=0.01)
     strategy_compare.add_argument("--allow-tier-b", action="store_true")
     strategy_compare.add_argument(
@@ -4532,6 +4717,16 @@ def _build_parser() -> argparse.ArgumentParser:
     strategy_backtest_summarize.add_argument("--snapshot-id", default="")
     strategy_backtest_summarize.add_argument("--strategies", default="")
     strategy_backtest_summarize.add_argument("--results", action="append", default=[])
+    strategy_backtest_summarize.add_argument(
+        "--all-complete-days",
+        action="store_true",
+        help="Summarize across every complete day in the indexed dataset.",
+    )
+    strategy_backtest_summarize.add_argument(
+        "--dataset-id",
+        default="",
+        help="Dataset id used with --all-complete-days (required when multiple datasets exist).",
+    )
     strategy_backtest_summarize.add_argument("--min-graded", type=int, default=200)
     strategy_backtest_summarize.add_argument("--bin-size", type=float, default=0.05)
     strategy_backtest_summarize.add_argument(

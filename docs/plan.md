@@ -57,7 +57,7 @@ The pipeline is intentionally stage-based so each stage has explicit input/outpu
 | 3 | Reference probability model | Partial | median no-vig style strategies (`s003+`) exist | add alt-line monotone interpolation + uncertainty estimation artifacts | `wt-ref-model-altline` |
 | 4 | Execution pricing + EV | Partial | execution-vs-discovery flow exists and is reported | centralize exact-point matching + conservative EV scoring as first-class stage output | `wt-execution-pricing` |
 | 5 | Eligibility gates | Partial | context/freshness/gate reasons already emitted in current reports | unify gate contracts and ensure all path decisions map to stable reason enums | `wt-gates-contracts` |
-| 6 | Portfolio + `ExecutionPlan` | Not started | ranked plays exist, but no canonical execution-plan artifact | implement deterministic portfolio selector and `execution-plan.json` contract | `wt-execution-plan` |
+| 6 | Portfolio + `ExecutionPlan` | Partial | deterministic max-picks selector and `execution-plan.json` artifact landed in strategy pipeline | expand exclusion reason coverage + compare/publish surfaces as first-class ops contract | `wt-execution-plan` |
 | 7 | Render/publish | Partial | strategy/brief/publish flows and latest mirrors exist | align all published outputs to compact contract and deterministic rerender diff policy | `wt-report-publish` |
 | 8 | Settle/evaluate | Partial | settlement + backtest summary commands exist | add promotion-ready scoreboard package (ROI + Brier + calibration + actionability + CLV proxy) | `wt-eval-scoreboard` |
 

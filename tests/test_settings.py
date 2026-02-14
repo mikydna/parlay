@@ -22,6 +22,7 @@ def test_settings_load_with_odds_api_key(monkeypatch: pytest.MonkeyPatch) -> Non
     assert settings.strategy_require_official_injuries is True
     assert settings.strategy_require_fresh_context is True
     assert settings.strategy_stale_quote_minutes == 20
+    assert settings.strategy_max_picks_default == 5
     assert settings.data_dir == "data/odds_api"
 
 

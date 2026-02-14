@@ -132,6 +132,8 @@ Defaults:
 Current strategy enforces EV floors as:
 - Tier A floor: `max(--min-ev, 0.03)`
 - Tier B floor: `max(--min-ev, 0.05)`
+- portfolio cap default: `strategy.max_picks_default` (runtime config, default `5`)
+- per-run override: `uv run prop-ev strategy run --max-picks <N>`
 
 This is current behavior, not a pending proposal.
 
@@ -156,6 +158,7 @@ Implementation model:
 
 Per snapshot:
 - `<REPORTS_DIR>/by-snapshot/<report_snapshot>/strategy-report.json`
+- `<REPORTS_DIR>/by-snapshot/<report_snapshot>/execution-plan.json`
 - `<REPORTS_DIR>/by-snapshot/<report_snapshot>/backtest-seed.jsonl`
 - `<REPORTS_DIR>/by-snapshot/<report_snapshot>/backtest-results-template.csv`
 - `<REPORTS_DIR>/by-snapshot/<report_snapshot>/backtest-readiness.json`
@@ -171,3 +174,12 @@ Latest mirrors:
 - `<REPORTS_DIR>/latest/strategy-brief.meta.json`
 - `<REPORTS_DIR>/latest/strategy-brief.pdf` (if generated)
 - `<REPORTS_DIR>/latest/latest.json`
+
+Cross-day backtest summary:
+
+```bash
+uv run prop-ev strategy backtest-summarize \
+  --strategies s008 \
+  --all-complete-days \
+  --dataset-id <DATASET_ID>
+```
