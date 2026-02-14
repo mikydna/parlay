@@ -262,6 +262,22 @@ def _parse_markets(value: str) -> list[str]:
     return markets
 
 
+def _parse_positive_float_csv(value: str, *, default: list[float], flag_name: str) -> list[float]:
+    raw_values = parse_csv(value)
+    if not raw_values:
+        return default
+    parsed_values: list[float] = []
+    for raw in raw_values:
+        try:
+            parsed = float(raw)
+        except ValueError as exc:
+            raise CLIError(f"{flag_name} must contain comma-separated numeric values") from exc
+        if parsed <= 0.0:
+            raise CLIError(f"{flag_name} values must be > 0")
+        parsed_values.append(parsed)
+    return sorted(set(parsed_values))
+
+
 def _resolve_days(
     *,
     days: int,
@@ -3002,6 +3018,62 @@ def _render_backtest_summary_markdown(report: dict[str, Any]) -> str:
             )
         lines.append("")
 
+    power_guidance = (
+        report.get("power_guidance", {}) if isinstance(report.get("power_guidance"), dict) else {}
+    )
+    if power_guidance:
+        assumptions = (
+            power_guidance.get("assumptions", {})
+            if isinstance(power_guidance.get("assumptions"), dict)
+            else {}
+        )
+        lines.append("## Power Guidance")
+        lines.append("")
+        lines.append(f"- baseline_strategy_id: `{power_guidance.get('baseline_strategy_id', '')}`")
+        lines.append(f"- alpha: `{assumptions.get('alpha', '')}`")
+        lines.append(f"- power: `{assumptions.get('power', '')}`")
+        lines.append(f"- picks_per_day: `{assumptions.get('picks_per_day', '')}`")
+        lines.append("")
+        lines.append(
+            "| Strategy | Overlap Days | Mean Daily ΔPnL | "
+            "Std Daily ΔPnL | Target | Required Days |"
+        )
+        lines.append("| --- | --- | --- | --- | --- | --- |")
+        for row in power_guidance.get("strategies", []):
+            if not isinstance(row, dict):
+                continue
+            required_rows = (
+                row.get("required_days_by_target", [])
+                if isinstance(row.get("required_days_by_target"), list)
+                else []
+            )
+            if not required_rows:
+                lines.append(
+                    "| {} | {} | {} | {} | n/a | n/a |".format(
+                        row.get("strategy_id", ""),
+                        row.get("overlap_days", 0),
+                        row.get("mean_daily_pnl_diff", ""),
+                        row.get("std_daily_pnl_diff", ""),
+                    )
+                )
+                continue
+            first = True
+            for target_row in required_rows:
+                if not isinstance(target_row, dict):
+                    continue
+                lines.append(
+                    "| {} | {} | {} | {} | {} | {} |".format(
+                        row.get("strategy_id", "") if first else "",
+                        row.get("overlap_days", 0) if first else "",
+                        row.get("mean_daily_pnl_diff", "") if first else "",
+                        row.get("std_daily_pnl_diff", "") if first else "",
+                        target_row.get("target_roi_uplift_per_bet", ""),
+                        target_row.get("required_days", ""),
+                    )
+                )
+                first = False
+        lines.append("")
+
     if winner:
         lines.append("## Winner")
         lines.append("")
@@ -3056,6 +3128,7 @@ def _cmd_strategy_backtest_summarize(args: argparse.Namespace) -> int:
         pick_promotion_winner,
         resolve_baseline_strategy_id,
     )
+    from prop_ev.power_guidance import PowerGuidanceAssumptions, build_power_guidance
 
     store = SnapshotStore(os.environ.get("PROP_EV_DATA_DIR", "data/odds_api"))
     snapshot_id = args.snapshot_id or _latest_snapshot_id(store)
@@ -3083,6 +3156,18 @@ def _cmd_strategy_backtest_summarize(args: argparse.Namespace) -> int:
         raise CLIError("--require-scored-fraction must be between 0 and 1")
     ece_slack = max(0.0, float(getattr(args, "ece_slack", 0.01)))
     brier_slack = max(0.0, float(getattr(args, "brier_slack", 0.01)))
+    power_alpha = float(getattr(args, "power_alpha", 0.05))
+    power_level = float(getattr(args, "power_level", 0.8))
+    if power_alpha <= 0.0 or power_alpha >= 1.0:
+        raise CLIError("--power-alpha must be between 0 and 1 (exclusive)")
+    if power_level <= 0.0 or power_level >= 1.0:
+        raise CLIError("--power-level must be between 0 and 1 (exclusive)")
+    power_picks_per_day = max(1, int(getattr(args, "power_picks_per_day", 5)))
+    power_target_uplifts = _parse_positive_float_csv(
+        str(getattr(args, "power_target_uplifts", "0.01,0.02,0.03,0.05")),
+        default=[0.01, 0.02, 0.03, 0.05],
+        flag_name="--power-target-uplifts",
+    )
     all_complete_days = bool(getattr(args, "all_complete_days", False))
     write_calibration_map = bool(getattr(args, "write_calibration_map", False))
     calibration_map_mode = (
@@ -3094,6 +3179,7 @@ def _cmd_strategy_backtest_summarize(args: argparse.Namespace) -> int:
     computed = []
     day_coverage: dict[str, Any] = {}
     rows_for_map: dict[str, list[dict[str, str]]] = {}
+    daily_pnl_by_strategy: dict[str, dict[str, float]] = {}
     dataset_id_value = ""
     if all_complete_days:
         if isinstance(explicit_results, list) and explicit_results:
@@ -3112,6 +3198,7 @@ def _cmd_strategy_backtest_summarize(args: argparse.Namespace) -> int:
             raise CLIError(f"dataset has no complete indexed days: {dataset_id_value}")
 
         rows_by_strategy: dict[str, list[dict[str, str]]] = {sid: [] for sid in strategy_ids}
+        daily_pnl_by_strategy = {sid: {} for sid in strategy_ids}
         skipped_days: list[dict[str, str]] = []
         days_with_any_results: set[str] = set()
         for day, day_snapshot_id in complete_days:
@@ -3131,6 +3218,13 @@ def _cmd_strategy_backtest_summarize(args: argparse.Namespace) -> int:
                 rows = load_backtest_csv(path)
                 if rows:
                     rows_by_strategy[strategy_id].extend(rows)
+                    day_summary = summarize_backtest_rows(
+                        rows,
+                        strategy_id=strategy_id,
+                        bin_size=bin_size,
+                    )
+                    if day_summary.rows_graded > 0:
+                        daily_pnl_by_strategy[strategy_id][day] = float(day_summary.total_pnl_units)
                     days_with_any_results.add(day)
 
         for strategy_id in strategy_ids:
@@ -3226,6 +3320,19 @@ def _cmd_strategy_backtest_summarize(args: argparse.Namespace) -> int:
         "strategies": sorted(strategy_rows, key=lambda row: row.get("strategy_id", "")),
         "winner": winner if winner is not None else {},
     }
+    if all_complete_days and baseline_summary is not None and daily_pnl_by_strategy:
+        power_guidance = build_power_guidance(
+            daily_pnl_by_strategy=daily_pnl_by_strategy,
+            baseline_strategy_id=baseline_strategy_id,
+            assumptions=PowerGuidanceAssumptions(
+                alpha=power_alpha,
+                power=power_level,
+                picks_per_day=power_picks_per_day,
+                target_roi_uplifts_per_bet=tuple(power_target_uplifts),
+            ),
+        )
+        if power_guidance:
+            report["power_guidance"] = power_guidance
     calibration_map_payload: dict[str, Any] | None = None
     if write_calibration_map and rows_for_map:
         calibration_map_payload = build_calibration_map(
@@ -4960,6 +5067,29 @@ def _build_parser() -> argparse.ArgumentParser:
         type=float,
         default=0.01,
         help="Allowed Brier regression vs baseline before failing promotion gate.",
+    )
+    strategy_backtest_summarize.add_argument(
+        "--power-alpha",
+        type=float,
+        default=0.05,
+        help="Type-I error rate used for promotion-floor power guidance.",
+    )
+    strategy_backtest_summarize.add_argument(
+        "--power-level",
+        type=float,
+        default=0.8,
+        help="Target statistical power used for promotion-floor guidance.",
+    )
+    strategy_backtest_summarize.add_argument(
+        "--power-picks-per-day",
+        type=int,
+        default=5,
+        help="Assumed executable picks per day when converting required days to graded rows.",
+    )
+    strategy_backtest_summarize.add_argument(
+        "--power-target-uplifts",
+        default="0.01,0.02,0.03,0.05",
+        help="Comma-separated ROI uplift targets per bet used in power guidance.",
     )
     strategy_backtest_summarize.add_argument("--min-graded", type=int, default=200)
     strategy_backtest_summarize.add_argument("--bin-size", type=float, default=0.05)
