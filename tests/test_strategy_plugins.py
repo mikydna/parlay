@@ -117,16 +117,20 @@ def test_compose_strategy_recipes_combines_layers() -> None:
     assert combined.portfolio_ranking == "best_ev"
 
 
-def test_s002_forces_allow_tier_b() -> None:
-    result = get_strategy("s002").run(inputs=_sample_inputs(), config=_sample_config())
-    assert result.config.allow_tier_b is True
+def test_strategies_force_allow_tier_b() -> None:
+    for strategy_id in ("s002", "s014"):
+        result = get_strategy(strategy_id).run(inputs=_sample_inputs(), config=_sample_config())
+        assert result.config.allow_tier_b is True
 
 
 def test_s003_uses_median_no_vig_recipe() -> None:
-    report = get_strategy("s003").run(inputs=_sample_inputs(), config=_sample_config()).report
-    audit = report["audit"]
-    assert audit["market_baseline_method"] == "median_book"
-    assert audit["market_baseline_fallback"] == "best_sides"
+    for strategy_id in ("s003", "s014"):
+        report = (
+            get_strategy(strategy_id).run(inputs=_sample_inputs(), config=_sample_config()).report
+        )
+        audit = report["audit"]
+        assert audit["market_baseline_method"] == "median_book"
+        assert audit["market_baseline_fallback"] == "best_sides"
 
 
 def test_gate_strategies_set_recipe_audit_fields() -> None:

@@ -56,6 +56,7 @@ STRATEGY_TITLE_KEY = {
     "s011": "Tier B + Quality + Rolling Priors",
     "s012": "Tier B + Aggressive Best EV",
     "s013": "Tier B + Quality-Weighted EV Low",
+    "s014": "Median No-Vig + Tier B",
 }
 
 STRATEGY_DESCRIPTION_KEY = {
@@ -96,6 +97,10 @@ STRATEGY_DESCRIPTION_KEY = {
     "s013": (
         "Extends s002 but ranks portfolio candidates by EV-low weighted by quote quality, "
         "favoring deeper/cleaner markets when edges are similar."
+    ),
+    "s014": (
+        "Extends s003 median no-vig baseline to include tier-B single-book edges "
+        "with the same stricter EV floor."
     ),
 }
 
