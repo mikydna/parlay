@@ -53,13 +53,13 @@ The pipeline is intentionally stage-based so each stage has explicit input/outpu
 | --- | --- | --- | --- | --- | --- |
 | 0 | Acquire/cache/day-index | Done (contract-locked) | cache store, snapshot persistence, spend-policy controls, historical day-index backfill/status, typed completeness/error semantics, `data verify` contract checks | expand operator dashboards for long-range dataset health summaries | `wt-data-plane` |
 | 1 | Normalize QuoteTable | Done (contract-locked) | canonical QuoteTable module, deterministic normalization, schema validation, `snapshot verify --check-derived`, JSONL/parquet contract parity checks | extend same strict contract style to additional derived tables as they are introduced | `wt-quote-normalize` |
-| 2 | De-vig + quality signals | Partial | implied/no-vig baseline logic exists in strategy path and plugins | extract into dedicated pricing module with explicit per-book quality outputs and contract tests | `wt-pricing-neutralize-vig` |
+| 2 | De-vig + quality signals | Done (contract-locked) | dedicated `pricing_core` module, extracted de-vig/baseline selection, deterministic quality metrics, and contract tests | optional future expansion: emit standalone pricing artifact beyond strategy-candidate surfaces | `wt-pricing-neutralize-vig` |
 | 3 | Reference probability model | Partial | median no-vig style strategies (`s003+`) exist | add alt-line monotone interpolation + uncertainty estimation artifacts | `wt-ref-model-altline` |
 | 4 | Execution pricing + EV | Partial | execution-vs-discovery flow exists and is reported | centralize exact-point matching + conservative EV scoring as first-class stage output | `wt-execution-pricing` |
 | 5 | Eligibility gates | Partial | context/freshness/gate reasons already emitted in current reports | unify gate contracts and ensure all path decisions map to stable reason enums | `wt-gates-contracts` |
 | 6 | Portfolio + `ExecutionPlan` | Partial | deterministic max-picks selector and `execution-plan.json` artifact landed in strategy pipeline | expand exclusion reason coverage + compare/publish surfaces as first-class ops contract | `wt-execution-plan` |
 | 7 | Render/publish | Partial | strategy/brief/publish flows and latest mirrors exist | align all published outputs to compact contract and deterministic rerender diff policy | `wt-report-publish` |
-| 8 | Settle/evaluate | Partial | settlement + backtest summary commands exist | add promotion-ready scoreboard package (ROI + Brier + calibration + actionability + CLV proxy) | `wt-eval-scoreboard` |
+| 8 | Settle/evaluate | Done (baseline-locked) | settlement + backtest summary + aggregate scoreboard + promotion-gate artifacts are implemented and reproducible | optional future expansion: CLV/close-proxy integration when reliable close data is available | `wt-eval-scoreboard` |
 
 ### Parallel worktree strategy (explicit)
 
