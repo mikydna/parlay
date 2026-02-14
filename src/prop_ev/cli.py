@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
+import subprocess
 import sys
 from collections import Counter
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from shutil import copy2
@@ -2677,7 +2680,7 @@ def _load_strategy_inputs(
         ),
         snapshot_day=_snapshot_date(snapshot_id),
         probabilistic_profile=probabilistic_profile,
-        auto_build=not offline,
+        auto_build=True,
     )
     return (
         snapshot_dir,
@@ -3361,6 +3364,648 @@ def _complete_day_snapshots(data_root: Path, dataset_id_value: str) -> list[tupl
         complete_rows.append((day, snapshot_id))
     complete_rows.sort(key=lambda item: item[0])
     return complete_rows
+
+
+def _parse_positive_int_csv(value: str, *, default: list[int], flag_name: str) -> list[int]:
+    raw = [item.strip() for item in value.split(",") if item.strip()]
+    if not raw:
+        return list(default)
+    parsed: list[int] = []
+    for item in raw:
+        try:
+            parsed_value = int(item)
+        except ValueError as exc:
+            raise CLIError(f"{flag_name} expects comma-separated integers") from exc
+        if parsed_value <= 0:
+            raise CLIError(f"{flag_name} values must be > 0")
+        parsed.append(parsed_value)
+    return list(dict.fromkeys(parsed))
+
+
+def _sha256_text(value: str) -> str:
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+def _sha256_file(path: Path) -> str:
+    if not path.exists():
+        return ""
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _abalation_build_input_hash(*, payload: dict[str, Any]) -> str:
+    normalized = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+    return _sha256_text(normalized)
+
+
+def _abalation_git_head() -> str:
+    try:
+        proc = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+    except OSError:
+        return "unknown"
+    if proc.returncode != 0:
+        return "unknown"
+    head = proc.stdout.strip()
+    return head or "unknown"
+
+
+def _abalation_state_dir(reports_root: Path) -> Path:
+    return reports_root / "_abalation_state"
+
+
+def _abalation_load_state(path: Path) -> dict[str, Any] | None:
+    return _load_json_object(path)
+
+
+def _abalation_write_state(path: Path, payload: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+
+
+def _abalation_count_seed_rows(path: Path) -> int:
+    if not path.exists():
+        return 0
+    count = 0
+    with path.open("r", encoding="utf-8") as handle:
+        for line in handle:
+            if line.strip():
+                count += 1
+    return count
+
+
+def _abalation_strategy_artifacts_exist(
+    *,
+    reports_dir: Path,
+    strategy_id: str,
+    seed_rows: int,
+) -> bool:
+    required = [
+        reports_dir / f"strategy-report.{strategy_id}.json",
+        reports_dir / f"backtest-seed.{strategy_id}.jsonl",
+        reports_dir / f"backtest-results-template.{strategy_id}.csv",
+    ]
+    if seed_rows > 0:
+        required.append(reports_dir / f"settlement.{strategy_id}.csv")
+    return all(path.exists() for path in required)
+
+
+def _abalation_strategy_cache_valid(
+    *,
+    reports_dir: Path,
+    state_path: Path,
+    expected_hash: str,
+    strategy_id: str,
+) -> bool:
+    payload = _abalation_load_state(state_path)
+    if not isinstance(payload, dict):
+        return False
+    input_hash = str(payload.get("input_hash", "")).strip()
+    if input_hash != expected_hash:
+        return False
+    seed_rows = int(payload.get("seed_rows", 1) or 0)
+    return _abalation_strategy_artifacts_exist(
+        reports_dir=reports_dir,
+        strategy_id=strategy_id,
+        seed_rows=seed_rows,
+    )
+
+
+def _abalation_compare_artifacts_exist(*, reports_dir: Path, strategy_ids: Sequence[str]) -> bool:
+    required = [
+        reports_dir / "strategy-compare.json",
+        reports_dir / "strategy-compare.md",
+    ]
+    for strategy_id in strategy_ids:
+        required.append(reports_dir / f"strategy-report.{strategy_id}.json")
+        required.append(reports_dir / f"backtest-seed.{strategy_id}.jsonl")
+    return all(path.exists() for path in required)
+
+
+def _abalation_compare_cache_valid(
+    *,
+    reports_dir: Path,
+    state_path: Path,
+    expected_hash: str,
+    strategy_ids: Sequence[str],
+) -> bool:
+    payload = _abalation_load_state(state_path)
+    if not isinstance(payload, dict):
+        return False
+    input_hash = str(payload.get("input_hash", "")).strip()
+    if input_hash != expected_hash:
+        return False
+    return _abalation_compare_artifacts_exist(reports_dir=reports_dir, strategy_ids=strategy_ids)
+
+
+def _parse_cli_kv(stdout: str) -> dict[str, str]:
+    payload: dict[str, str] = {}
+    for line in stdout.splitlines():
+        key, sep, value = line.partition("=")
+        if not sep:
+            continue
+        normalized = key.strip()
+        if not normalized:
+            continue
+        payload[normalized] = value.strip()
+    return payload
+
+
+def _run_cli_subcommand(
+    *,
+    args: list[str],
+    env: dict[str, str],
+    cwd: Path,
+    global_cli_args: Sequence[str] | None = None,
+) -> str:
+    cmd = [sys.executable, "-m", "prop_ev.cli"]
+    if global_cli_args:
+        cmd.extend(global_cli_args)
+    cmd.extend(args)
+    proc = subprocess.run(
+        cmd,
+        check=False,
+        capture_output=True,
+        text=True,
+        env=env,
+        cwd=cwd,
+    )
+    if proc.returncode != 0:
+        stderr = proc.stderr.strip()
+        stdout = proc.stdout.strip()
+        details = stderr or stdout or f"exit={proc.returncode}"
+        raise CLIError(f"subcommand failed ({' '.join(args)}): {details}")
+    return proc.stdout
+
+
+def _cmd_strategy_abalation(args: argparse.Namespace) -> int:
+    store = SnapshotStore(os.environ.get("PROP_EV_DATA_DIR", "data/odds_api"))
+    data_root = store.root
+    dataset_id_value = _resolve_complete_day_dataset_id(
+        data_root, str(getattr(args, "dataset_id", ""))
+    )
+    complete_rows = _complete_day_snapshots(data_root, dataset_id_value)
+    if not complete_rows:
+        raise CLIError(f"dataset has no complete indexed days: {dataset_id_value}")
+
+    strategy_ids = _parse_strategy_ids(str(getattr(args, "strategies", "")))
+    if not strategy_ids:
+        raise CLIError("abalation requires --strategies")
+    if len(strategy_ids) < 2:
+        raise CLIError("abalation requires at least 2 strategies")
+    caps = _parse_positive_int_csv(
+        str(getattr(args, "caps", "")),
+        default=[1, 2, 5],
+        flag_name="--caps",
+    )
+    force_days = {item.strip() for item in parse_csv(str(getattr(args, "force_days", ""))) if item}
+    force_strategies = set(_parse_strategy_ids(str(getattr(args, "force_strategies", ""))))
+    force_all = bool(getattr(args, "force", False))
+    reuse_existing = bool(getattr(args, "reuse_existing", True)) and not force_all
+
+    default_profile = str(os.environ.get("PROP_EV_STRATEGY_PROBABILISTIC_PROFILE", "off"))
+    probabilistic_profile = _resolve_input_probabilistic_profile(
+        default_profile=default_profile,
+        probabilistic_profile_arg=str(getattr(args, "probabilistic_profile", "")),
+        strategy_ids=list(strategy_ids),
+    )
+
+    reports_root_raw = str(getattr(args, "reports_root", "")).strip()
+    base_reports_root = (
+        Path(reports_root_raw).expanduser().resolve()
+        if reports_root_raw
+        else report_outputs_root(store)
+    )
+    run_id_raw = str(getattr(args, "run_id", "")).strip()
+    if run_id_raw:
+        run_id = _sanitize_analysis_run_id(run_id_raw)
+        if not run_id:
+            raise CLIError("--run-id must contain letters, numbers, '_' '-' or '.'")
+    else:
+        run_id = _sanitize_analysis_run_id(
+            f"abalation-{datetime.now(UTC).strftime('%Y%m%dT%H%M%SZ')}"
+        )
+    if not run_id:
+        raise CLIError("failed to build run id")
+    run_root = base_reports_root / "abalation" / run_id
+    run_root.mkdir(parents=True, exist_ok=True)
+
+    base_env = dict(os.environ)
+    base_env["PROP_EV_DATA_DIR"] = str(store.root)
+    cwd = Path.cwd()
+    code_revision = _abalation_git_head()
+    nba_data_dir = str(
+        Path(os.environ.get("PROP_EV_NBA_DATA_DIR", "data/nba_data")).expanduser().resolve()
+    )
+    runtime_dir = str(
+        Path(os.environ.get("PROP_EV_RUNTIME_DIR", "data/runtime")).expanduser().resolve()
+    )
+
+    manifest_hashes = {
+        snapshot_id: _sha256_file(store.snapshot_dir(snapshot_id) / "manifest.json")
+        for _, snapshot_id in complete_rows
+    }
+
+    prebuild_minutes_cache = bool(getattr(args, "prebuild_minutes_cache", True))
+    if prebuild_minutes_cache and probabilistic_profile == "minutes_v1":
+        nba_dir = (
+            Path(os.environ.get("PROP_EV_NBA_DATA_DIR", "data/nba_data")).expanduser().resolve()
+        )
+        nba_layout = build_nba_layout(nba_dir)
+        prebuild_workers = max(1, int(getattr(args, "max_workers", 6)))
+
+        def _prebuild_one(day_value: str) -> tuple[str, int]:
+            payload = load_minutes_prob_index_for_snapshot(
+                layout=nba_layout,
+                snapshot_day=day_value,
+                probabilistic_profile="minutes_v1",
+                auto_build=True,
+            )
+            meta = payload.get("meta", {}) if isinstance(payload.get("meta"), dict) else {}
+            rows = int(meta.get("rows", 0) or 0)
+            return day_value, rows
+
+        with ThreadPoolExecutor(max_workers=prebuild_workers) as executor:
+            futures = {executor.submit(_prebuild_one, day): day for day, _ in complete_rows}
+            for future in as_completed(futures):
+                day_value, rows = future.result()
+                print(f"minutes_cache_day={day_value} rows={rows}")
+
+    mode = str(getattr(args, "mode", "replay"))
+    top_n = max(0, int(getattr(args, "top_n", 10)))
+    min_ev = float(getattr(args, "min_ev", 0.01))
+    allow_tier_b = bool(getattr(args, "allow_tier_b", False))
+    offline = bool(getattr(args, "offline", True))
+    block_paid = bool(getattr(args, "block_paid", True))
+    refresh_context = bool(getattr(args, "refresh_context", False))
+    results_source = str(getattr(args, "results_source", "historical")).strip() or "historical"
+    max_workers = max(1, int(getattr(args, "max_workers", 6)))
+    cap_workers = max(1, int(getattr(args, "cap_workers", 3)))
+    cap_workers = min(cap_workers, len(caps))
+
+    min_graded = max(0, int(getattr(args, "min_graded", 20)))
+    bin_size = float(getattr(args, "bin_size", 0.1))
+    require_scored_fraction = float(getattr(args, "require_scored_fraction", 0.9))
+    ece_slack = float(getattr(args, "ece_slack", 0.01))
+    brier_slack = float(getattr(args, "brier_slack", 0.01))
+    power_alpha = float(getattr(args, "power_alpha", 0.05))
+    power_level = float(getattr(args, "power_level", 0.8))
+    power_target_uplifts = str(getattr(args, "power_target_uplifts", "0.01,0.02,0.03,0.05")).strip()
+    calibration_map_mode = str(getattr(args, "calibration_map_mode", "walk_forward")).strip()
+    analysis_prefix_raw = str(getattr(args, "analysis_run_prefix", "abalation")).strip()
+    analysis_prefix = _sanitize_analysis_run_id(analysis_prefix_raw)
+    if not analysis_prefix:
+        raise CLIError("--analysis-run-prefix must contain letters, numbers, '_' '-' or '.'")
+    snapshot_id_for_summary = str(getattr(args, "snapshot_id", "")).strip() or complete_rows[-1][1]
+
+    cap_results: list[dict[str, Any]] = []
+
+    def _cap_worker(cap: int) -> dict[str, Any]:
+        cap_root = run_root / f"cap-max{cap}"
+        cap_root.mkdir(parents=True, exist_ok=True)
+        cap_env = dict(base_env)
+        cap_env["PROP_EV_REPORTS_DIR"] = str(cap_root)
+        cap_global_cli_args = [
+            "--data-dir",
+            str(store.root),
+            "--reports-dir",
+            str(cap_root),
+            "--nba-data-dir",
+            nba_data_dir,
+            "--runtime-dir",
+            runtime_dir,
+        ]
+        state_dir = _abalation_state_dir(cap_root)
+        state_dir.mkdir(parents=True, exist_ok=True)
+
+        cap_summary: dict[str, Any] = {
+            "cap": cap,
+            "compare_ran": 0,
+            "compare_skipped": 0,
+            "settled": 0,
+            "settle_skipped": 0,
+            "no_seed_rows": 0,
+        }
+
+        def _snapshot_worker(day_snapshot: tuple[str, str]) -> dict[str, int]:
+            day_value, snapshot_id = day_snapshot
+            reports_dir = snapshot_reports_dir(store, snapshot_id, reports_root=cap_root)
+            reports_dir.mkdir(parents=True, exist_ok=True)
+            manifest_hash = manifest_hashes.get(snapshot_id, "")
+            forced_day = force_all or day_value in force_days or snapshot_id in force_days
+
+            compare_payload = {
+                "kind": "compare",
+                "snapshot_id": snapshot_id,
+                "day": day_value,
+                "strategies": list(strategy_ids),
+                "cap": cap,
+                "top_n": top_n,
+                "min_ev": min_ev,
+                "mode": mode,
+                "allow_tier_b": allow_tier_b,
+                "probabilistic_profile": probabilistic_profile,
+                "manifest_hash": manifest_hash,
+                "code_revision": code_revision,
+            }
+            compare_hash = _abalation_build_input_hash(payload=compare_payload)
+            compare_state_path = state_dir / f"{snapshot_id}.compare.json"
+            compare_cached = (
+                reuse_existing
+                and not forced_day
+                and _abalation_compare_cache_valid(
+                    reports_dir=reports_dir,
+                    state_path=compare_state_path,
+                    expected_hash=compare_hash,
+                    strategy_ids=strategy_ids,
+                )
+            )
+
+            strategy_hash_by_id: dict[str, str] = {}
+            strategy_cached_by_id: dict[str, bool] = {}
+            strategy_core_ready: dict[str, bool] = {}
+            for strategy_id in strategy_ids:
+                strategy_payload = {
+                    "kind": "strategy",
+                    "snapshot_id": snapshot_id,
+                    "day": day_value,
+                    "strategy_id": strategy_id,
+                    "cap": cap,
+                    "top_n": top_n,
+                    "min_ev": min_ev,
+                    "mode": mode,
+                    "allow_tier_b": allow_tier_b,
+                    "probabilistic_profile": probabilistic_profile,
+                    "results_source": results_source,
+                    "manifest_hash": manifest_hash,
+                    "code_revision": code_revision,
+                }
+                strategy_hash = _abalation_build_input_hash(payload=strategy_payload)
+                strategy_hash_by_id[strategy_id] = strategy_hash
+                strategy_state_path = state_dir / f"{snapshot_id}.{strategy_id}.json"
+                strategy_cached_by_id[strategy_id] = (
+                    reuse_existing
+                    and not forced_day
+                    and strategy_id not in force_strategies
+                    and _abalation_strategy_cache_valid(
+                        reports_dir=reports_dir,
+                        state_path=strategy_state_path,
+                        expected_hash=strategy_hash,
+                        strategy_id=strategy_id,
+                    )
+                )
+                strategy_core_ready[strategy_id] = (
+                    reports_dir / f"strategy-report.{strategy_id}.json"
+                ).exists() and (reports_dir / f"backtest-seed.{strategy_id}.jsonl").exists()
+
+            needs_compare = (
+                not compare_cached
+                or forced_day
+                or any(strategy_id in force_strategies for strategy_id in strategy_ids)
+                or any(
+                    not strategy_core_ready.get(strategy_id, False) for strategy_id in strategy_ids
+                )
+            )
+            local_summary: dict[str, int] = {
+                "compare_ran": 0,
+                "compare_skipped": 0,
+                "settled": 0,
+                "settle_skipped": 0,
+                "no_seed_rows": 0,
+            }
+            if needs_compare:
+                compare_cmd = [
+                    "strategy",
+                    "compare",
+                    "--snapshot-id",
+                    snapshot_id,
+                    "--strategies",
+                    ",".join(strategy_ids),
+                    "--top-n",
+                    str(top_n),
+                    "--max-picks",
+                    str(cap),
+                    "--min-ev",
+                    str(min_ev),
+                    "--mode",
+                    mode,
+                    "--probabilistic-profile",
+                    probabilistic_profile,
+                ]
+                if allow_tier_b:
+                    compare_cmd.append("--allow-tier-b")
+                if offline:
+                    compare_cmd.append("--offline")
+                if block_paid:
+                    compare_cmd.append("--block-paid")
+                if refresh_context:
+                    compare_cmd.append("--refresh-context")
+                _run_cli_subcommand(
+                    args=compare_cmd,
+                    env=cap_env,
+                    cwd=cwd,
+                    global_cli_args=cap_global_cli_args,
+                )
+                _abalation_write_state(
+                    compare_state_path,
+                    {
+                        "input_hash": compare_hash,
+                        "snapshot_id": snapshot_id,
+                        "day": day_value,
+                        "cap": cap,
+                        "strategies": list(strategy_ids),
+                        "generated_at_utc": _iso(_utc_now()),
+                    },
+                )
+                local_summary["compare_ran"] += 1
+            else:
+                local_summary["compare_skipped"] += 1
+
+            for strategy_id in strategy_ids:
+                strategy_state_path = state_dir / f"{snapshot_id}.{strategy_id}.json"
+                strategy_hash = strategy_hash_by_id[strategy_id]
+                forced_strategy = forced_day or strategy_id in force_strategies
+                if (
+                    reuse_existing
+                    and not forced_strategy
+                    and _abalation_strategy_cache_valid(
+                        reports_dir=reports_dir,
+                        state_path=strategy_state_path,
+                        expected_hash=strategy_hash,
+                        strategy_id=strategy_id,
+                    )
+                ):
+                    local_summary["settle_skipped"] += 1
+                    continue
+
+                seed_path = reports_dir / f"backtest-seed.{strategy_id}.jsonl"
+                seed_rows = _abalation_count_seed_rows(seed_path)
+                if seed_rows == 0:
+                    _abalation_write_state(
+                        strategy_state_path,
+                        {
+                            "input_hash": strategy_hash,
+                            "snapshot_id": snapshot_id,
+                            "day": day_value,
+                            "cap": cap,
+                            "strategy_id": strategy_id,
+                            "seed_rows": 0,
+                            "generated_at_utc": _iso(_utc_now()),
+                        },
+                    )
+                    local_summary["no_seed_rows"] += 1
+                    continue
+
+                settle_cmd = [
+                    "strategy",
+                    "settle",
+                    "--snapshot-id",
+                    snapshot_id,
+                    "--strategy-report-file",
+                    f"strategy-report.{strategy_id}.json",
+                    "--results-source",
+                    results_source,
+                    "--write-csv",
+                    "--no-pdf",
+                    "--no-json",
+                ]
+                if offline:
+                    settle_cmd.append("--offline")
+                _run_cli_subcommand(
+                    args=settle_cmd,
+                    env=cap_env,
+                    cwd=cwd,
+                    global_cli_args=cap_global_cli_args,
+                )
+                _abalation_write_state(
+                    strategy_state_path,
+                    {
+                        "input_hash": strategy_hash,
+                        "snapshot_id": snapshot_id,
+                        "day": day_value,
+                        "cap": cap,
+                        "strategy_id": strategy_id,
+                        "seed_rows": seed_rows,
+                        "generated_at_utc": _iso(_utc_now()),
+                    },
+                )
+                local_summary["settled"] += 1
+
+            return local_summary
+
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = {
+                executor.submit(_snapshot_worker, day_snapshot): day_snapshot
+                for day_snapshot in complete_rows
+            }
+            for future in as_completed(futures):
+                local = future.result()
+                for key in cap_summary:
+                    cap_summary[key] += int(local.get(key, 0))
+
+        analysis_run_id = _sanitize_analysis_run_id(f"{analysis_prefix}-{run_id}-max{cap}")
+        if not analysis_run_id:
+            raise CLIError("failed to build analysis run id")
+        summarize_cmd = [
+            "strategy",
+            "backtest-summarize",
+            "--snapshot-id",
+            snapshot_id_for_summary,
+            "--strategies",
+            ",".join(strategy_ids),
+            "--all-complete-days",
+            "--dataset-id",
+            dataset_id_value,
+            "--min-graded",
+            str(min_graded),
+            "--bin-size",
+            str(bin_size),
+            "--require-scored-fraction",
+            str(require_scored_fraction),
+            "--ece-slack",
+            str(ece_slack),
+            "--brier-slack",
+            str(brier_slack),
+            "--power-alpha",
+            str(power_alpha),
+            "--power-level",
+            str(power_level),
+            "--power-picks-per-day",
+            str(cap),
+            "--power-target-uplifts",
+            power_target_uplifts,
+            "--write-analysis-scoreboard",
+            "--analysis-run-id",
+            analysis_run_id,
+            "--write-calibration-map",
+            "--calibration-map-mode",
+            calibration_map_mode,
+        ]
+        summarize_stdout = _run_cli_subcommand(
+            args=summarize_cmd,
+            env=cap_env,
+            cwd=cwd,
+            global_cli_args=cap_global_cli_args,
+        )
+        kv = _parse_cli_kv(summarize_stdout)
+        cap_summary["summary_json"] = kv.get("summary_json", "")
+        cap_summary["analysis_scoreboard_json"] = kv.get("analysis_scoreboard_json", "")
+        cap_summary["calibration_map_json"] = kv.get("calibration_map_json", "")
+        cap_summary["winner_strategy_id"] = kv.get("winner_strategy_id", "")
+        cap_summary["reports_root"] = str(cap_root)
+        print(
+            f"abalation_cap={cap} compare_ran={cap_summary['compare_ran']} "
+            f"settle_ran={cap_summary['settled']} "
+            f"settle_skipped={cap_summary['settle_skipped']} "
+            f"no_seed_rows={cap_summary['no_seed_rows']}"
+        )
+        print(f"abalation_cap_reports_root={cap_root}")
+        if cap_summary["analysis_scoreboard_json"]:
+            print(
+                f"abalation_cap_analysis_scoreboard_json={cap_summary['analysis_scoreboard_json']}"
+            )
+        return cap_summary
+
+    with ThreadPoolExecutor(max_workers=cap_workers) as executor:
+        futures = {executor.submit(_cap_worker, cap): cap for cap in caps}
+        for future in as_completed(futures):
+            cap_results.append(future.result())
+
+    cap_results.sort(key=lambda row: int(row.get("cap", 0)))
+    run_summary = {
+        "schema_version": 1,
+        "report_kind": "abalation_run",
+        "generated_at_utc": _iso(_utc_now()),
+        "run_id": run_id,
+        "dataset_id": dataset_id_value,
+        "snapshot_count": len(complete_rows),
+        "strategies": list(strategy_ids),
+        "caps": caps,
+        "probabilistic_profile": probabilistic_profile,
+        "results_source": results_source,
+        "reuse_existing": reuse_existing,
+        "reports_root": str(run_root),
+        "caps_summary": cap_results,
+    }
+    summary_path = run_root / "abalation-run.json"
+    summary_path.write_text(
+        json.dumps(run_summary, sort_keys=True, indent=2) + "\n", encoding="utf-8"
+    )
+    print(f"abalation_run_id={run_id}")
+    print(f"abalation_summary_json={summary_path}")
+    for row in cap_results:
+        cap_value = int(row.get("cap", 0))
+        winner = str(row.get("winner_strategy_id", ""))
+        scoreboard = str(row.get("analysis_scoreboard_json", ""))
+        print(
+            f"abalation_cap_result cap={cap_value} "
+            f"winner_strategy_id={winner} "
+            f"scoreboard={scoreboard}"
+        )
+    return 0
 
 
 def _cmd_strategy_backtest_summarize(args: argparse.Namespace) -> int:
@@ -5297,6 +5942,103 @@ def _build_parser() -> argparse.ArgumentParser:
     strategy_compare.add_argument("--offline", action="store_true")
     strategy_compare.add_argument("--block-paid", action="store_true")
     strategy_compare.add_argument("--refresh-context", action="store_true")
+
+    strategy_abalation = strategy_subparsers.add_parser(
+        "abalation",
+        help="Run multi-cap strategy abalation with per-cap report roots and cache reuse",
+    )
+    strategy_abalation.set_defaults(func=_cmd_strategy_abalation)
+    strategy_abalation.add_argument("--snapshot-id", default="")
+    strategy_abalation.add_argument("--dataset-id", default="")
+    strategy_abalation.add_argument("--strategies", required=True)
+    strategy_abalation.add_argument(
+        "--caps",
+        default="1,2,5",
+        help="Comma-separated max-picks caps to evaluate (default: 1,2,5).",
+    )
+    strategy_abalation.add_argument("--top-n", type=int, default=10)
+    strategy_abalation.add_argument("--min-ev", type=float, default=0.01)
+    strategy_abalation.add_argument(
+        "--mode",
+        choices=("auto", "live", "replay"),
+        default="replay",
+    )
+    strategy_abalation.add_argument("--allow-tier-b", action="store_true")
+    strategy_abalation.add_argument(
+        "--probabilistic-profile",
+        choices=("off", "minutes_v1"),
+        default="",
+    )
+    strategy_abalation.add_argument(
+        "--offline",
+        dest="offline",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Use offline mode for compare/settle sub-steps (default: true).",
+    )
+    strategy_abalation.add_argument(
+        "--block-paid",
+        dest="block_paid",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Block paid cache misses in compare steps (default: true).",
+    )
+    strategy_abalation.add_argument("--refresh-context", action="store_true")
+    strategy_abalation.add_argument(
+        "--results-source",
+        choices=("auto", "historical", "live", "cache_only"),
+        default="historical",
+    )
+    strategy_abalation.add_argument(
+        "--prebuild-minutes-cache",
+        dest="prebuild_minutes_cache",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Prebuild per-day minutes cache before compare loops (default: true).",
+    )
+    strategy_abalation.add_argument("--reports-root", default="")
+    strategy_abalation.add_argument("--run-id", default="")
+    strategy_abalation.add_argument("--analysis-run-prefix", default="abalation")
+    strategy_abalation.add_argument(
+        "--reuse-existing",
+        dest="reuse_existing",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Reuse unchanged compare/settle outputs when cache signatures match (default: true).",
+    )
+    strategy_abalation.add_argument(
+        "--force",
+        action="store_true",
+        help="Force recompute for all days/strategies/caps.",
+    )
+    strategy_abalation.add_argument(
+        "--force-days",
+        default="",
+        help="Comma-separated day values (YYYY-MM-DD) and/or snapshot ids to recompute.",
+    )
+    strategy_abalation.add_argument(
+        "--force-strategies",
+        default="",
+        help="Comma-separated strategy ids to recompute.",
+    )
+    strategy_abalation.add_argument("--max-workers", type=int, default=6)
+    strategy_abalation.add_argument("--cap-workers", type=int, default=3)
+    strategy_abalation.add_argument("--min-graded", type=int, default=20)
+    strategy_abalation.add_argument("--bin-size", type=float, default=0.1)
+    strategy_abalation.add_argument("--require-scored-fraction", type=float, default=0.9)
+    strategy_abalation.add_argument("--ece-slack", type=float, default=0.01)
+    strategy_abalation.add_argument("--brier-slack", type=float, default=0.01)
+    strategy_abalation.add_argument("--power-alpha", type=float, default=0.05)
+    strategy_abalation.add_argument("--power-level", type=float, default=0.8)
+    strategy_abalation.add_argument(
+        "--power-target-uplifts",
+        default="0.01,0.02,0.03,0.05",
+    )
+    strategy_abalation.add_argument(
+        "--calibration-map-mode",
+        choices=("walk_forward", "in_sample"),
+        default="walk_forward",
+    )
 
     strategy_backtest_prep = strategy_subparsers.add_parser(
         "backtest-prep", help="Write backtest seed/readiness artifacts for a snapshot"
