@@ -33,6 +33,8 @@ def test_strategy_id_map_has_titles_and_descriptions() -> None:
     assert mapping["strategy_id"]["s007"] == "Quality Composite Gate"
     assert mapping["strategy_id"]["s008"] == "Conservative Quality Floor"
     assert mapping["strategy_id"]["s009"] == "Conservative Quality + Rolling Priors"
+    assert mapping["strategy_id"]["s016"] == "Tier B + LOO Quality Weighted"
+    assert mapping["strategy_id"]["s018"] == "Tier A Minutes Validation"
     assert mapping["strategy_id"]["s020"] == "Probabilistic Minutes v1"
     assert mapping["strategy_description"]["s006"]
     assert mapping["strategy_description"]["s007"]
@@ -43,6 +45,7 @@ def test_strategy_id_map_has_titles_and_descriptions() -> None:
     assert strategy_title("s007") == "Quality Composite Gate"
     assert strategy_title("s008") == "Conservative Quality Floor"
     assert strategy_title("s009") == "Conservative Quality + Rolling Priors"
+    assert strategy_title("s019") == "Tier A Best-Sides Ablation"
     assert strategy_title("s020") == "Probabilistic Minutes v1"
     assert strategy_description("s002")
 

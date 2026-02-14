@@ -128,14 +128,21 @@ def _parse_side(value: Any) -> str | None:
     return None
 
 
-def extract_book_fair_pairs(group_rows: list[dict[str, Any]]) -> list[BookFairPair]:
+def extract_book_fair_pairs(
+    group_rows: list[dict[str, Any]],
+    *,
+    exclude_book_keys: frozenset[str] | None = None,
+) -> list[BookFairPair]:
     """Extract deterministic per-book paired prices with no-vig probabilities."""
+    excluded = exclude_book_keys or frozenset()
     book_sides: dict[str, dict[str, list[int]]] = {}
     for row in group_rows:
         if not isinstance(row, dict):
             continue
         book = str(row.get("book", "")).strip()
         if not book:
+            continue
+        if book in excluded:
             continue
         side = _parse_side(row.get("side", ""))
         if side is None:
@@ -179,9 +186,10 @@ def summarize_line_pricing(
     now_utc: datetime,
     stale_quote_minutes: int,
     hold_fallback: float | None,
+    exclude_book_keys: frozenset[str] | None = None,
 ) -> LinePricingQuality:
     """Compute deterministic pricing quality and uncertainty fields for one line."""
-    book_pairs = tuple(extract_book_fair_pairs(group_rows))
+    book_pairs = tuple(extract_book_fair_pairs(group_rows, exclude_book_keys=exclude_book_keys))
     p_over_values = [pair.p_over_fair for pair in book_pairs]
     hold_values = [pair.hold for pair in book_pairs]
     p_over_median = _median(p_over_values)

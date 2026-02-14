@@ -53,13 +53,13 @@ The pipeline is intentionally stage-based so each stage has explicit input/outpu
 | --- | --- | --- | --- | --- | --- |
 | 0 | Acquire/cache/day-index | Done (contract-locked) | cache store, snapshot persistence, spend-policy controls, historical day-index backfill/status, typed completeness/error semantics, `data verify` contract checks | expand operator dashboards for long-range dataset health summaries | `wt-data-plane` |
 | 1 | Normalize QuoteTable | Done (contract-locked) | canonical QuoteTable module, deterministic normalization, schema validation, `snapshot verify --check-derived`, JSONL/parquet contract parity checks | extend same strict contract style to additional derived tables as they are introduced | `wt-quote-normalize` |
-| 2 | De-vig + quality signals | Partial | implied/no-vig baseline logic exists in strategy path and plugins | extract into dedicated pricing module with explicit per-book quality outputs and contract tests | `wt-pricing-neutralize-vig` |
-| 3 | Reference probability model | Partial | median no-vig style strategies (`s003+`) exist | add alt-line monotone interpolation + uncertainty estimation artifacts | `wt-ref-model-altline` |
-| 4 | Execution pricing + EV | Partial | execution-vs-discovery flow exists and is reported | centralize exact-point matching + conservative EV scoring as first-class stage output | `wt-execution-pricing` |
+| 2 | De-vig + quality signals | Done (contract-locked) | dedicated `pricing_core` module, extracted de-vig/baseline selection, deterministic quality metrics, and contract tests | optional future expansion: emit standalone pricing artifact beyond strategy-candidate surfaces | `wt-pricing-neutralize-vig` |
+| 3 | Reference probability model | Done (baseline-locked) | monotone alt-line interpolation (`pricing_reference`) is integrated and tested; provenance includes `reference_line_method` and `reference_points_count` | optional future expansion: explicit standalone reference-curve artifact for cross-tool reuse | `wt-ref-model-altline` |
+| 4 | Execution pricing + EV | Done (baseline-locked) | execution-price EV + conservative EV (`ev_low`) are integrated in candidate contract and gating flow | optional future expansion: dedicated execution-pricing artifact split from strategy report payloads | `wt-execution-pricing` |
 | 5 | Eligibility gates | Partial | context/freshness/gate reasons already emitted in current reports | unify gate contracts and ensure all path decisions map to stable reason enums | `wt-gates-contracts` |
-| 6 | Portfolio + `ExecutionPlan` | Partial | deterministic max-picks selector and `execution-plan.json` artifact landed in strategy pipeline | expand exclusion reason coverage + compare/publish surfaces as first-class ops contract | `wt-execution-plan` |
+| 6 | Portfolio + `ExecutionPlan` | Done (baseline-locked) | deterministic selector + validated `execution-plan.json` contract are integrated with reproducibility checks | optional future expansion: richer exclusion taxonomy surfacing across compare/publish views | `wt-execution-plan` |
 | 7 | Render/publish | Partial | strategy/brief/publish flows and latest mirrors exist | align all published outputs to compact contract and deterministic rerender diff policy | `wt-report-publish` |
-| 8 | Settle/evaluate | Partial | settlement + backtest summary commands exist | add promotion-ready scoreboard package (ROI + Brier + calibration + actionability + CLV proxy) | `wt-eval-scoreboard` |
+| 8 | Settle/evaluate | Done (baseline-locked) | settlement + backtest summary + aggregate scoreboard + promotion-gate artifacts are implemented and reproducible | optional future expansion: CLV/close-proxy integration when reliable close data is available | `wt-eval-scoreboard` |
 
 ### Parallel worktree strategy (explicit)
 
@@ -487,6 +487,30 @@ boundaries.
   - stable schema snapshots in tests,
   - existing default strategy behavior is unchanged unless explicitly toggled.
 
+### Track A/B integration slice — Strategy integrity + ablations (current)
+
+- **Scope**:
+  - E1 leave-one-out baseline exclusion (exclude candidate execution book from baseline build),
+  - E2 Tier-B baseline independence gate (`min_other_books`),
+  - additive candidate provenance fields for baseline contributors and exclusion state,
+  - new ablation strategies `s016`–`s019` (opt-in only; no default flips).
+- **Contract additions**:
+  - strategy config: `exclude_selected_book_from_baseline`,
+  - strategy config: `tier_b_min_other_books_for_baseline`,
+  - candidate fields:
+    - `baseline_excluded_books`,
+    - `baseline_books_used`,
+    - `baseline_books_used_count`,
+    - `baseline_method_effective`,
+    - `baseline_is_independent_of_selected_book`.
+- **Reason codes**:
+  - `baseline_insufficient_coverage_after_exclusion`,
+  - `tier_b_baseline_not_independent`.
+- **Done criteria**:
+  - existing strategy ids retain behavior unless new flags/ids are selected,
+  - new strategies run end-to-end with deterministic outputs,
+  - baseline circularity is explicitly auditable per candidate row.
+
 ### Track B — Minutes/usage modeling pipeline (start now, parallel with Track A)
 
 - **Owner worktree**: `wt-minutes-usage-model` (branch prefix: `codex/minutes-*`).
@@ -626,11 +650,10 @@ For each track, Codex should generate:
 
 ## 10) Immediate Next Execution Sequence
 
-1. Merge Stage 0/1 hardening PR and explicitly close IM1 on `main`.
-2. Execute Track B (B1+B2) in parallel and harvest IM2.
-3. Execute Track A pricing upgrades (A3+A4) + Track C baseline, then harvest IM3.
-4. Execute Track D baseline and harvest IM4.
-5. Propose only evidence-backed default flips and harvest IM5 incrementally.
+1. Merge active integration PRs (currently strategy-integrity ablation pack) and rerun full gates.
+2. Run offline ablation comparisons (`s016`–`s020`) across complete indexed days and refresh aggregate scoreboards.
+3. Keep IM5 deferred until a dedicated default-flip packet clears promotion gates with rollback documented.
+4. Continue Track E hygiene improvements (data/layout/report guardrails) without changing strategy defaults.
 
 ## 11) Out of Scope (current horizon)
 

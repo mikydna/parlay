@@ -18,6 +18,10 @@ from prop_ev.strategies.s012_tier_b_aggressive_best_ev import S012
 from prop_ev.strategies.s013_tier_b_quality_weighted import S013
 from prop_ev.strategies.s014_median_tier_b import S014
 from prop_ev.strategies.s015_tier_b_calibrated_ev_low import S015
+from prop_ev.strategies.s016_tier_b_quality_weighted_loo import S016
+from prop_ev.strategies.s017_tier_b_median_loo import S017
+from prop_ev.strategies.s018_tier_a_minutes_validation import S018
+from prop_ev.strategies.s019_tier_a_best_sides_ablation import S019
 from prop_ev.strategies.s020_prob_minutes import S020
 
 
@@ -38,6 +42,10 @@ def _registry() -> dict[str, StrategyPlugin]:
         S013(),
         S014(),
         S015(),
+        S016(),
+        S017(),
+        S018(),
+        S019(),
         S020(),
     ]
     out: dict[str, StrategyPlugin] = {}
