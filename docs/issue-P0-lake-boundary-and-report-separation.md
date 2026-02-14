@@ -1,4 +1,4 @@
-# P0 Issue: Lake Boundary + Report Separation
+# P0 Issue: Data Boundary + Report Separation
 
 Status: Open  
 Priority: P0  
@@ -6,55 +6,56 @@ Owner: Data platform / pipeline
 
 ## Problem
 
-`parlay-data` currently mixes concerns that should be isolated:
+`parlay-data` still mixes concerns that should be isolated:
 
-1. **Cross-lake leakage**
-   - `odds_api/snapshots/*/context/*` contains NBA-derived artifacts (injuries/roster/pdf context).
-   - `odds_api/reference/player_identity_map.json` is NBA-centric reference data.
-2. **Report material inside lake snapshots**
-   - `odds_api/snapshots/*/reports/*` stores strategy/playbook/settlement outputs inside the same namespace as canonical lake artifacts.
-3. **Runtime caches co-located with versioned data**
-   - LLM and NBA runtime caches are physically under `odds_api/*` (currently gitignored, but same tree).
+1. **Cross-domain leakage**
+   - `odds_api/snapshots/*/context/*` may still hold NBA-derived artifacts.
+   - `odds_api/reference/player_identity_map.json` is NBA-owned reference data.
+2. **Report material inside odds snapshots**
+   - `odds_api/snapshots/*/reports/*` is still possible in legacy snapshots.
+3. **Runtime caches co-located with versioned odds data**
+   - LLM and NBA runtime caches can appear under `odds_api/*`.
 
 This increases coupling, makes contracts ambiguous, and complicates restore/backfill behavior.
 
 ## Required Contract (target state)
 
-### 1) Strict lake ownership
+### 1) Strict ownership with current roots (no `lakes/` churn)
 
-- `lakes/nba/**` owns NBA raw/clean/manifests/archives only.
-- `lakes/odds/**` owns odds snapshots/datasets/bundles/usage only.
-- No NBA payload blobs may exist under odds lake paths.
+- `nba_data/**` owns NBA raw/clean/manifests/archives/context/reference only.
+- `odds_api/**` owns odds snapshots/datasets/bundles/usage only.
+- No NBA payload blobs may exist under `odds_api/**`.
 
-### 2) Reports are not lake artifacts
+### 2) Reports are not odds snapshot artifacts
 
-- No `reports/` directories under any `lakes/**/snapshots/*`.
-- Reports move to a separate reporting namespace:
+- No `reports/` directories under `odds_api/snapshots/*`.
+- Reports must live under a separate reporting namespace:
   - `reports/odds/by-snapshot/<snapshot_id>/...`
   - `reports/odds/daily/<date>/snapshot=<snapshot_id>/...`
   - `reports/odds/latest/...`
-  - `reports/nba/verify/...` (or equivalent non-lake reporting root)
+  - `reports/nba/verify/...`
 
 ### 3) Runtime/cache isolation
 
-- Runtime-only artifacts live under a dedicated non-versioned runtime root (for example `runtime/**`).
-- `llm_cache`, `llm_usage`, `nba_cache`, temporary injury/roster cache files are not stored in lake roots.
+- Runtime-only artifacts live under `runtime/**` (non-versioned).
+- `llm_cache`, `llm_usage`, `nba_cache`, and temporary cache blobs do not live under `odds_api/**`.
 
-## Canonical Layout (proposed)
+## Canonical Layout (no new top-level rename)
 
 ```text
 parlay-data/
-  lakes/
-    nba/
-      raw/
-      clean/schema_v*/
-      manifests/
-      raw_archives/
-    odds/
-      snapshots/<snapshot_id>/{manifest.json,requests/,responses/,meta/,derived/}
-      datasets/<dataset_id>/{spec.json,days/*.json}
-      bundles/snapshots/*.tar.zst
-      usage/usage-YYYY-MM.jsonl
+  nba_data/
+    raw/
+    clean/schema_v*/
+    manifests/
+    raw_archives/
+    context/
+    reference/
+  odds_api/
+    snapshots/<snapshot_id>/{manifest.json,requests/,responses/,meta/,derived/,context_ref.json}
+    datasets/<dataset_id>/{spec.json,days/*.json}
+    bundles/snapshots/*.tar.zst
+    usage/usage-YYYY-MM.jsonl
   reports/
     nba/verify/...
     odds/
@@ -70,25 +71,26 @@ parlay-data/
 ## Migration Requirements
 
 1. **Data move**
-   - Move NBA context artifacts from odds snapshots to NBA-owned paths.
-   - Replace in-odds copies with lightweight references (`context_ref.json` + hash/path).
+   - Move NBA context artifacts from `odds_api/snapshots/*/context/*` to NBA-owned paths.
+   - Keep lightweight references in odds snapshots (`context_ref.json` + hash/path).
 2. **Report relocation**
    - Move snapshot-embedded report files into `reports/odds/by-snapshot/<snapshot_id>/`.
-   - Keep only lake-safe artifacts inside snapshot directories.
+   - Keep only odds-lake artifacts inside `odds_api/snapshots/*`.
 3. **Writer changes**
-   - Update `prop-ev` writers so new runs never write `snapshots/*/reports/*`.
-   - Update read paths for strategy/playbook/settlement/report publish commands.
+   - Ensure new runs never write `odds_api/snapshots/*/reports/*`.
+   - Ensure read paths for strategy/playbook/settlement/report publish use `reports/odds/**`.
 4. **Guardrails**
    - Add automated checks that fail if:
-     - `lakes/**/snapshots/*/reports/*` is present.
-     - NBA data appears under odds lake roots.
+     - `odds_api/snapshots/*/reports/*` is present.
+     - NBA-owned blobs appear under `odds_api/**`.
+     - runtime/cache dirs are present under `odds_api/**`.
 5. **Back-compat**
-   - Temporary migration shim allowed for reading legacy paths, but writes must target new layout only.
+   - Read shims can be temporary; all new writes target canonical paths only.
 
 ## Acceptance Criteria
 
-- [ ] Fresh runs produce no `snapshots/*/reports/*` directories.
-- [ ] No NBA context blobs remain under odds lake roots.
+- [ ] Fresh runs produce no `odds_api/snapshots/*/reports/*` directories.
+- [ ] No NBA context/reference blobs remain under `odds_api/**`.
 - [ ] Report publish/read commands resolve against `reports/odds/**`.
 - [ ] Guardrail checks are enforced in local validation.
 - [ ] Existing backtest/settlement/playbook workflows pass on migrated data.

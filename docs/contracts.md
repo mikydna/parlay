@@ -107,7 +107,7 @@ Strategy health command degraded/broken gates:
 ## Odds Day-Index Contract
 
 Path:
-- `lakes/odds/datasets/<dataset_id>/days/<YYYY-MM-DD>.json`
+- `<ODDS_DATA_DIR>/datasets/<dataset_id>/days/<YYYY-MM-DD>.json`
 
 Required operational keys:
 - `day`
@@ -139,8 +139,8 @@ Primary incomplete reasons currently emitted:
 ## QuoteTable Contract (Derived Odds)
 
 Canonical derived paths:
-- `lakes/odds/snapshots/<snapshot_id>/derived/event_props.jsonl`
-- `lakes/odds/snapshots/<snapshot_id>/derived/featured_odds.jsonl`
+- `<ODDS_DATA_DIR>/snapshots/<snapshot_id>/derived/event_props.jsonl`
+- `<ODDS_DATA_DIR>/snapshots/<snapshot_id>/derived/featured_odds.jsonl`
 
 `event_props` required columns:
 - `provider`
@@ -176,7 +176,9 @@ Canonical featured identity tuple:
 
 Verification commands (contract checks):
 - `prop-ev snapshot verify --snapshot-id <id> --check-derived --require-table event_props [--require-parquet]`
-- `prop-ev data verify --dataset-id <id> [--from <YYYY-MM-DD> --to <YYYY-MM-DD>] [--require-complete] [--require-parquet]`
+- `prop-ev data verify --dataset-id <id> [--from <YYYY-MM-DD> --to <YYYY-MM-DD>] [--require-complete] [--require-parquet] [--require-canonical-jsonl]`
+- `prop-ev data verify --dataset-id <id> [--allow-incomplete-day <YYYY-MM-DD>] [--allow-incomplete-reason <reason>]`
+- `prop-ev data repair-derived --dataset-id <id> [--from <YYYY-MM-DD> --to <YYYY-MM-DD>]`
 
 ## State ID Maps
 

@@ -19,11 +19,12 @@ If env vars are missing, the CLI also checks key files at repo root:
 `ODDS_API_KEY` / `ODDS_API_KEY.ignore`.
 Set `OPENAI_API_KEY` for LLM summaries, or place the key in `OPENAI_KEY` /
 `OPENAI_KEY.ignore` at repo root.
-Set `ODDS_DATA_DIR` in your shell (or pass `--data-dir`) to the storage location,
-for example `/Users/$USER/Documents/Code/parlay-data/lakes/odds`.
-Set `NBA_DATA_DIR` via `PROP_EV_NBA_DATA_DIR`, for example
-`/Users/$USER/Documents/Code/parlay-data/lakes/nba`.
-Reports are written to `REPORTS_DIR` (default: sibling `reports/odds/` next to `ODDS_DATA_DIR`).
+Set `PROP_EV_DATA_DIR` in your shell (or pass `--data-dir`) to the storage location,
+for example `/Users/$USER/Documents/Code/parlay-data/odds_api`.
+Set `PROP_EV_NBA_DATA_DIR`, for example
+`/Users/$USER/Documents/Code/parlay-data/nba_data`.
+Reports are written to `PROP_EV_REPORTS_DIR` (default: sibling `reports/odds/`
+next to `PROP_EV_DATA_DIR`).
 
 Bookmaker whitelist defaults are in `config/bookmakers.json` (currently DraftKings + FanDuel).
 When `--bookmakers` is omitted, snapshot/playbook commands use this whitelist automatically.
@@ -32,7 +33,7 @@ When `--bookmakers` is omitted, snapshot/playbook commands use this whitelist au
 
 ```bash
 uv run prop-ev --help
-uv run prop-ev --data-dir /Users/$USER/Documents/Code/parlay-data/lakes/odds snapshot ls
+uv run prop-ev --data-dir /Users/$USER/Documents/Code/parlay-data/odds_api snapshot ls
 uv run prop-ev snapshot slate --dry-run
 uv run prop-ev snapshot props --dry-run --max-events 10
 uv run prop-ev strategy health --offline
@@ -104,7 +105,7 @@ Bundle snapshots and convert JSONL -> Parquet:
 ```bash
 uv run prop-ev snapshot lake --snapshot-id <SNAPSHOT_ID>
 uv run prop-ev snapshot pack --snapshot-id <SNAPSHOT_ID>
-uv run prop-ev snapshot unpack --bundle <ODDS_DATA_DIR>/bundles/snapshots/<SNAPSHOT_ID>.tar.zst
+uv run prop-ev snapshot unpack --bundle <PROP_EV_DATA_DIR>/bundles/snapshots/<SNAPSHOT_ID>.tar.zst
 ```
 
 Historical day backfill (paid key, per-event historical endpoints):
@@ -137,6 +138,9 @@ Discover stored day-index datasets (avoids spec mismatch confusion):
 uv run prop-ev data datasets ls --json
 uv run prop-ev data datasets show --dataset-id <DATASET_ID> --json
 uv run prop-ev data status --dataset-id <DATASET_ID> --from 2026-02-01 --to 2026-02-12 --json-summary
+uv run prop-ev data verify --dataset-id <DATASET_ID> --from 2026-02-01 --to 2026-02-12 --require-complete --require-parquet --json
+uv run prop-ev data verify --dataset-id <DATASET_ID> --from 2026-02-01 --to 2026-02-12 --require-complete --require-parquet --require-canonical-jsonl --json
+uv run prop-ev data repair-derived --dataset-id <DATASET_ID> --from 2026-02-01 --to 2026-02-12 --json
 ```
 
 No-spend completeness check (cache-only, no paid calls):
@@ -163,7 +167,6 @@ This allows free endpoints (like event listing) but makes paid endpoints cache-o
 
 Strategy reports are written to:
 - `<REPORTS_DIR>/by-snapshot/<REPORT_SNAPSHOT>/strategy-report.json`
-- `<REPORTS_DIR>/by-snapshot/<REPORT_SNAPSHOT>/strategy-report.md`
 - `<REPORTS_DIR>/by-snapshot/<REPORT_SNAPSHOT>/backtest-seed.jsonl`
 - `<REPORTS_DIR>/by-snapshot/<REPORT_SNAPSHOT>/backtest-results-template.csv`
 - `<REPORTS_DIR>/by-snapshot/<REPORT_SNAPSHOT>/backtest-readiness.json`

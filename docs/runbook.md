@@ -2,7 +2,7 @@
 
 Operator-focused flow for daily execution, offline replay, and health triage.
 
-Assume `ODDS_DATA_DIR=/Users/$USER/Documents/Code/parlay-data/lakes/odds`
+Assume `ODDS_DATA_DIR=/Users/$USER/Documents/Code/parlay-data/odds_api`
 or pass `--data-dir` explicitly on commands.
 `REPORTS_DIR` defaults to `/Users/$USER/Documents/Code/parlay-data/reports/odds`
 unless overridden via `--reports-dir` / `PROP_EV_REPORTS_DIR`.
@@ -63,6 +63,8 @@ uv run prop-ev data datasets ls --json
 uv run prop-ev data datasets show --dataset-id <DATASET_ID> --json
 uv run prop-ev data status --dataset-id <DATASET_ID> --from 2026-01-22 --to 2026-02-12 --json-summary
 uv run prop-ev data verify --dataset-id <DATASET_ID> --from 2026-01-22 --to 2026-02-12 --json
+uv run prop-ev data repair-derived --dataset-id <DATASET_ID> --from 2026-01-22 --to 2026-02-12 --json
+uv run prop-ev data verify --dataset-id <DATASET_ID> --from 2026-01-22 --to 2026-02-12 --require-complete --require-parquet --require-canonical-jsonl --json
 uv run prop-ev data guardrails --json
 ```
 
@@ -153,7 +155,6 @@ Implementation model:
 
 Per snapshot:
 - `<REPORTS_DIR>/by-snapshot/<report_snapshot>/strategy-report.json`
-- `<REPORTS_DIR>/by-snapshot/<report_snapshot>/strategy-report.md`
 - `<REPORTS_DIR>/by-snapshot/<report_snapshot>/backtest-seed.jsonl`
 - `<REPORTS_DIR>/by-snapshot/<report_snapshot>/backtest-results-template.csv`
 - `<REPORTS_DIR>/by-snapshot/<report_snapshot>/backtest-readiness.json`
