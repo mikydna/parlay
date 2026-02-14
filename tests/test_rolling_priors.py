@@ -112,3 +112,31 @@ def test_build_rolling_priors_supports_snapshot_day_fallback_and_delta_cap(tmp_p
     assert priors["rows_used"] == 1
     assert priors["adjustments"][key]["sample_size"] == 1
     assert priors["adjustments"][key]["delta"] == 0.02
+
+
+def test_build_rolling_priors_supports_day_index_snapshot_ids(tmp_path: Path) -> None:
+    reports_root = tmp_path / "reports" / "odds"
+    _write_backtest_csv(
+        reports_root / "by-snapshot" / "x" / "backtest-results-template.s009.csv",
+        [
+            {
+                "snapshot_id": "day-bdfa890a-2026-02-12",
+                "modeled_date_et": "",
+                "market": "player_assists",
+                "recommended_side": "over",
+                "result": "win",
+            }
+        ],
+    )
+
+    priors = build_rolling_priors(
+        reports_root=reports_root,
+        strategy_id="s009",
+        as_of_day="2026-02-13",
+        window_days=7,
+        min_samples=1,
+    )
+
+    key = "player_assists::over"
+    assert priors["rows_used"] == 1
+    assert priors["adjustments"][key]["sample_size"] == 1

@@ -1,3 +1,4 @@
+from dataclasses import replace
 from datetime import UTC, datetime
 
 from prop_ev.strategies import get_strategy
@@ -132,6 +133,7 @@ def test_gate_strategies_set_recipe_audit_fields() -> None:
     report_s006 = get_strategy("s006").run(inputs=_sample_inputs(), config=_sample_config()).report
     report_s007 = get_strategy("s007").run(inputs=_sample_inputs(), config=_sample_config()).report
     report_s008 = get_strategy("s008").run(inputs=_sample_inputs(), config=_sample_config()).report
+    report_s009 = get_strategy("s009").run(inputs=_sample_inputs(), config=_sample_config()).report
     assert report_s004["audit"]["min_book_pairs"] == 2
     assert report_s005["audit"]["hold_cap"] == 0.08
     assert report_s006["audit"]["p_over_iqr_cap"] == 0.08
@@ -142,3 +144,25 @@ def test_gate_strategies_set_recipe_audit_fields() -> None:
     assert report_s008["audit"]["min_quality_score"] == 0.55
     assert report_s008["audit"]["min_ev_low"] == 0.01
     assert report_s008["audit"]["max_uncertainty_band"] == 0.08
+    assert report_s009["audit"]["min_quality_score"] == 0.55
+    assert report_s009["audit"]["min_ev_low"] == 0.01
+    assert report_s009["audit"]["max_uncertainty_band"] == 0.08
+
+
+def test_s009_applies_rolling_priors_while_s008_ignores_them() -> None:
+    base_inputs = _sample_inputs()
+    inputs = replace(
+        base_inputs,
+        rolling_priors={
+            "as_of_day": "2026-02-12",
+            "window_days": 21,
+            "rows_used": 50,
+            "adjustments": {"player_points::over": {"delta": 0.01, "sample_size": 30}},
+        },
+    )
+
+    report_s008 = get_strategy("s008").run(inputs=inputs, config=_sample_config()).report
+    report_s009 = get_strategy("s009").run(inputs=inputs, config=_sample_config()).report
+
+    assert report_s008["summary"]["rolling_priors_rows_used"] == 0
+    assert report_s009["summary"]["rolling_priors_rows_used"] == 50

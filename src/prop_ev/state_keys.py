@@ -51,6 +51,7 @@ STRATEGY_TITLE_KEY = {
     "s006": "Dispersion-IQR Gate",
     "s007": "Quality Composite Gate",
     "s008": "Conservative Quality Floor",
+    "s009": "Conservative Quality + Rolling Priors",
 }
 
 STRATEGY_DESCRIPTION_KEY = {
@@ -71,6 +72,10 @@ STRATEGY_DESCRIPTION_KEY = {
     "s008": (
         "Extends quality composite gating with conservative uncertainty and EV-low floors "
         "for more stable execution picks."
+    ),
+    "s009": (
+        "Extends s008 with rolling settled-outcome prior tilt for ranking while keeping "
+        "the same conservative gates."
     ),
 }
 

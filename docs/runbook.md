@@ -146,6 +146,7 @@ Strategy IDs:
 - `s006` — Dispersion-IQR Gate
 - `s007` — Quality Composite Gate (s003 + s004 + s005)
 - `s008` — Conservative Quality Floor (s007 + dispersion + quality/uncertainty/EV-low gates)
+- `s009` — Conservative Quality + Rolling Priors (s008 + rolling settled-outcome ranking tilt)
 
 Legacy IDs are not accepted.
 

@@ -8,6 +8,8 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+_DAY_SUFFIX_RE = re.compile(r"(?P<day>\d{4}-\d{2}-\d{2})$")
+
 
 def _safe_day(value: str) -> date | None:
     raw = value.strip()
@@ -28,6 +30,9 @@ def _day_from_snapshot_id(snapshot_id: str) -> date | None:
     match = re.match(r"^daily-(\d{4})-?(\d{2})-?(\d{2})", raw)
     if match:
         return _safe_day(f"{match.group(1)}-{match.group(2)}-{match.group(3)}")
+    match_day = _DAY_SUFFIX_RE.search(raw)
+    if match_day:
+        return _safe_day(match_day.group("day"))
     return None
 
 

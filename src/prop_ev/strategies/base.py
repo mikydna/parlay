@@ -60,6 +60,7 @@ class StrategyResult:
 @dataclass(frozen=True)
 class StrategyRecipe:
     force_allow_tier_b: bool = False
+    use_rolling_priors: bool = False
     market_baseline_method: str | None = None
     market_baseline_fallback: str | None = None
     min_book_pairs: int | None = None
@@ -82,6 +83,7 @@ def compose_strategy_recipes(*recipes: StrategyRecipe) -> StrategyRecipe:
     for recipe in recipes:
         merged = StrategyRecipe(
             force_allow_tier_b=merged.force_allow_tier_b or bool(recipe.force_allow_tier_b),
+            use_rolling_priors=merged.use_rolling_priors or bool(recipe.use_rolling_priors),
             market_baseline_method=(
                 recipe.market_baseline_method
                 if recipe.market_baseline_method is not None
@@ -140,7 +142,7 @@ def run_strategy_recipe(
         event_context=inputs.event_context,
         slate_rows=inputs.slate_rows,
         player_identity_map=inputs.player_identity_map,
-        rolling_priors=inputs.rolling_priors,
+        rolling_priors=inputs.rolling_priors if recipe.use_rolling_priors else None,
         min_ev=effective_config.min_ev,
         allow_tier_b=effective_config.allow_tier_b,
         require_official_injuries=effective_config.require_official_injuries,

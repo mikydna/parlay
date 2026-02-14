@@ -37,6 +37,7 @@ from prop_ev.execution_projection import ExecutionProjectionConfig, project_exec
 from prop_ev.identity_map import load_identity_map, update_identity_map
 from prop_ev.lake_guardrails import build_guardrail_report
 from prop_ev.lake_migration import migrate_layout
+from prop_ev.nba_data.date_resolver import resolve_snapshot_date_str
 from prop_ev.nba_data.repo import NBARepository
 from prop_ev.normalize import normalize_event_odds, normalize_featured_odds
 from prop_ev.odds_client import (
@@ -3862,23 +3863,7 @@ _COMPACT_PLAYBOOK_REPORTS: tuple[str, ...] = (
 
 
 def _snapshot_date(snapshot_id: str) -> str:
-    if len(snapshot_id) >= 10:
-        date_prefix = snapshot_id[:10]
-        try:
-            date.fromisoformat(date_prefix)
-            return date_prefix
-        except ValueError:
-            pass
-    daily_match = re.match(r"^daily-(\d{4})-?(\d{2})-?(\d{2})", snapshot_id)
-    if daily_match:
-        year, month, day = daily_match.groups()
-        candidate = f"{year}-{month}-{day}"
-        try:
-            date.fromisoformat(candidate)
-            return candidate
-        except ValueError:
-            pass
-    return _utc_now().strftime("%Y-%m-%d")
+    return resolve_snapshot_date_str(snapshot_id)
 
 
 def _publish_compact_playbook_outputs(
