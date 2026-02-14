@@ -87,6 +87,15 @@ Required keys:
 Path:
 - `<REPORTS_DIR>/by-snapshot/<snapshot_id>/backtest-summary.json`
 - `<REPORTS_DIR>/by-snapshot/<report_snapshot>/backtest-summary.json`
+- `<REPORTS_DIR>/analysis/<run_id>/aggregate-scoreboard.json` (optional aggregate artifact)
+
+Top-level required keys:
+- `schema_version`
+- `report_kind`
+- `generated_at_utc`
+- `summary`
+- `strategies`
+- `winner`
 
 Summary-level required keys:
 - `snapshot_id`

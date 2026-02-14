@@ -273,9 +273,14 @@ This is an optional follow-on that makes the calibration work visible at the **p
 Implemented:
 - `strategy backtest-summarize` can emit
   `backtest-calibration-map.json` via `--write-calibration-map`.
+- `strategy backtest-summarize` can emit aggregate scoreboard artifacts under
+  `reports/odds/analysis/<run_id>/aggregate-scoreboard.json` via
+  `--write-analysis-scoreboard [--analysis-run-id <id>]`.
 - Calibration map mode supports `walk_forward` (default) and `in_sample`.
 - Pure calibration-map application utilities exist in
   `src/prop_ev/calibration_map.py`.
+- Backtest summary payloads now include `schema_version` and `report_kind`
+  for stable parsing.
 - `generate_brief_for_snapshot` auto-loads sibling
   `backtest-calibration-map.json` (or explicit path) and annotates rows with:
   - `p_conservative`,
