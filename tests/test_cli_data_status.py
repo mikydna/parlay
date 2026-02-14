@@ -296,3 +296,100 @@ def test_data_status_json_summary_warns_for_missing_spec_dataset(
     warnings = payload.get("warnings", [])
     assert isinstance(warnings, list)
     assert warnings and warnings[0]["code"] == "dataset_not_found_for_spec"
+
+
+def test_data_done_days_json_and_require_complete_exit_code(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    data_root = tmp_path / "data" / "odds_api"
+
+    spec = DatasetSpec(
+        sport_key="basketball_nba",
+        markets=["player_points"],
+        regions="us",
+        bookmakers="draftkings",
+        include_links=False,
+        include_sids=False,
+        historical=True,
+    )
+    save_dataset_spec(data_root, spec)
+    save_day_status(
+        data_root,
+        spec,
+        "2026-02-10",
+        _status_payload(day="2026-02-10", complete=True, missing_count=0, total_events=7),
+    )
+    save_day_status(
+        data_root,
+        spec,
+        "2026-02-11",
+        _status_payload(day="2026-02-11", complete=False, missing_count=2, total_events=7),
+    )
+
+    code = main(
+        [
+            "--data-dir",
+            str(data_root),
+            "data",
+            "done-days",
+            "--dataset-id",
+            dataset_id(spec),
+            "--from",
+            "2026-02-10",
+            "--to",
+            "2026-02-11",
+            "--require-complete",
+            "--json",
+        ]
+    )
+    assert code == 2
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["complete_days"] == ["2026-02-10"]
+    assert payload["incomplete_days"] == ["2026-02-11"]
+    assert payload["incomplete_reason_counts"] == {"missing_event_odds": 1}
+
+
+def test_data_done_days_default_output_lists_days(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    data_root = tmp_path / "data" / "odds_api"
+
+    spec = DatasetSpec(
+        sport_key="basketball_nba",
+        markets=["player_points"],
+        regions="us",
+        bookmakers="fanduel",
+        include_links=False,
+        include_sids=False,
+    )
+    save_dataset_spec(data_root, spec)
+    save_day_status(
+        data_root,
+        spec,
+        "2026-02-20",
+        _status_payload(day="2026-02-20", complete=True, missing_count=0, total_events=5),
+    )
+    save_day_status(
+        data_root,
+        spec,
+        "2026-02-21",
+        _status_payload(day="2026-02-21", complete=False, missing_count=1, total_events=5),
+    )
+
+    code = main(
+        [
+            "--data-dir",
+            str(data_root),
+            "data",
+            "done-days",
+            "--dataset-id",
+            dataset_id(spec),
+        ]
+    )
+    assert code == 0
+    output = capsys.readouterr().out
+    assert "dataset_id=" in output
+    assert "complete_days=2026-02-20" in output
+    assert "incomplete_days=2026-02-21" in output

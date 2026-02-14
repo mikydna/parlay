@@ -1386,6 +1386,98 @@ def _cmd_data_status(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_data_done_days(args: argparse.Namespace) -> int:
+    data_root = Path(os.environ.get("PROP_EV_DATA_DIR", "data/odds_api"))
+    dataset_id_value = str(getattr(args, "dataset_id", "")).strip()
+    if not dataset_id_value:
+        raise CLIError("--dataset-id is required")
+
+    spec, _ = _load_dataset_spec_or_error(data_root, dataset_id_value)
+    available_days = _dataset_day_names(data_root, dataset_id_value)
+    from_day = str(getattr(args, "from_day", "")).strip()
+    to_day = str(getattr(args, "to_day", "")).strip()
+    if (from_day and not to_day) or (to_day and not from_day):
+        raise CLIError("--from and --to must be provided together")
+
+    if from_day and to_day:
+        selected_days = _resolve_days(
+            days=1,
+            from_day=from_day,
+            to_day=to_day,
+            tz_name=str(getattr(args, "tz_name", "America/New_York")),
+        )
+    else:
+        selected_days = available_days
+
+    rows: list[dict[str, Any]] = []
+    for day in selected_days:
+        status = _load_day_status_for_dataset(
+            data_root,
+            dataset_id_value=dataset_id_value,
+            day=day,
+        )
+        if not isinstance(status, dict):
+            rows.append(
+                {
+                    "day": day,
+                    "complete": False,
+                    "missing_count": 0,
+                    "total_events": 0,
+                    "snapshot_id": "",
+                    "note": "missing day status",
+                    "error": "",
+                    "error_code": "missing_day_status",
+                    "status_code": "incomplete_missing_day_status",
+                    "reason_codes": ["missing_day_status"],
+                    "odds_coverage_ratio": 0.0,
+                    "updated_at_utc": "",
+                }
+            )
+            continue
+        rows.append(_day_row_from_status(day, status))
+
+    payload = _build_status_summary_payload(
+        dataset_id_value=dataset_id_value,
+        spec=spec,
+        rows=rows,
+        from_day=selected_days[0] if selected_days else "",
+        to_day=selected_days[-1] if selected_days else "",
+        tz_name=str(getattr(args, "tz_name", "America/New_York")),
+        warnings=[],
+    )
+    payload["available_day_count"] = len(available_days)
+    payload["available_from_day"] = available_days[0] if available_days else ""
+    payload["available_to_day"] = available_days[-1] if available_days else ""
+
+    if bool(getattr(args, "json_output", False)):
+        print(json.dumps(payload, sort_keys=True))
+    else:
+        print(
+            ("dataset_id={} selected_days={} complete={} incomplete={} from={} to={}").format(
+                dataset_id_value,
+                payload.get("total_days", 0),
+                payload.get("complete_count", 0),
+                payload.get("incomplete_count", 0),
+                payload.get("from_day", ""),
+                payload.get("to_day", ""),
+            )
+        )
+        complete_days = payload.get("complete_days", [])
+        incomplete_days = payload.get("incomplete_days", [])
+        if isinstance(complete_days, list):
+            print(f"complete_days={','.join(str(day) for day in complete_days)}")
+        if isinstance(incomplete_days, list):
+            print(f"incomplete_days={','.join(str(day) for day in incomplete_days)}")
+        reason_counts = payload.get("incomplete_reason_counts", {})
+        if isinstance(reason_counts, dict):
+            for reason, count in sorted(reason_counts.items()):
+                print(f"incomplete_reason={reason} count={count}")
+
+    if bool(getattr(args, "require_complete", False)) and int(payload["incomplete_count"]) > 0:
+        return 2
+    return 0
+
+
 def _cmd_data_backfill(args: argparse.Namespace) -> int:
     data_root = Path(os.environ.get("PROP_EV_DATA_DIR", "data/odds_api"))
     spec = _dataset_spec_from_args(args)
@@ -4706,6 +4798,27 @@ def _build_parser() -> argparse.ArgumentParser:
         "--json-summary",
         action="store_true",
         help="Emit machine-readable day summary JSON",
+    )
+
+    data_done_days = data_subparsers.add_parser(
+        "done-days",
+        help="Show complete vs incomplete days from stored day-index rows",
+    )
+    data_done_days.set_defaults(func=_cmd_data_done_days)
+    data_done_days.add_argument("--dataset-id", required=True)
+    data_done_days.add_argument("--from", dest="from_day", default="")
+    data_done_days.add_argument("--to", dest="to_day", default="")
+    data_done_days.add_argument("--tz", dest="tz_name", default="America/New_York")
+    data_done_days.add_argument(
+        "--require-complete",
+        action="store_true",
+        help="Exit 2 when any selected day is incomplete.",
+    )
+    data_done_days.add_argument(
+        "--json",
+        dest="json_output",
+        action="store_true",
+        help="Emit machine-readable JSON payload",
     )
 
     data_datasets = data_subparsers.add_parser(
