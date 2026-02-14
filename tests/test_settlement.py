@@ -187,6 +187,60 @@ def test_grade_seed_rows_preserves_pricing_quality_fields() -> None:
     assert row["summary_eligible_lines"] == 104
 
 
+def test_grade_seed_rows_resolves_player_aliases() -> None:
+    seed_rows = [
+        _seed_row(
+            ticket_key="suffix",
+            player="Robert Williams",
+            market="player_points",
+            side="over",
+            point=2.5,
+        ),
+        _seed_row(
+            ticket_key="nickname",
+            player="Carlton Carrington",
+            market="player_points",
+            side="over",
+            point=2.5,
+        ),
+    ]
+    payload = {
+        "status": "ok",
+        "source": "nba_data_schedule_plus_boxscore",
+        "fetched_at_utc": "2026-02-12T01:00:00Z",
+        "games": [
+            {
+                "game_id": "g-final",
+                "home_team": "home team",
+                "away_team": "away team",
+                "game_status": "final",
+                "game_status_text": "Final",
+                "players": {
+                    "robertwilliamsiii": {
+                        "name": "Robert Williams III",
+                        "statistics": {"points": 5},
+                    },
+                    "bubcarrington": {
+                        "name": "Bub Carrington",
+                        "statistics": {"points": 6},
+                    },
+                },
+            }
+        ],
+        "errors": [],
+    }
+    rows = grade_seed_rows(
+        seed_rows=seed_rows,
+        results_payload=payload,
+        source="nba_data_schedule_plus_boxscore",
+    )
+    by_key = {str(row["ticket_key"]): row for row in rows}
+    assert by_key["suffix"]["result"] == "win"
+    assert by_key["suffix"]["result_reason"] == "final_settled"
+    assert by_key["nickname"]["result"] == "win"
+    assert by_key["nickname"]["result_reason"] == "final_settled"
+
+
 def test_render_settlement_markdown_uses_compact_labels() -> None:
     report = {
         "snapshot_id": "snap-1",

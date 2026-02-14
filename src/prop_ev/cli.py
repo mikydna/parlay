@@ -38,7 +38,9 @@ from prop_ev.identity_map import load_identity_map, update_identity_map
 from prop_ev.lake_guardrails import build_guardrail_report
 from prop_ev.lake_migration import migrate_layout
 from prop_ev.nba_data.date_resolver import resolve_snapshot_date_str
+from prop_ev.nba_data.minutes_prob import load_minutes_prob_index_for_snapshot
 from prop_ev.nba_data.repo import NBARepository
+from prop_ev.nba_data.store.layout import build_layout as build_nba_layout
 from prop_ev.normalize import normalize_event_odds, normalize_featured_odds
 from prop_ev.odds_client import (
     OddsAPIClient,
@@ -2038,6 +2040,40 @@ def _allow_secondary_injuries_override(*, cli_flag: bool) -> bool:
     return cli_flag or _env_bool("PROP_EV_STRATEGY_ALLOW_SECONDARY_INJURIES", False)
 
 
+def _resolve_probabilistic_profile(value: str) -> str:
+    profile = value.strip().lower() or "off"
+    if profile not in {"off", "minutes_v1"}:
+        raise CLIError(f"invalid probabilistic profile: {value} (expected off|minutes_v1)")
+    return profile
+
+
+def _strategy_recipe_probabilistic_profile(strategy_id: str) -> str:
+    plugin = get_strategy(strategy_id)
+    recipe = getattr(plugin, "recipe", None)
+    raw = str(getattr(recipe, "probabilistic_profile", "") or "").strip()
+    if not raw:
+        return "off"
+    return _resolve_probabilistic_profile(raw)
+
+
+def _resolve_input_probabilistic_profile(
+    *,
+    default_profile: str,
+    probabilistic_profile_arg: str,
+    strategy_ids: list[str],
+) -> str:
+    explicit = str(probabilistic_profile_arg).strip()
+    if explicit:
+        return _resolve_probabilistic_profile(explicit)
+    default_resolved = _resolve_probabilistic_profile(default_profile)
+    required: set[str] = {default_resolved}
+    for strategy_id in strategy_ids:
+        required.add(_strategy_recipe_probabilistic_profile(strategy_id))
+    if "minutes_v1" in required:
+        return "minutes_v1"
+    return "off"
+
+
 def _official_injury_hard_fail_message() -> str:
     return (
         "official injury report unavailable; refusing to continue without override. "
@@ -2106,6 +2142,9 @@ def _strategy_policy_from_env() -> dict[str, Any]:
             False,
         ),
         "stale_quote_minutes": _env_int("PROP_EV_STRATEGY_STALE_QUOTE_MINUTES", 20),
+        "probabilistic_profile": _resolve_probabilistic_profile(
+            str(os.environ.get("PROP_EV_STRATEGY_PROBABILISTIC_PROFILE", "off"))
+        ),
         "injuries_stale_hours": _env_float("PROP_EV_CONTEXT_INJURIES_STALE_HOURS", 6.0),
         "roster_stale_hours": _env_float("PROP_EV_CONTEXT_ROSTER_STALE_HOURS", 24.0),
         "require_fresh_context": _env_bool("PROP_EV_STRATEGY_REQUIRE_FRESH_CONTEXT", True),
@@ -2570,12 +2609,14 @@ def _load_strategy_inputs(
     offline: bool,
     block_paid: bool,
     refresh_context: bool,
+    probabilistic_profile: str,
 ) -> tuple[
     Path,
     dict[str, Any],
     list[dict[str, Any]],
     dict[str, dict[str, str]],
     list[dict[str, Any]],
+    dict[str, Any],
     dict[str, Any],
     dict[str, Any],
     dict[str, Any],
@@ -2616,6 +2657,14 @@ def _load_strategy_inputs(
         event_context=event_context,
     )
     player_identity_map = load_identity_map(identity_map_path)
+    minutes_probabilities = load_minutes_prob_index_for_snapshot(
+        layout=build_nba_layout(
+            Path(os.environ.get("PROP_EV_NBA_DATA_DIR", "data/nba_data")).expanduser().resolve()
+        ),
+        snapshot_day=_snapshot_date(snapshot_id),
+        probabilistic_profile=probabilistic_profile,
+        auto_build=not offline,
+    )
     return (
         snapshot_dir,
         manifest,
@@ -2625,18 +2674,27 @@ def _load_strategy_inputs(
         injuries,
         roster,
         player_identity_map,
+        minutes_probabilities,
     )
 
 
 def _cmd_strategy_run(args: argparse.Namespace) -> int:
     store = SnapshotStore(os.environ.get("PROP_EV_DATA_DIR", "data/odds_api"))
     snapshot_id = args.snapshot_id or _latest_snapshot_id(store)
+    strategy_requested = str(getattr(args, "strategy", "s001"))
+    plugin = get_strategy(strategy_requested)
+    strategy_id = normalize_strategy_id(plugin.info.id)
     require_official_injuries = _env_bool("PROP_EV_STRATEGY_REQUIRE_OFFICIAL_INJURIES", True)
     allow_secondary_injuries = _allow_secondary_injuries_override(
         cli_flag=bool(getattr(args, "allow_secondary_injuries", False))
     )
     stale_quote_minutes_env = _env_int("PROP_EV_STRATEGY_STALE_QUOTE_MINUTES", 20)
     require_fresh_context_env = _env_bool("PROP_EV_STRATEGY_REQUIRE_FRESH_CONTEXT", True)
+    probabilistic_profile = _resolve_input_probabilistic_profile(
+        default_profile=str(os.environ.get("PROP_EV_STRATEGY_PROBABILISTIC_PROFILE", "off")),
+        probabilistic_profile_arg=str(getattr(args, "probabilistic_profile", "")),
+        strategy_ids=[strategy_id],
+    )
     (
         strategy_run_mode,
         stale_quote_minutes,
@@ -2655,12 +2713,14 @@ def _cmd_strategy_run(args: argparse.Namespace) -> int:
         injuries,
         roster,
         player_identity_map,
+        minutes_probabilities,
     ) = _load_strategy_inputs(
         store=store,
         snapshot_id=snapshot_id,
         offline=bool(args.offline),
         block_paid=bool(getattr(args, "block_paid", False)),
         refresh_context=bool(args.refresh_context),
+        probabilistic_profile=probabilistic_profile,
     )
     official = _coerce_dict(injuries.get("official")) if isinstance(injuries, dict) else {}
     secondary = _coerce_dict(injuries.get("secondary")) if isinstance(injuries, dict) else {}
@@ -2673,9 +2733,6 @@ def _cmd_strategy_run(args: argparse.Namespace) -> int:
     if secondary_override_active:
         print("note=official_injury_missing_using_secondary_override")
 
-    strategy_requested = str(getattr(args, "strategy", "s001"))
-    plugin = get_strategy(strategy_requested)
-    strategy_id = normalize_strategy_id(plugin.info.id)
     max_picks_default = _env_int("PROP_EV_STRATEGY_MAX_PICKS_DEFAULT", 5)
     requested_max_picks = int(getattr(args, "max_picks", 0))
     resolved_max_picks = (
@@ -2701,6 +2758,7 @@ def _cmd_strategy_run(args: argparse.Namespace) -> int:
         require_official_injuries=bool(effective_require_official),
         stale_quote_minutes=int(stale_quote_minutes),
         require_fresh_context=bool(require_fresh_context),
+        probabilistic_profile=probabilistic_profile,
     )
     inputs = StrategyInputs(
         snapshot_id=snapshot_id,
@@ -2712,6 +2770,9 @@ def _cmd_strategy_run(args: argparse.Namespace) -> int:
         slate_rows=slate_rows,
         player_identity_map=player_identity_map if isinstance(player_identity_map, dict) else None,
         rolling_priors=rolling_priors,
+        minutes_probabilities=(
+            minutes_probabilities if isinstance(minutes_probabilities, dict) else None
+        ),
     )
     result = plugin.run(inputs=inputs, config=config)
     report = decorate_report(result.report, strategy=plugin.info, config=result.config)
@@ -2789,6 +2850,7 @@ def _cmd_strategy_run(args: argparse.Namespace) -> int:
             int(rolling_priors.get("rows_used", 0)),
         )
     )
+    print(f"probabilistic_profile={probabilistic_profile}")
     print(f"stale_quote_minutes={stale_quote_minutes}")
     print(f"require_fresh_context={str(bool(require_fresh_context)).lower()}")
     print(f"health_gates={','.join(health_gates) if health_gates else 'none'}")
@@ -2948,6 +3010,11 @@ def _cmd_strategy_compare(args: argparse.Namespace) -> int:
     require_official_injuries = _env_bool("PROP_EV_STRATEGY_REQUIRE_OFFICIAL_INJURIES", True)
     stale_quote_minutes_env = _env_int("PROP_EV_STRATEGY_STALE_QUOTE_MINUTES", 20)
     require_fresh_context_env = _env_bool("PROP_EV_STRATEGY_REQUIRE_FRESH_CONTEXT", True)
+    probabilistic_profile = _resolve_input_probabilistic_profile(
+        default_profile=str(os.environ.get("PROP_EV_STRATEGY_PROBABILISTIC_PROFILE", "off")),
+        probabilistic_profile_arg=str(getattr(args, "probabilistic_profile", "")),
+        strategy_ids=strategy_ids,
+    )
     _, stale_quote_minutes, require_fresh_context = _resolve_strategy_runtime_policy(
         mode=str(getattr(args, "mode", "auto")),
         stale_quote_minutes=stale_quote_minutes_env,
@@ -2963,12 +3030,14 @@ def _cmd_strategy_compare(args: argparse.Namespace) -> int:
         injuries,
         roster,
         player_identity_map,
+        minutes_probabilities,
     ) = _load_strategy_inputs(
         store=store,
         snapshot_id=snapshot_id,
         offline=bool(args.offline),
         block_paid=bool(getattr(args, "block_paid", False)),
         refresh_context=bool(args.refresh_context),
+        probabilistic_profile=probabilistic_profile,
     )
 
     base_config = StrategyRunConfig(
@@ -2983,6 +3052,7 @@ def _cmd_strategy_compare(args: argparse.Namespace) -> int:
         require_official_injuries=bool(require_official_injuries),
         stale_quote_minutes=int(stale_quote_minutes),
         require_fresh_context=bool(require_fresh_context),
+        probabilistic_profile=probabilistic_profile,
     )
     compare_rows: list[dict[str, Any]] = []
     ranked_sets: dict[str, set[tuple[str, str, str, float, str]]] = {}
@@ -3013,6 +3083,9 @@ def _cmd_strategy_compare(args: argparse.Namespace) -> int:
                 player_identity_map if isinstance(player_identity_map, dict) else None
             ),
             rolling_priors=rolling_priors,
+            minutes_probabilities=(
+                minutes_probabilities if isinstance(minutes_probabilities, dict) else None
+            ),
         )
         result = plugin.run(inputs=inputs, config=base_config)
         report = decorate_report(result.report, strategy=plugin.info, config=result.config)
@@ -3097,6 +3170,7 @@ def _cmd_strategy_compare(args: argparse.Namespace) -> int:
     print(f"snapshot_id={snapshot_id}")
     print(f"strategies={','.join(strategy_ids)}")
     print(f"strategy_max_picks={int(base_config.max_picks)}")
+    print(f"probabilistic_profile={probabilistic_profile}")
     print(f"compare_json={json_path}")
     print(f"compare_md={md_path}")
     return 0
@@ -3380,6 +3454,13 @@ def _cmd_strategy_backtest_summarize(args: argparse.Namespace) -> int:
                 bin_size=bin_size,
             )
             computed.append(summary)
+
+        if not any(item.rows_total > 0 for item in computed):
+            raise CLIError(
+                "no backtest rows found for selected complete days/strategies; "
+                "run `prop-ev strategy backtest-prep` and "
+                "`prop-ev strategy settle --write-csv` first"
+            )
         rows_for_map = rows_by_strategy
         day_coverage = {
             "all_complete_days": True,
@@ -5071,6 +5152,15 @@ def _build_parser() -> argparse.ArgumentParser:
         default="auto",
         help="Strategy runtime mode (replay relaxes freshness gates for historical reruns).",
     )
+    strategy_run.add_argument(
+        "--probabilistic-profile",
+        choices=("off", "minutes_v1"),
+        default="",
+        help=(
+            "Optional probabilistic profile override. "
+            "When omitted, uses runtime config strategy.probabilistic_profile."
+        ),
+    )
     strategy_run.add_argument("--allow-tier-b", action="store_true")
     strategy_run.add_argument(
         "--write-backtest-artifacts",
@@ -5162,6 +5252,15 @@ def _build_parser() -> argparse.ArgumentParser:
         choices=("auto", "live", "replay"),
         default="auto",
         help="Strategy runtime mode (replay relaxes freshness gates for historical reruns).",
+    )
+    strategy_compare.add_argument(
+        "--probabilistic-profile",
+        choices=("off", "minutes_v1"),
+        default="",
+        help=(
+            "Optional probabilistic profile override. "
+            "When omitted, uses runtime config strategy.probabilistic_profile."
+        ),
     )
     strategy_compare.add_argument("--allow-tier-b", action="store_true")
     strategy_compare.add_argument(

@@ -14,6 +14,17 @@ from prop_ev.nba_data.export import export_clean_artifacts, export_raw_archives
 from prop_ev.nba_data.ingest.discover import discover_games
 from prop_ev.nba_data.ingest.fetch import ingest_resources, parse_resources
 from prop_ev.nba_data.io_utils import atomic_write_json
+from prop_ev.nba_data.minutes_prob import (
+    DEFAULT_MARKETS as MINUTES_PROB_DEFAULT_MARKETS,
+)
+from prop_ev.nba_data.minutes_prob import (
+    MinutesProbTrainConfig,
+    evaluate_minutes_prob_predictions_file,
+    minutes_prob_root,
+    predict_minutes_probabilities,
+    resolve_default_predictions_out,
+    train_minutes_prob_model,
+)
 from prop_ev.nba_data.minutes_usage import (
     MinutesUsageBuildConfig,
     build_minutes_usage_baseline_artifact,
@@ -42,6 +53,13 @@ def _parse_providers(raw: str) -> list[str]:
     if not values:
         return ["data_nba", "stats_nba"]
     return values
+
+
+def _parse_markets(raw: str) -> tuple[str, ...]:
+    values = [item.strip() for item in raw.split(",") if item.strip()]
+    if not values:
+        return MINUTES_PROB_DEFAULT_MARKETS
+    return tuple(values)
 
 
 def _cmd_discover(args: argparse.Namespace) -> int:
@@ -292,6 +310,104 @@ def _cmd_minutes_usage_baseline(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_minutes_prob_train(args: argparse.Namespace) -> int:
+    source_config = load_config(data_dir=getattr(args, "data_dir", None))
+    source_layout = build_layout(source_config.data_dir)
+    out_dir_raw = str(getattr(args, "out_dir", "")).strip()
+    out_dir = Path(out_dir_raw).expanduser() if out_dir_raw else minutes_prob_root(source_layout)
+    summary = train_minutes_prob_model(
+        layout=source_layout,
+        config=MinutesProbTrainConfig(
+            seasons=_parse_seasons(args.seasons),
+            season_type=str(args.season_type),
+            history_games=int(args.history_games),
+            min_history_games=int(args.min_history_games),
+            eval_days=int(args.eval_days),
+            schema_version=int(args.schema_version),
+            random_seed=int(args.random_seed),
+            model_version=str(args.model_version),
+        ),
+        out_dir=out_dir,
+    )
+    if args.json_output:
+        print(json.dumps(summary, sort_keys=True, indent=2))
+    else:
+        eval_metrics = summary.get("evaluation", {}).get("metrics", {})
+        artifacts = summary.get("artifacts", {})
+        print(
+            ("run_id={} rows_train={} rows_eval={} mae={} rmse={} coverage={} model_dir={}").format(
+                summary.get("run_id", ""),
+                summary.get("rows_train", 0),
+                summary.get("rows_eval", 0),
+                eval_metrics.get("mae"),
+                eval_metrics.get("rmse"),
+                eval_metrics.get("coverage_p10_p90"),
+                artifacts.get("model_dir", ""),
+            )
+        )
+    return 0
+
+
+def _cmd_minutes_prob_predict(args: argparse.Namespace) -> int:
+    source_config = load_config(data_dir=getattr(args, "data_dir", None))
+    source_layout = build_layout(source_config.data_dir)
+    model_dir = Path(str(args.model_dir)).expanduser()
+    out_raw = str(getattr(args, "out", "")).strip()
+    if out_raw:
+        out_path = Path(out_raw).expanduser()
+    else:
+        out_path = resolve_default_predictions_out(
+            model_dir=model_dir,
+            as_of_date=str(args.as_of_date),
+        )
+    summary = predict_minutes_probabilities(
+        layout=source_layout,
+        model_dir=model_dir,
+        as_of_date=str(args.as_of_date),
+        out_path=out_path,
+        snapshot_id=str(getattr(args, "snapshot_id", "")).strip(),
+        markets=_parse_markets(str(getattr(args, "markets", ""))),
+    )
+    if args.json_output:
+        print(json.dumps(summary, sort_keys=True, indent=2))
+    else:
+        print(
+            ("snapshot_id={} as_of_date={} rows={} out={}").format(
+                summary.get("snapshot_id", ""),
+                summary.get("as_of_date", ""),
+                summary.get("rows", 0),
+                summary.get("out_path", ""),
+            )
+        )
+    return 0
+
+
+def _cmd_minutes_prob_evaluate(args: argparse.Namespace) -> int:
+    model_dir = Path(str(args.model_dir)).expanduser()
+    if not model_dir.exists():
+        raise FileNotFoundError(f"model dir not found: {model_dir}")
+    predictions_path = Path(str(args.predictions)).expanduser()
+    out_path = Path(str(args.out)).expanduser()
+    payload = evaluate_minutes_prob_predictions_file(
+        predictions_path=predictions_path,
+        out_path=out_path,
+    )
+    if args.json_output:
+        print(json.dumps(payload, sort_keys=True, indent=2))
+    else:
+        metrics = payload.get("metrics", {})
+        print(
+            ("rows_scored={} mae={} rmse={} coverage={} out={}").format(
+                payload.get("rows_scored", 0),
+                metrics.get("mae"),
+                metrics.get("rmse"),
+                metrics.get("coverage_p10_p90"),
+                out_path,
+            )
+        )
+    return 0
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="nba-data")
     subparsers = parser.add_subparsers(dest="command")
@@ -383,6 +499,50 @@ def _build_parser() -> argparse.ArgumentParser:
     minutes_usage.add_argument("--min-history-games", type=int, default=3)
     minutes_usage.add_argument("--eval-days", type=int, default=30)
     minutes_usage.add_argument("--json", dest="json_output", action="store_true")
+
+    minutes_prob = subparsers.add_parser(
+        "minutes-prob",
+        help="Train/predict/evaluate probabilistic minutes artifacts from clean NBA parquet",
+    )
+    minutes_prob_subparsers = minutes_prob.add_subparsers(dest="minutes_prob_command")
+
+    minutes_prob_train = minutes_prob_subparsers.add_parser("train", help="Train minutes model")
+    minutes_prob_train.set_defaults(func=_cmd_minutes_prob_train)
+    minutes_prob_train.add_argument("--data-dir", default="")
+    minutes_prob_train.add_argument("--out-dir", default="")
+    minutes_prob_train.add_argument("--seasons", default="2023-24,2024-25,2025-26")
+    minutes_prob_train.add_argument("--season-type", default="Regular Season")
+    minutes_prob_train.add_argument("--schema-version", type=int, default=SCHEMA_VERSION)
+    minutes_prob_train.add_argument("--history-games", type=int, default=10)
+    minutes_prob_train.add_argument("--min-history-games", type=int, default=3)
+    minutes_prob_train.add_argument("--eval-days", type=int, default=30)
+    minutes_prob_train.add_argument("--model-version", default="minutes_prob_v1")
+    minutes_prob_train.add_argument("--random-seed", type=int, default=42)
+    minutes_prob_train.add_argument("--json", dest="json_output", action="store_true")
+
+    minutes_prob_predict = minutes_prob_subparsers.add_parser(
+        "predict", help="Generate per-player probabilistic minutes predictions for one day"
+    )
+    minutes_prob_predict.set_defaults(func=_cmd_minutes_prob_predict)
+    minutes_prob_predict.add_argument("--data-dir", default="")
+    minutes_prob_predict.add_argument("--model-dir", required=True)
+    minutes_prob_predict.add_argument("--as-of-date", required=True)
+    minutes_prob_predict.add_argument("--snapshot-id", default="")
+    minutes_prob_predict.add_argument(
+        "--markets",
+        default=",".join(MINUTES_PROB_DEFAULT_MARKETS),
+    )
+    minutes_prob_predict.add_argument("--out", default="")
+    minutes_prob_predict.add_argument("--json", dest="json_output", action="store_true")
+
+    minutes_prob_evaluate = minutes_prob_subparsers.add_parser(
+        "evaluate", help="Evaluate a probabilistic minutes predictions parquet artifact"
+    )
+    minutes_prob_evaluate.set_defaults(func=_cmd_minutes_prob_evaluate)
+    minutes_prob_evaluate.add_argument("--model-dir", required=True)
+    minutes_prob_evaluate.add_argument("--predictions", required=True)
+    minutes_prob_evaluate.add_argument("--out", required=True)
+    minutes_prob_evaluate.add_argument("--json", dest="json_output", action="store_true")
 
     return parser
 

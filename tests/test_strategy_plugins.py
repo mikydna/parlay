@@ -120,7 +120,7 @@ def test_compose_strategy_recipes_combines_layers() -> None:
 
 
 def test_strategies_force_allow_tier_b() -> None:
-    for strategy_id in ("s002", "s014", "s015"):
+    for strategy_id in ("s002", "s014", "s015", "s020"):
         result = get_strategy(strategy_id).run(inputs=_sample_inputs(), config=_sample_config())
         assert result.config.allow_tier_b is True
 
@@ -203,3 +203,37 @@ def test_s009_applies_rolling_priors_while_s008_ignores_them() -> None:
     assert report_s010["summary"]["rolling_priors_rows_used"] == 0
     assert report_s011["summary"]["rolling_priors_rows_used"] == 50
     assert report_s015["summary"]["rolling_priors_rows_used"] == 50
+
+
+def test_s020_applies_minutes_prob_profile_and_outputs_fields() -> None:
+    base_inputs = _sample_inputs()
+    minutes_probabilities = {
+        "exact": {
+            "event-1|playera|player_points": {
+                "minutes_p10": 28.0,
+                "minutes_p50": 34.0,
+                "minutes_p90": 38.0,
+                "minutes_mu": 34.0,
+                "minutes_sigma_proxy": 3.0,
+                "p_active": 0.98,
+                "games_on_team": 12,
+                "days_on_team": 40,
+                "new_team_phase": "gt_10",
+                "confidence_score": 0.82,
+                "data_quality_flags": "",
+            }
+        },
+        "player": {},
+        "meta": {"profile": "minutes_v1"},
+    }
+    inputs = replace(base_inputs, minutes_probabilities=minutes_probabilities)
+    result = get_strategy("s020").run(inputs=inputs, config=_sample_config())
+    report = result.report
+    assert report["audit"]["probabilistic_profile"] == "minutes_v1"
+    assert report["audit"]["min_prob_confidence"] == 0.5
+    assert report["audit"]["max_minutes_band"] == 22.0
+    candidate = report["candidates"][0]
+    assert candidate["prob_source"] == "minutes_v1_model"
+    assert candidate["minutes_p50"] == 34.0
+    assert candidate["p_active"] == 0.98
+    assert candidate["confidence_score"] == 0.82

@@ -42,6 +42,7 @@ class Settings(BaseSettings):
     strategy_stale_quote_minutes: int = 20
     strategy_max_picks_default: int = 5
     strategy_default_id: str = "s001"
+    strategy_probabilistic_profile: str = "off"
     context_injuries_stale_hours: float = 6.0
     context_roster_stale_hours: float = 24.0
     data_dir: str = "data/odds_api"
