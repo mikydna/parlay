@@ -14,6 +14,7 @@ This folder is split into two groups:
 - `plan.md` — canonical engineering/product roadmap and milestone plan.
 - `integration-milestone-execution.md` — step-by-step IM1–IM5 closure runbook and evidence checklist.
 - `integration-evidence-2026-02-14.md` — concrete IM baseline evidence run (scoreboards, determinism, guardrails, done-days behavior).
+- `im5-default-policy-decision-2026-02-14.md` — current IM5 default-flip decision and reopen criteria.
 - `track-stage2-pricing-fixed-point.md` — detailed execution plan for Stage 2 pricing metrics and `s008`.
 - `strat-odds-api-integration.md` — source-policy rationale and integration context.
 - `issue-P0-lake-boundary-and-report-separation.md` — blocking storage-contract issue for strict lake/report separation.

@@ -1,6 +1,6 @@
 # P0 Issue: Data Boundary + Report Separation
 
-Status: Open  
+Status: Closed (2026-02-14)  
 Priority: P0  
 Owner: Data platform / pipeline
 
@@ -89,11 +89,23 @@ parlay-data/
 
 ## Acceptance Criteria
 
-- [ ] Fresh runs produce no `odds_api/snapshots/*/reports/*` directories.
-- [ ] No NBA context/reference blobs remain under `odds_api/**`.
-- [ ] Report publish/read commands resolve against `reports/odds/**`.
-- [ ] Guardrail checks are enforced in local validation.
-- [ ] Existing backtest/settlement/playbook workflows pass on migrated data.
+- [x] Fresh runs produce no `odds_api/snapshots/*/reports/*` directories.
+- [x] No NBA context/reference blobs remain under `odds_api/**`.
+- [x] Report publish/read commands resolve against `reports/odds/**`.
+- [x] Guardrail checks are enforced in local validation.
+- [x] Existing backtest/settlement/playbook workflows pass on migrated data.
+
+## Closure Evidence (2026-02-14)
+
+- Guardrail pass:
+  - `PROP_EV_DATA_DIR=/Users/andy/Documents/Code/parlay-data/odds_api uv run prop-ev data guardrails --json`
+  - result: `status=ok`, `violation_count=0`.
+- Filesystem audit:
+  - no `odds_api/snapshots/*/reports/` directories,
+  - no NBA-owned context/reference blobs under `odds_api/**`.
+- Workflow checks:
+  - replay strategy run writes reports under `reports/odds/by-snapshot/<snapshot_id>/...`,
+  - complete-day scoreboard path is `reports/odds/analysis/<run_id>/aggregate-scoreboard.json`.
 
 ## Non-Goals
 

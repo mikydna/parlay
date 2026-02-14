@@ -2165,6 +2165,20 @@ def _resolve_strategy_runtime_policy(
     return mode_key, resolved_stale, resolved_fresh_context
 
 
+def _replay_quote_now_from_manifest(manifest: dict[str, Any]) -> str | None:
+    raw = str(manifest.get("created_at_utc", "")).strip()
+    if not raw:
+        return None
+    normalized = raw.replace("Z", "+00:00")
+    try:
+        parsed = datetime.fromisoformat(normalized)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
 def _execution_projection_tag(bookmakers: tuple[str, ...]) -> str:
     cleaned = [re.sub(r"[^a-z0-9._-]+", "-", book.strip().lower()) for book in bookmakers]
     cleaned = [book.strip("._-") for book in cleaned if book.strip("._-")]
@@ -2750,6 +2764,9 @@ def _cmd_strategy_run(args: argparse.Namespace) -> int:
             strategy_id=rolling_source_strategy_id,
             snapshot_id=snapshot_id,
         )
+    replay_quote_now_utc = (
+        _replay_quote_now_from_manifest(manifest) if strategy_run_mode == "replay" else None
+    )
     config = StrategyRunConfig(
         top_n=int(args.top_n),
         max_picks=resolved_max_picks,
@@ -2759,6 +2776,7 @@ def _cmd_strategy_run(args: argparse.Namespace) -> int:
         stale_quote_minutes=int(stale_quote_minutes),
         require_fresh_context=bool(require_fresh_context),
         probabilistic_profile=probabilistic_profile,
+        quote_now_utc=replay_quote_now_utc,
     )
     inputs = StrategyInputs(
         snapshot_id=snapshot_id,
@@ -3015,7 +3033,11 @@ def _cmd_strategy_compare(args: argparse.Namespace) -> int:
         probabilistic_profile_arg=str(getattr(args, "probabilistic_profile", "")),
         strategy_ids=strategy_ids,
     )
-    _, stale_quote_minutes, require_fresh_context = _resolve_strategy_runtime_policy(
+    (
+        strategy_run_mode,
+        stale_quote_minutes,
+        require_fresh_context,
+    ) = _resolve_strategy_runtime_policy(
         mode=str(getattr(args, "mode", "auto")),
         stale_quote_minutes=stale_quote_minutes_env,
         require_fresh_context=require_fresh_context_env,
@@ -3039,6 +3061,9 @@ def _cmd_strategy_compare(args: argparse.Namespace) -> int:
         refresh_context=bool(args.refresh_context),
         probabilistic_profile=probabilistic_profile,
     )
+    replay_quote_now_utc = (
+        _replay_quote_now_from_manifest(manifest) if strategy_run_mode == "replay" else None
+    )
 
     base_config = StrategyRunConfig(
         top_n=int(args.top_n),
@@ -3053,6 +3078,7 @@ def _cmd_strategy_compare(args: argparse.Namespace) -> int:
         stale_quote_minutes=int(stale_quote_minutes),
         require_fresh_context=bool(require_fresh_context),
         probabilistic_profile=probabilistic_profile,
+        quote_now_utc=replay_quote_now_utc,
     )
     compare_rows: list[dict[str, Any]] = []
     ranked_sets: dict[str, set[tuple[str, str, str, float, str]]] = {}
