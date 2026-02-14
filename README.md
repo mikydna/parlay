@@ -137,6 +137,9 @@ Discover stored day-index datasets (avoids spec mismatch confusion):
 uv run prop-ev data datasets ls --json
 uv run prop-ev data datasets show --dataset-id <DATASET_ID> --json
 uv run prop-ev data status --dataset-id <DATASET_ID> --from 2026-02-01 --to 2026-02-12 --json-summary
+uv run prop-ev data verify --dataset-id <DATASET_ID> --from 2026-02-01 --to 2026-02-12 --require-complete --require-parquet --json
+uv run prop-ev data verify --dataset-id <DATASET_ID> --from 2026-02-01 --to 2026-02-12 --require-complete --require-parquet --require-canonical-jsonl --json
+uv run prop-ev data repair-derived --dataset-id <DATASET_ID> --from 2026-02-01 --to 2026-02-12 --json
 ```
 
 No-spend completeness check (cache-only, no paid calls):
@@ -163,7 +166,6 @@ This allows free endpoints (like event listing) but makes paid endpoints cache-o
 
 Strategy reports are written to:
 - `<REPORTS_DIR>/by-snapshot/<REPORT_SNAPSHOT>/strategy-report.json`
-- `<REPORTS_DIR>/by-snapshot/<REPORT_SNAPSHOT>/strategy-report.md`
 - `<REPORTS_DIR>/by-snapshot/<REPORT_SNAPSHOT>/backtest-seed.jsonl`
 - `<REPORTS_DIR>/by-snapshot/<REPORT_SNAPSHOT>/backtest-results-template.csv`
 - `<REPORTS_DIR>/by-snapshot/<REPORT_SNAPSHOT>/backtest-readiness.json`

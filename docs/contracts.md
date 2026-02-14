@@ -176,7 +176,9 @@ Canonical featured identity tuple:
 
 Verification commands (contract checks):
 - `prop-ev snapshot verify --snapshot-id <id> --check-derived --require-table event_props [--require-parquet]`
-- `prop-ev data verify --dataset-id <id> [--from <YYYY-MM-DD> --to <YYYY-MM-DD>] [--require-complete] [--require-parquet]`
+- `prop-ev data verify --dataset-id <id> [--from <YYYY-MM-DD> --to <YYYY-MM-DD>] [--require-complete] [--require-parquet] [--require-canonical-jsonl]`
+- `prop-ev data verify --dataset-id <id> [--allow-incomplete-day <YYYY-MM-DD>] [--allow-incomplete-reason <reason>]`
+- `prop-ev data repair-derived --dataset-id <id> [--from <YYYY-MM-DD> --to <YYYY-MM-DD>]`
 
 ## State ID Maps
 

@@ -79,6 +79,7 @@ from prop_ev.settlement import settle_snapshot
 from prop_ev.snapshot_artifacts import (
     lake_snapshot_derived,
     pack_snapshot,
+    repair_snapshot_derived_contracts,
     unpack_snapshot,
     verify_snapshot_derived_contracts,
 )
@@ -960,6 +961,25 @@ def _incomplete_reason_code(row: dict[str, Any]) -> str:
     return "incomplete_unknown"
 
 
+def _parse_allow_incomplete_days(raw_values: list[str]) -> set[str]:
+    allowed_days: set[str] = set()
+    for raw_value in raw_values:
+        for value in parse_csv(str(raw_value)):
+            try:
+                date.fromisoformat(value)
+            except ValueError as exc:
+                raise CLIError(f"invalid --allow-incomplete-day value: {value}") from exc
+            allowed_days.add(value)
+    return allowed_days
+
+
+def _parse_allow_incomplete_reasons(raw_values: list[str]) -> set[str]:
+    allowed_reasons: set[str] = set()
+    for raw_value in raw_values:
+        allowed_reasons.update(parse_csv(str(raw_value)))
+    return allowed_reasons
+
+
 def _build_status_summary_payload(
     *,
     dataset_id_value: str,
@@ -1414,6 +1434,13 @@ def _cmd_data_verify(args: argparse.Namespace) -> int:
     else:
         selected_days = available_days
 
+    allow_incomplete_days = _parse_allow_incomplete_days(
+        [str(value) for value in getattr(args, "allow_incomplete_day", [])]
+    )
+    allow_incomplete_reasons = _parse_allow_incomplete_reasons(
+        [str(value) for value in getattr(args, "allow_incomplete_reason", [])]
+    )
+
     day_reports: list[dict[str, Any]] = []
     issue_count = 0
     checked_complete_days = 0
@@ -1451,12 +1478,15 @@ def _cmd_data_verify(args: argparse.Namespace) -> int:
             row = _day_row_from_status(day, status)
 
         if bool(getattr(args, "require_complete", False)) and not bool(row.get("complete", False)):
-            row_issues.append(
-                {
-                    "code": "incomplete_day",
-                    "detail": _incomplete_reason_code(row),
-                }
-            )
+            reason_code = _incomplete_reason_code(row)
+            allowlisted = day in allow_incomplete_days or reason_code in allow_incomplete_reasons
+            if not allowlisted:
+                row_issues.append(
+                    {
+                        "code": "incomplete_day",
+                        "detail": reason_code,
+                    }
+                )
 
         if bool(row.get("complete", False)):
             checked_complete_days += 1
@@ -1476,6 +1506,9 @@ def _cmd_data_verify(args: argparse.Namespace) -> int:
                     derived_issues = verify_snapshot_derived_contracts(
                         snapshot_dir=snapshot_dir,
                         require_parquet=bool(getattr(args, "require_parquet", False)),
+                        require_canonical_jsonl=bool(
+                            getattr(args, "require_canonical_jsonl", False)
+                        ),
                         required_tables=(EVENT_PROPS_TABLE,),
                     )
                     row_issues.extend(derived_issues)
@@ -1504,6 +1537,9 @@ def _cmd_data_verify(args: argparse.Namespace) -> int:
         "issue_count": issue_count,
         "require_complete": bool(getattr(args, "require_complete", False)),
         "require_parquet": bool(getattr(args, "require_parquet", False)),
+        "require_canonical_jsonl": bool(getattr(args, "require_canonical_jsonl", False)),
+        "allow_incomplete_days": sorted(allow_incomplete_days),
+        "allow_incomplete_reasons": sorted(allow_incomplete_reasons),
         "days": day_reports,
         "generated_at_utc": iso_z(_utc_now()),
     }
@@ -1513,13 +1549,14 @@ def _cmd_data_verify(args: argparse.Namespace) -> int:
     else:
         print(
             "dataset_id={} checked_days={} checked_complete_days={} issue_count={} "
-            "require_complete={} require_parquet={}".format(
+            "require_complete={} require_parquet={} require_canonical_jsonl={}".format(
                 dataset_id_value,
                 len(selected_days),
                 checked_complete_days,
                 issue_count,
                 str(bool(getattr(args, "require_complete", False))).lower(),
                 str(bool(getattr(args, "require_parquet", False))).lower(),
+                str(bool(getattr(args, "require_canonical_jsonl", False))).lower(),
             )
         )
         for row in day_reports:
@@ -1539,6 +1576,192 @@ def _cmd_data_verify(args: argparse.Namespace) -> int:
                     int(row.get("issue_count", 0)),
                     issue_codes,
                 )
+            )
+
+    return 2 if issue_count else 0
+
+
+def _cmd_data_repair_derived(args: argparse.Namespace) -> int:
+    data_root = Path(os.environ.get("PROP_EV_DATA_DIR", "data/odds_api"))
+    dataset_id_value = str(getattr(args, "dataset_id", "")).strip()
+    if not dataset_id_value:
+        raise CLIError("--dataset-id is required")
+
+    _load_dataset_spec_or_error(data_root, dataset_id_value)
+    available_days = _dataset_day_names(data_root, dataset_id_value)
+    from_day = str(getattr(args, "from_day", "")).strip()
+    to_day = str(getattr(args, "to_day", "")).strip()
+    if (from_day and not to_day) or (to_day and not from_day):
+        raise CLIError("--from and --to must be provided together")
+
+    if from_day and to_day:
+        selected_days = _resolve_days(
+            days=1,
+            from_day=from_day,
+            to_day=to_day,
+            tz_name=str(getattr(args, "tz_name", "America/New_York")),
+        )
+    else:
+        selected_days = available_days
+
+    day_reports: list[dict[str, Any]] = []
+    issue_count = 0
+    repaired_days = 0
+    skipped_incomplete_days = 0
+    for day in selected_days:
+        status = _load_day_status_for_dataset(
+            data_root,
+            dataset_id_value=dataset_id_value,
+            day=day,
+        )
+        if not isinstance(status, dict):
+            issues = [
+                {
+                    "code": "missing_day_status",
+                    "detail": (
+                        _dataset_days_dir(data_root, dataset_id_value) / f"{day}.json"
+                    ).as_posix(),
+                }
+            ]
+            issue_count += len(issues)
+            day_reports.append(
+                {
+                    "day": day,
+                    "status": "error",
+                    "snapshot_id": "",
+                    "jsonl_rewritten": 0,
+                    "parquet_written": 0,
+                    "issue_count": len(issues),
+                    "issues": issues,
+                }
+            )
+            continue
+
+        row = _day_row_from_status(day, status)
+        if not bool(row.get("complete", False)):
+            skipped_incomplete_days += 1
+            day_reports.append(
+                {
+                    "day": day,
+                    "status": "skipped_incomplete",
+                    "snapshot_id": str(row.get("snapshot_id", "")),
+                    "reason": _incomplete_reason_code(row),
+                    "jsonl_rewritten": 0,
+                    "parquet_written": 0,
+                    "issue_count": 0,
+                    "issues": [],
+                }
+            )
+            continue
+
+        snapshot_id = str(row.get("snapshot_id", "")).strip()
+        if not snapshot_id:
+            issues = [{"code": "missing_snapshot_id", "detail": day}]
+            issue_count += len(issues)
+            day_reports.append(
+                {
+                    "day": day,
+                    "status": "error",
+                    "snapshot_id": "",
+                    "jsonl_rewritten": 0,
+                    "parquet_written": 0,
+                    "issue_count": len(issues),
+                    "issues": issues,
+                }
+            )
+            continue
+
+        snapshot_dir = data_root / "snapshots" / snapshot_id
+        if not snapshot_dir.exists():
+            issues = [
+                {
+                    "code": "missing_snapshot_dir",
+                    "detail": snapshot_dir.as_posix(),
+                }
+            ]
+            issue_count += len(issues)
+            day_reports.append(
+                {
+                    "day": day,
+                    "status": "error",
+                    "snapshot_id": snapshot_id,
+                    "jsonl_rewritten": 0,
+                    "parquet_written": 0,
+                    "issue_count": len(issues),
+                    "issues": issues,
+                }
+            )
+            continue
+
+        try:
+            repair_report = repair_snapshot_derived_contracts(snapshot_dir)
+        except (FileNotFoundError, ValueError) as exc:
+            issues = [{"code": "repair_failed", "detail": str(exc)}]
+            issue_count += len(issues)
+            day_reports.append(
+                {
+                    "day": day,
+                    "status": "error",
+                    "snapshot_id": snapshot_id,
+                    "jsonl_rewritten": 0,
+                    "parquet_written": 0,
+                    "issue_count": len(issues),
+                    "issues": issues,
+                }
+            )
+            continue
+
+        issues = verify_snapshot_derived_contracts(
+            snapshot_dir=snapshot_dir,
+            require_parquet=True,
+            require_canonical_jsonl=True,
+            required_tables=(EVENT_PROPS_TABLE,),
+        )
+        issue_count += len(issues)
+        repaired_days += 1
+        day_reports.append(
+            {
+                "day": day,
+                "status": "repaired" if not issues else "repaired_with_issues",
+                "snapshot_id": snapshot_id,
+                "jsonl_rewritten": len(repair_report.get("jsonl_rewritten", [])),
+                "parquet_written": len(repair_report.get("parquet_written", [])),
+                "issue_count": len(issues),
+                "issues": issues,
+            }
+        )
+
+    payload = {
+        "dataset_id": dataset_id_value,
+        "selected_days": len(selected_days),
+        "repaired_days": repaired_days,
+        "skipped_incomplete_days": skipped_incomplete_days,
+        "issue_count": issue_count,
+        "days": day_reports,
+        "generated_at_utc": iso_z(_utc_now()),
+    }
+
+    if bool(getattr(args, "json_output", False)):
+        print(json.dumps(payload, sort_keys=True))
+    else:
+        print(
+            f"dataset_id={dataset_id_value} selected_days={len(selected_days)} "
+            f"repaired_days={repaired_days} skipped_incomplete_days={skipped_incomplete_days} "
+            f"issue_count={issue_count}"
+        )
+        for row in day_reports:
+            issue_codes = ",".join(
+                str(item.get("code", ""))
+                for item in row.get("issues", [])
+                if isinstance(item, dict) and str(item.get("code", "")).strip()
+            )
+            print(
+                f"day={str(row.get('day', ''))} "
+                f"status={str(row.get('status', ''))} "
+                f"snapshot_id={str(row.get('snapshot_id', ''))} "
+                f"jsonl_rewritten={int(row.get('jsonl_rewritten', 0))} "
+                f"parquet_written={int(row.get('parquet_written', 0))} "
+                f"issues={int(row.get('issue_count', 0))} issue_codes={issue_codes}"
             )
 
     return 2 if issue_count else 0
@@ -4013,6 +4236,39 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Fail when complete-day snapshots are missing required parquet mirrors",
     )
     data_verify.add_argument(
+        "--require-canonical-jsonl",
+        action="store_true",
+        help="Fail when complete-day snapshots have non-canonical derived JSONL rows",
+    )
+    data_verify.add_argument(
+        "--allow-incomplete-day",
+        action="append",
+        default=[],
+        help="Allow one incomplete day (repeatable, YYYY-MM-DD)",
+    )
+    data_verify.add_argument(
+        "--allow-incomplete-reason",
+        action="append",
+        default=[],
+        help="Allow incomplete reason code (repeatable, supports comma-separated values)",
+    )
+    data_verify.add_argument(
+        "--json",
+        dest="json_output",
+        action="store_true",
+        help="Emit machine-readable JSON payload",
+    )
+
+    data_repair = data_subparsers.add_parser(
+        "repair-derived",
+        help="Canonicalize derived JSONL and rebuild parquet for complete dataset days",
+    )
+    data_repair.set_defaults(func=_cmd_data_repair_derived)
+    data_repair.add_argument("--dataset-id", required=True)
+    data_repair.add_argument("--from", dest="from_day", default="")
+    data_repair.add_argument("--to", dest="to_day", default="")
+    data_repair.add_argument("--tz", dest="tz_name", default="America/New_York")
+    data_repair.add_argument(
         "--json",
         dest="json_output",
         action="store_true",

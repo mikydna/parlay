@@ -79,6 +79,12 @@ def _load_jsonl(path: Path) -> list[dict[str, Any]]:
     return rows
 
 
+def _write_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
+    lines = [f"{json.dumps(row, sort_keys=True, ensure_ascii=True)}\n" for row in rows]
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("".join(lines), encoding="utf-8")
+
+
 def _enforce_schema(table_name: str, frame: pl.DataFrame) -> pl.DataFrame:
     schema = _TABLE_SCHEMAS[table_name]
     columns = [name for name, _ in schema]
@@ -125,6 +131,7 @@ def verify_snapshot_derived_contracts(
     *,
     snapshot_dir: Path,
     require_parquet: bool = False,
+    require_canonical_jsonl: bool = True,
     required_tables: tuple[str, ...] = (),
 ) -> list[dict[str, str]]:
     """Verify canonical derived-table contracts and jsonl/parquet parity."""
@@ -191,7 +198,7 @@ def verify_snapshot_derived_contracts(
             )
             continue
 
-        if rows != canonical_rows:
+        if require_canonical_jsonl and rows != canonical_rows:
             issues.append(
                 {
                     "code": "jsonl_noncanonical",
@@ -224,6 +231,30 @@ def verify_snapshot_derived_contracts(
             )
 
     return issues
+
+
+def repair_snapshot_derived_contracts(snapshot_dir: Path) -> dict[str, list[Path]]:
+    """Repair known derived JSONL tables to canonical order and regenerate parquet mirrors."""
+    derived_dir = snapshot_dir / "derived"
+    if not derived_dir.exists():
+        raise FileNotFoundError(f"missing derived directory: {derived_dir}")
+
+    rewritten_jsonl: list[Path] = []
+    for table_name in sorted(_TABLE_SCHEMAS.keys()):
+        jsonl_path = derived_dir / f"{table_name}.jsonl"
+        if not jsonl_path.exists():
+            continue
+        rows = _load_jsonl(jsonl_path)
+        canonical_rows = _canonical_rows_for_table(table_name, rows)
+        if rows != canonical_rows:
+            _write_jsonl(jsonl_path, canonical_rows)
+            rewritten_jsonl.append(jsonl_path)
+
+    parquet_written = lake_snapshot_derived(snapshot_dir)
+    return {
+        "jsonl_rewritten": rewritten_jsonl,
+        "parquet_written": parquet_written,
+    }
 
 
 def lake_snapshot_derived(snapshot_dir: Path) -> list[Path]:

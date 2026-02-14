@@ -66,7 +66,6 @@ uv run prop-ev data status --dataset-id <DATASET_ID> --from 2026-01-22 --to 2026
   - `<odds_data_dir>/snapshots/<snapshot_id>/derived/event_props.jsonl`
 - Strategy outputs:
   - `<REPORTS_DIR>/by-snapshot/<report_snapshot>/strategy-report.json`
-  - `<REPORTS_DIR>/by-snapshot/<report_snapshot>/strategy-report.md`
   - `<REPORTS_DIR>/by-snapshot/<report_snapshot>/backtest-seed.jsonl`
   - `<REPORTS_DIR>/by-snapshot/<report_snapshot>/backtest-results-template.csv`
   - `<REPORTS_DIR>/by-snapshot/<report_snapshot>/backtest-readiness.json`

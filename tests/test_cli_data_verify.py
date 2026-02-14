@@ -153,3 +153,173 @@ def test_data_verify_require_complete_fails_on_incomplete_day(
     issues = first_day.get("issues", [])
     assert isinstance(issues, list)
     assert issues and issues[0]["code"] == "incomplete_day"
+
+
+def test_data_verify_allowlists_incomplete_day_and_reason(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    data_root = tmp_path / "data" / "odds_api"
+
+    spec = DatasetSpec(
+        sport_key="basketball_nba",
+        markets=["player_points"],
+        regions="us",
+        bookmakers="draftkings",
+        include_links=False,
+        include_sids=False,
+    )
+    save_dataset_spec(data_root, spec)
+
+    day = "2026-02-13"
+    snapshot_id = snapshot_id_for_day(spec, day)
+    save_day_status(data_root, spec, day, _incomplete_status(day=day, snapshot_id=snapshot_id))
+
+    code_by_day = main(
+        [
+            "--data-dir",
+            str(data_root),
+            "data",
+            "verify",
+            "--dataset-id",
+            dataset_id(spec),
+            "--from",
+            day,
+            "--to",
+            day,
+            "--require-complete",
+            "--allow-incomplete-day",
+            day,
+            "--json",
+        ]
+    )
+    assert code_by_day == 0
+    payload_by_day = json.loads(capsys.readouterr().out)
+    assert payload_by_day["issue_count"] == 0
+
+    code_by_reason = main(
+        [
+            "--data-dir",
+            str(data_root),
+            "data",
+            "verify",
+            "--dataset-id",
+            dataset_id(spec),
+            "--from",
+            day,
+            "--to",
+            day,
+            "--require-complete",
+            "--allow-incomplete-reason",
+            "missing_events_list",
+            "--json",
+        ]
+    )
+    assert code_by_reason == 0
+    payload_by_reason = json.loads(capsys.readouterr().out)
+    assert payload_by_reason["issue_count"] == 0
+
+
+def test_data_verify_require_canonical_jsonl_is_opt_in(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    data_root = tmp_path / "data" / "odds_api"
+
+    spec = DatasetSpec(
+        sport_key="basketball_nba",
+        markets=["player_points"],
+        regions="us",
+        bookmakers="draftkings",
+        include_links=False,
+        include_sids=False,
+    )
+    save_dataset_spec(data_root, spec)
+
+    day = "2026-02-14"
+    snapshot_id = snapshot_id_for_day(spec, day)
+    store = SnapshotStore(data_root)
+    snapshot_dir = store.ensure_snapshot(snapshot_id)
+    store.write_jsonl(
+        snapshot_dir / "derived" / "event_props.jsonl",
+        [
+            {
+                "provider": "odds_api",
+                "snapshot_id": snapshot_id,
+                "schema_version": 1,
+                "event_id": "event-2",
+                "market": "player_points",
+                "player": "Player B",
+                "side": "Under",
+                "price": "-115",
+                "point": "21.5",
+                "book": "draftkings",
+                "last_update": "2026-02-14T18:00:00Z",
+                "link": "",
+            },
+            {
+                "provider": "odds_api",
+                "snapshot_id": snapshot_id,
+                "schema_version": 1,
+                "event_id": "event-1",
+                "market": "player_points",
+                "player": "Player A",
+                "side": "Over",
+                "price": -105,
+                "point": 20.5,
+                "book": "draftkings",
+                "last_update": "2026-02-14T18:00:00Z",
+                "link": "",
+            },
+        ],
+    )
+    assert (
+        main(["--data-dir", str(data_root), "snapshot", "lake", "--snapshot-id", snapshot_id]) == 0
+    )
+    _ = capsys.readouterr()
+    save_day_status(data_root, spec, day, _complete_status(day=day, snapshot_id=snapshot_id))
+
+    code_without_flag = main(
+        [
+            "--data-dir",
+            str(data_root),
+            "data",
+            "verify",
+            "--dataset-id",
+            dataset_id(spec),
+            "--from",
+            day,
+            "--to",
+            day,
+            "--require-complete",
+            "--require-parquet",
+            "--json",
+        ]
+    )
+    assert code_without_flag == 0
+    payload_without_flag = json.loads(capsys.readouterr().out)
+    assert payload_without_flag["issue_count"] == 0
+
+    code_with_flag = main(
+        [
+            "--data-dir",
+            str(data_root),
+            "data",
+            "verify",
+            "--dataset-id",
+            dataset_id(spec),
+            "--from",
+            day,
+            "--to",
+            day,
+            "--require-complete",
+            "--require-parquet",
+            "--require-canonical-jsonl",
+            "--json",
+        ]
+    )
+    assert code_with_flag == 2
+    payload_with_flag = json.loads(capsys.readouterr().out)
+    assert payload_with_flag["issue_count"] == 1
+    issues = payload_with_flag["days"][0]["issues"]
+    assert issues and issues[0]["code"] == "jsonl_noncanonical"
