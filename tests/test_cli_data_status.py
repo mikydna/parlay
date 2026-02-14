@@ -393,3 +393,73 @@ def test_data_done_days_default_output_lists_days(
     assert "dataset_id=" in output
     assert "complete_days=2026-02-20" in output
     assert "incomplete_days=2026-02-21" in output
+    assert "preflight_pass=false" in output
+
+
+def test_data_done_days_allowlist_passes_preflight_gate(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    data_root = tmp_path / "data" / "odds_api"
+
+    spec = DatasetSpec(
+        sport_key="basketball_nba",
+        markets=["player_points"],
+        regions="us",
+        bookmakers="draftkings,fanduel",
+        include_links=False,
+        include_sids=False,
+        historical=True,
+    )
+    save_dataset_spec(data_root, spec)
+    save_day_status(
+        data_root,
+        spec,
+        "2026-01-24",
+        _status_payload(
+            day="2026-01-24",
+            complete=False,
+            missing_count=1,
+            total_events=7,
+            error="Client error '404 Not Found' for url 'https://api.the-odds-api.com/v4/...' ",
+        ),
+    )
+    save_day_status(
+        data_root,
+        spec,
+        "2026-01-25",
+        _status_payload(
+            day="2026-01-25",
+            complete=False,
+            missing_count=2,
+            total_events=8,
+            error="Client error '404 Not Found' for url 'https://api.the-odds-api.com/v4/...' ",
+        ),
+    )
+
+    code = main(
+        [
+            "--data-dir",
+            str(data_root),
+            "data",
+            "done-days",
+            "--dataset-id",
+            dataset_id(spec),
+            "--from",
+            "2026-01-24",
+            "--to",
+            "2026-01-25",
+            "--allow-incomplete-day",
+            "2026-01-25",
+            "--allow-incomplete-reason",
+            "upstream_404",
+            "--require-complete",
+            "--json",
+        ]
+    )
+    assert code == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["preflight_pass"] is True
+    assert payload["allowed_incomplete_count"] == 2
+    assert payload["disallowed_incomplete_count"] == 0
+    assert payload["disallowed_incomplete_reason_counts"] == {}

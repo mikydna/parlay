@@ -1448,6 +1448,39 @@ def _cmd_data_done_days(args: argparse.Namespace) -> int:
     payload["available_day_count"] = len(available_days)
     payload["available_from_day"] = available_days[0] if available_days else ""
     payload["available_to_day"] = available_days[-1] if available_days else ""
+    allow_incomplete_days = _parse_allow_incomplete_days(
+        [str(value) for value in getattr(args, "allow_incomplete_day", [])]
+    )
+    allow_incomplete_reasons = _parse_allow_incomplete_reasons(
+        [str(value) for value in getattr(args, "allow_incomplete_reason", [])]
+    )
+    disallowed_days: list[str] = []
+    disallowed_reason_counts: Counter[str] = Counter()
+    allowed_incomplete_count = 0
+    for row in rows:
+        if bool(row.get("complete", False)):
+            continue
+        day = str(row.get("day", "")).strip()
+        reason = _incomplete_reason_code(row)
+        allowed = False
+        if day and day in allow_incomplete_days:
+            allowed = True
+        if reason and reason in allow_incomplete_reasons:
+            allowed = True
+        if allowed:
+            allowed_incomplete_count += 1
+            continue
+        if day:
+            disallowed_days.append(day)
+        disallowed_reason_counts[reason] += 1
+
+    payload["allowed_incomplete_days"] = sorted(allow_incomplete_days)
+    payload["allowed_incomplete_reasons"] = sorted(allow_incomplete_reasons)
+    payload["allowed_incomplete_count"] = allowed_incomplete_count
+    payload["disallowed_incomplete_days"] = sorted(disallowed_days)
+    payload["disallowed_incomplete_count"] = len(disallowed_days)
+    payload["disallowed_incomplete_reason_counts"] = dict(sorted(disallowed_reason_counts.items()))
+    payload["preflight_pass"] = len(disallowed_days) == 0
 
     if bool(getattr(args, "json_output", False)):
         print(json.dumps(payload, sort_keys=True))
@@ -1472,8 +1505,21 @@ def _cmd_data_done_days(args: argparse.Namespace) -> int:
         if isinstance(reason_counts, dict):
             for reason, count in sorted(reason_counts.items()):
                 print(f"incomplete_reason={reason} count={count}")
+        disallowed_reason_counts_payload = payload.get("disallowed_incomplete_reason_counts", {})
+        if isinstance(disallowed_reason_counts_payload, dict):
+            for reason, count in sorted(disallowed_reason_counts_payload.items()):
+                print(f"disallowed_incomplete_reason={reason} count={count}")
+        print(
+            "preflight_pass={} disallowed_incomplete_count={}".format(
+                str(bool(payload.get("preflight_pass", False))).lower(),
+                int(payload.get("disallowed_incomplete_count", 0)),
+            )
+        )
 
-    if bool(getattr(args, "require_complete", False)) and int(payload["incomplete_count"]) > 0:
+    if (
+        bool(getattr(args, "require_complete", False))
+        and int(payload.get("disallowed_incomplete_count", 0)) > 0
+    ):
         return 2
     return 0
 
@@ -4810,9 +4856,21 @@ def _build_parser() -> argparse.ArgumentParser:
     data_done_days.add_argument("--to", dest="to_day", default="")
     data_done_days.add_argument("--tz", dest="tz_name", default="America/New_York")
     data_done_days.add_argument(
+        "--allow-incomplete-day",
+        action="append",
+        default=[],
+        help="Allow one incomplete day (repeatable, YYYY-MM-DD).",
+    )
+    data_done_days.add_argument(
+        "--allow-incomplete-reason",
+        action="append",
+        default=[],
+        help="Allow incomplete reason code (repeatable, supports comma-separated values).",
+    )
+    data_done_days.add_argument(
         "--require-complete",
         action="store_true",
-        help="Exit 2 when any selected day is incomplete.",
+        help="Exit 2 when any selected day is incomplete after allowlist filtering.",
     )
     data_done_days.add_argument(
         "--json",

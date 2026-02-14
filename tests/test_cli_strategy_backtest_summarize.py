@@ -35,6 +35,21 @@ def _complete_day_status(*, day: str, snapshot_id_for_day: str) -> dict[str, obj
     }
 
 
+def _extract_output_path(stdout: str, *, key: str) -> str:
+    prefix = f"{key}="
+    for line in stdout.splitlines():
+        if line.startswith(prefix):
+            return line.split("=", 1)[1].strip()
+    return ""
+
+
+def _canonical_scoreboard_payload(payload: dict[str, object]) -> dict[str, object]:
+    normalized = dict(payload)
+    normalized.pop("generated_at_utc", None)
+    normalized.pop("analysis_run_id", None)
+    return normalized
+
+
 def test_strategy_backtest_summarize_all_complete_days_aggregates_rows(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
@@ -396,3 +411,89 @@ def test_strategy_backtest_summarize_writes_power_guidance_for_complete_days(
     analysis_payload = json.loads(Path(analysis_path).read_text(encoding="utf-8"))
     assert analysis_payload["report_kind"] == "aggregate_scoreboard"
     assert analysis_payload["analysis_run_id"] == "eval-smoke"
+
+
+def test_strategy_backtest_summarize_analysis_scoreboard_is_deterministic(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    data_root = tmp_path / "data" / "odds_api"
+    store = SnapshotStore(data_root)
+    spec = DatasetSpec(
+        sport_key="basketball_nba",
+        markets=["player_points"],
+        regions="us",
+        bookmakers="draftkings,fanduel",
+        include_links=False,
+        include_sids=False,
+        historical=True,
+        historical_anchor_hour_local=12,
+        historical_pre_tip_minutes=60,
+    )
+    save_dataset_spec(data_root, spec)
+
+    snapshot_day_one = "day-a-2026-02-01"
+    snapshot_day_two = "day-b-2026-02-02"
+    store.ensure_snapshot(snapshot_day_one)
+    store.ensure_snapshot(snapshot_day_two)
+    save_day_status(
+        data_root,
+        spec,
+        "2026-02-01",
+        _complete_day_status(day="2026-02-01", snapshot_id_for_day=snapshot_day_one),
+    )
+    save_day_status(
+        data_root,
+        spec,
+        "2026-02-02",
+        _complete_day_status(day="2026-02-02", snapshot_id_for_day=snapshot_day_two),
+    )
+    for snapshot_id, result in [(snapshot_day_one, "win"), (snapshot_day_two, "loss")]:
+        reports_dir = snapshot_reports_dir(store, snapshot_id)
+        _write_backtest_csv(
+            reports_dir / "backtest-results-template.s008.csv",
+            [
+                {
+                    "snapshot_id": snapshot_id,
+                    "strategy_id": "s008",
+                    "market": "player_points",
+                    "recommended_side": "over",
+                    "selected_price_american": 100,
+                    "stake_units": 1,
+                    "result": result,
+                }
+            ],
+        )
+
+    run_ids = ["eval-deterministic-a", "eval-deterministic-b"]
+    analysis_payloads: list[dict[str, object]] = []
+    for run_id in run_ids:
+        code = main(
+            [
+                "--data-dir",
+                str(data_root),
+                "strategy",
+                "backtest-summarize",
+                "--snapshot-id",
+                snapshot_day_two,
+                "--strategies",
+                "s008",
+                "--all-complete-days",
+                "--dataset-id",
+                dataset_id(spec),
+                "--min-graded",
+                "1",
+                "--write-analysis-scoreboard",
+                "--analysis-run-id",
+                run_id,
+            ]
+        )
+        out = capsys.readouterr().out
+        assert code == 0
+        analysis_path = _extract_output_path(out, key="analysis_scoreboard_json")
+        assert analysis_path
+        analysis_payloads.append(json.loads(Path(analysis_path).read_text(encoding="utf-8")))
+
+    assert _canonical_scoreboard_payload(analysis_payloads[0]) == _canonical_scoreboard_payload(
+        analysis_payloads[1]
+    )

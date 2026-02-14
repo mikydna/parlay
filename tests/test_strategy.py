@@ -549,6 +549,96 @@ def test_build_strategy_report_applies_max_picks_and_emits_execution_plan() -> N
     assert report["portfolio_watchlist"][0]["portfolio_reason"] == "portfolio_cap_daily"
 
 
+def test_build_strategy_report_execution_plan_deterministic_except_timestamp() -> None:
+    now_utc = datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    rows = [
+        {
+            "event_id": "event-1",
+            "market": "player_points",
+            "player": "Player A",
+            "point": 22.5,
+            "side": "Over",
+            "price": 120,
+            "book": "book_a",
+            "link": "",
+            "last_update": now_utc,
+        },
+        {
+            "event_id": "event-1",
+            "market": "player_points",
+            "player": "Player A",
+            "point": 22.5,
+            "side": "Under",
+            "price": 120,
+            "book": "book_a",
+            "link": "",
+            "last_update": now_utc,
+        },
+        {
+            "event_id": "event-2",
+            "market": "player_assists",
+            "player": "Player C",
+            "point": 6.5,
+            "side": "Over",
+            "price": 120,
+            "book": "book_a",
+            "link": "",
+            "last_update": now_utc,
+        },
+        {
+            "event_id": "event-2",
+            "market": "player_assists",
+            "player": "Player C",
+            "point": 6.5,
+            "side": "Under",
+            "price": 120,
+            "book": "book_a",
+            "link": "",
+            "last_update": now_utc,
+        },
+    ]
+    kwargs = {
+        "snapshot_id": "snap-det",
+        "manifest": {"requests": {}},
+        "rows": rows,
+        "top_n": 10,
+        "max_picks": 1,
+        "event_context": {
+            "event-1": {
+                "home_team": "Boston Celtics",
+                "away_team": "Miami Heat",
+                "commence_time": now_utc,
+            },
+            "event-2": {
+                "home_team": "New York Knicks",
+                "away_team": "Atlanta Hawks",
+                "commence_time": now_utc,
+            },
+        },
+        "roster": {
+            "status": "ok",
+            "count_teams": 4,
+            "teams": {
+                "boston celtics": {"active": ["playera"], "inactive": [], "all": ["playera"]},
+                "miami heat": {"active": [], "inactive": [], "all": []},
+                "new york knicks": {"active": ["playerc"], "inactive": [], "all": ["playerc"]},
+                "atlanta hawks": {"active": [], "inactive": [], "all": []},
+            },
+        },
+        "injuries": {"official": {"status": "ok", "rows_count": 0, "rows": []}, "secondary": {}},
+        "require_official_injuries": False,
+        "allow_tier_b": True,
+    }
+    report_a = build_strategy_report(**kwargs)
+    report_b = build_strategy_report(**kwargs)
+
+    execution_plan_a = dict(report_a["execution_plan"])
+    execution_plan_b = dict(report_b["execution_plan"])
+    execution_plan_a.pop("generated_at_utc", None)
+    execution_plan_b.pop("generated_at_utc", None)
+    assert execution_plan_a == execution_plan_b
+
+
 def test_build_strategy_report_applies_rolling_prior_adjustment_fields() -> None:
     now_utc = datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
     report = build_strategy_report(

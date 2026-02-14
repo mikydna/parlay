@@ -55,3 +55,5 @@ uv run nba-data minutes-usage \
 Outputs:
 - `predictions.parquet` (per-player/game minutes predictions with errors)
 - `summary.json` (model version, windows, MAE/RMSE/Bias, artifact paths)
+
+Season type matching is normalized, so both `Regular Season` and `regular_season` are accepted.
