@@ -7,6 +7,7 @@ from types import SimpleNamespace
 import pytest
 
 import prop_ev.cli as cli
+from prop_ev import runtime_config
 from prop_ev.cli import main
 from prop_ev.storage import SnapshotStore
 
@@ -30,11 +31,41 @@ def _write_props_snapshot(store: SnapshotStore, snapshot_id: str) -> None:
     )
 
 
+def _set_runtime_config(*, monkeypatch: pytest.MonkeyPatch, tmp_path: Path, data_dir: Path) -> None:
+    config_path = tmp_path / "runtime.toml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "[paths]",
+                f'odds_data_dir = "{data_dir}"',
+                f'nba_data_dir = "{tmp_path / "data" / "nba_data"}"',
+                f'reports_dir = "{tmp_path / "data" / "reports" / "odds"}"',
+                f'runtime_dir = "{tmp_path / "data" / "runtime"}"',
+                'bookmakers_config_path = "config/bookmakers.json"',
+                "",
+                "[odds_api]",
+                'key_files = ["ODDS_API_KEY.ignore"]',
+                "",
+                "[openai]",
+                'key_files = ["OPENAI_KEY.ignore"]',
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(runtime_config, "DEFAULT_CONFIG_PATH", config_path)
+    monkeypatch.setattr(
+        runtime_config,
+        "DEFAULT_LOCAL_OVERRIDE_PATH",
+        tmp_path / "runtime.local.toml",
+    )
+
+
 def test_playbook_run_offline_uses_latest_snapshot(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys
 ) -> None:
     data_dir = tmp_path / "data" / "odds_api"
-    monkeypatch.setenv("PROP_EV_DATA_DIR", str(data_dir))
+    _set_runtime_config(monkeypatch=monkeypatch, tmp_path=tmp_path, data_dir=data_dir)
     monkeypatch.setenv("ODDS_API_KEY", "odds-test")
 
     store = SnapshotStore(data_dir)
@@ -73,7 +104,7 @@ def test_playbook_run_live_mode_creates_snapshot(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys
 ) -> None:
     data_dir = tmp_path / "data" / "odds_api"
-    monkeypatch.setenv("PROP_EV_DATA_DIR", str(data_dir))
+    _set_runtime_config(monkeypatch=monkeypatch, tmp_path=tmp_path, data_dir=data_dir)
     monkeypatch.setenv("ODDS_API_KEY", "odds-test")
 
     store = SnapshotStore(data_dir)
@@ -139,7 +170,7 @@ def test_playbook_run_fails_when_live_snapshot_fails(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys
 ) -> None:
     data_dir = tmp_path / "data" / "odds_api"
-    monkeypatch.setenv("PROP_EV_DATA_DIR", str(data_dir))
+    _set_runtime_config(monkeypatch=monkeypatch, tmp_path=tmp_path, data_dir=data_dir)
     monkeypatch.setenv("ODDS_API_KEY", "odds-test")
 
     class FakeOddsClient:
@@ -175,7 +206,7 @@ def test_playbook_run_block_paid_uses_latest_snapshot(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys
 ) -> None:
     data_dir = tmp_path / "data" / "odds_api"
-    monkeypatch.setenv("PROP_EV_DATA_DIR", str(data_dir))
+    _set_runtime_config(monkeypatch=monkeypatch, tmp_path=tmp_path, data_dir=data_dir)
     monkeypatch.setenv("ODDS_API_KEY", "odds-test")
 
     store = SnapshotStore(data_dir)
@@ -236,7 +267,7 @@ def test_playbook_run_exit_on_no_games_returns_early(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys
 ) -> None:
     data_dir = tmp_path / "data" / "odds_api"
-    monkeypatch.setenv("PROP_EV_DATA_DIR", str(data_dir))
+    _set_runtime_config(monkeypatch=monkeypatch, tmp_path=tmp_path, data_dir=data_dir)
     monkeypatch.setenv("ODDS_API_KEY", "odds-test")
 
     class FakeOddsClient:
@@ -282,7 +313,7 @@ def test_playbook_run_context_preflight_official_missing_hard_fails(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys
 ) -> None:
     data_dir = tmp_path / "data" / "odds_api"
-    monkeypatch.setenv("PROP_EV_DATA_DIR", str(data_dir))
+    _set_runtime_config(monkeypatch=monkeypatch, tmp_path=tmp_path, data_dir=data_dir)
     monkeypatch.setenv("ODDS_API_KEY", "odds-test")
 
     store = SnapshotStore(data_dir)
@@ -348,7 +379,7 @@ def test_playbook_run_context_preflight_allows_secondary_with_explicit_flag(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys
 ) -> None:
     data_dir = tmp_path / "data" / "odds_api"
-    monkeypatch.setenv("PROP_EV_DATA_DIR", str(data_dir))
+    _set_runtime_config(monkeypatch=monkeypatch, tmp_path=tmp_path, data_dir=data_dir)
     monkeypatch.setenv("ODDS_API_KEY", "odds-test")
 
     store = SnapshotStore(data_dir)

@@ -32,11 +32,9 @@ def _status_payload(
 
 def test_data_status_json_summary_reports_completion_and_reasons(
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     data_root = tmp_path / "data" / "odds_api"
-    monkeypatch.setenv("PROP_EV_DATA_DIR", str(data_root))
 
     spec = DatasetSpec(
         sport_key="basketball_nba",
@@ -98,6 +96,8 @@ def test_data_status_json_summary_reports_completion_and_reasons(
 
     code = main(
         [
+            "--data-dir",
+            str(data_root),
             "data",
             "status",
             "--sport-key",
@@ -148,11 +148,9 @@ def test_data_status_json_summary_reports_completion_and_reasons(
 
 def test_data_status_default_output_lines(
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     data_root = tmp_path / "data" / "odds_api"
-    monkeypatch.setenv("PROP_EV_DATA_DIR", str(data_root))
 
     spec = DatasetSpec(
         sport_key="basketball_nba",
@@ -171,6 +169,8 @@ def test_data_status_default_output_lines(
 
     code = main(
         [
+            "--data-dir",
+            str(data_root),
             "data",
             "status",
             "--sport-key",
@@ -194,11 +194,9 @@ def test_data_status_default_output_lines(
 
 def test_data_status_with_dataset_id_uses_stored_spec(
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     data_root = tmp_path / "data" / "odds_api"
-    monkeypatch.setenv("PROP_EV_DATA_DIR", str(data_root))
 
     stored_spec = DatasetSpec(
         sport_key="basketball_nba",
@@ -221,6 +219,8 @@ def test_data_status_with_dataset_id_uses_stored_spec(
 
     code = main(
         [
+            "--data-dir",
+            str(data_root),
             "data",
             "status",
             "--dataset-id",
@@ -252,11 +252,9 @@ def test_data_status_with_dataset_id_uses_stored_spec(
 
 def test_data_status_json_summary_warns_for_missing_spec_dataset(
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     data_root = tmp_path / "data" / "odds_api"
-    monkeypatch.setenv("PROP_EV_DATA_DIR", str(data_root))
 
     existing_spec = DatasetSpec(
         sport_key="basketball_nba",
@@ -276,6 +274,8 @@ def test_data_status_json_summary_warns_for_missing_spec_dataset(
 
     code = main(
         [
+            "--data-dir",
+            str(data_root),
             "data",
             "status",
             "--sport-key",

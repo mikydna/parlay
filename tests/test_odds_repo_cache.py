@@ -79,6 +79,26 @@ def test_global_cache_hit_materializes_into_snapshot(tmp_path: Path) -> None:
     assert (store.snapshot_dir(snapshot_id) / "requests" / f"{key}.json").exists()
 
 
+def test_global_cache_ignores_legacy_cache_tree(tmp_path: Path) -> None:
+    data_root = tmp_path / "data" / "odds_api"
+    cache = GlobalCacheStore(data_root)
+    key = "legacy-only-key"
+
+    legacy_cache_dir = data_root / "cache"
+    (legacy_cache_dir / "responses").mkdir(parents=True, exist_ok=True)
+    (legacy_cache_dir / "meta").mkdir(parents=True, exist_ok=True)
+    (legacy_cache_dir / "responses" / f"{key}.json").write_text(
+        '{"id":"legacy"}\n', encoding="utf-8"
+    )
+    (legacy_cache_dir / "meta" / f"{key}.json").write_text(
+        '{"status":"legacy"}\n', encoding="utf-8"
+    )
+
+    assert cache.has_response(key) is False
+    assert cache.load_response(key) is None
+    assert cache.load_meta(key) is None
+
+
 def test_paid_miss_no_spend_raises(tmp_path: Path) -> None:
     data_root = tmp_path / "data" / "odds_api"
     store = SnapshotStore(data_root)
