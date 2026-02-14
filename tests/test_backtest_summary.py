@@ -127,6 +127,32 @@ def test_summarize_backtest_rows_roi_and_brier(tmp_path: Path) -> None:
     assert summary.actionability_rate == 0.5
 
 
+def test_summarize_backtest_rows_accepts_decimal_price_strings() -> None:
+    summary = summarize_backtest_rows(
+        [
+            {
+                "selected_price_american": "-106.0",
+                "stake_units": "1",
+                "model_p_hit": "0.6",
+                "result": "win",
+            },
+            {
+                "selected_price_american": "112.0",
+                "stake_units": "1",
+                "model_p_hit": "0.5",
+                "result": "loss",
+            },
+        ],
+        strategy_id="s001",
+        bin_size=0.1,
+    )
+    assert summary.rows_graded == 2
+    assert summary.wins == 1
+    assert summary.losses == 1
+    assert summary.total_stake_units == 2.0
+    assert summary.brier is not None
+
+
 def test_pick_winner_min_graded(tmp_path: Path) -> None:
     a = summarize_backtest_rows(
         [
