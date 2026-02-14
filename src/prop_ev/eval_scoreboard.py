@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import math
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
@@ -9,6 +11,18 @@ DEFAULT_BASELINE_STRATEGY_ID = "s007"
 
 PROMOTION_STATUS_PASS = "pass"
 PROMOTION_STATUS_FAIL = "fail"
+
+POWER_STATUS_PASS = "pass"
+POWER_STATUS_FAIL = "fail"
+POWER_STATUS_UNKNOWN = "unknown"
+POWER_STATUS_BASELINE = "baseline"
+
+POWER_REASON_MISSING_GUIDANCE = "missing_power_guidance"
+POWER_REASON_MISSING_ROW = "missing_power_row"
+POWER_REASON_MISSING_TARGET = "missing_power_target"
+POWER_REASON_INSUFFICIENT_OVERLAP = "insufficient_overlap_for_power"
+POWER_REASON_MISSING_REQUIRED_ROWS = "missing_required_rows"
+POWER_REASON_UNDERPOWERED = "underpowered_for_target_uplift"
 
 
 @dataclass(frozen=True)
@@ -145,3 +159,110 @@ def pick_promotion_winner(strategy_rows: list[dict[str, Any]]) -> dict[str, Any]
         "brier": winner.get("brier"),
         "decision": "selected_by=roi_then_rows_graded_then_ece_then_brier_then_strategy_id",
     }
+
+
+def _match_power_target_row(
+    *,
+    required_days_by_target: list[dict[str, Any]],
+    target_roi_uplift_per_bet: float,
+) -> dict[str, Any] | None:
+    best_row: dict[str, Any] | None = None
+    best_gap = math.inf
+    for row in required_days_by_target:
+        if not isinstance(row, dict):
+            continue
+        target_value = _safe_float(row.get("target_roi_uplift_per_bet"))
+        if target_value is None:
+            continue
+        gap = abs(target_value - target_roi_uplift_per_bet)
+        if gap < best_gap:
+            best_gap = gap
+            best_row = row
+    return best_row
+
+
+def build_power_gate(
+    *,
+    summary: BacktestSummary,
+    power_guidance: Mapping[str, Any] | None,
+    target_roi_uplift_per_bet: float,
+) -> dict[str, Any]:
+    strategy_id = str(summary.strategy_id).strip()
+    rows_graded = int(summary.rows_graded)
+    target_uplift = max(0.0, float(target_roi_uplift_per_bet))
+    result: dict[str, Any] = {
+        "status": POWER_STATUS_UNKNOWN,
+        "reasons": [],
+        "target_roi_uplift_per_bet": target_uplift,
+        "observed_days": None,
+        "required_days": None,
+        "observed_graded_rows": rows_graded,
+        "required_graded_rows": None,
+    }
+
+    if target_uplift <= 0.0:
+        result["reasons"] = [POWER_REASON_MISSING_TARGET]
+        return result
+
+    if not isinstance(power_guidance, Mapping):
+        result["reasons"] = [POWER_REASON_MISSING_GUIDANCE]
+        return result
+
+    baseline_strategy_id = str(power_guidance.get("baseline_strategy_id", "")).strip()
+    if strategy_id and strategy_id == baseline_strategy_id:
+        result["status"] = POWER_STATUS_BASELINE
+        return result
+
+    rows = power_guidance.get("strategies")
+    if not isinstance(rows, list):
+        result["reasons"] = [POWER_REASON_MISSING_GUIDANCE]
+        return result
+
+    matched_row: dict[str, Any] | None = None
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        if str(row.get("strategy_id", "")).strip() == strategy_id:
+            matched_row = row
+            break
+
+    if matched_row is None:
+        result["reasons"] = [POWER_REASON_MISSING_ROW]
+        return result
+
+    overlap_days = int(_safe_float(matched_row.get("overlap_days")) or 0)
+    result["observed_days"] = overlap_days
+    if bool(matched_row.get("insufficient_overlap", False)):
+        result["status"] = POWER_STATUS_FAIL
+        result["reasons"] = [POWER_REASON_INSUFFICIENT_OVERLAP]
+        return result
+
+    required_rows = matched_row.get("required_days_by_target")
+    if not isinstance(required_rows, list):
+        result["reasons"] = [POWER_REASON_MISSING_TARGET]
+        return result
+
+    matched_target = _match_power_target_row(
+        required_days_by_target=required_rows,
+        target_roi_uplift_per_bet=target_uplift,
+    )
+    if matched_target is None:
+        result["reasons"] = [POWER_REASON_MISSING_TARGET]
+        return result
+
+    required_days = int(_safe_float(matched_target.get("required_days")) or 0)
+    required_graded_rows = int(_safe_float(matched_target.get("required_graded_rows")) or 0)
+    result["required_days"] = required_days if required_days > 0 else None
+    result["required_graded_rows"] = required_graded_rows if required_graded_rows > 0 else None
+
+    if required_graded_rows <= 0:
+        result["reasons"] = [POWER_REASON_MISSING_REQUIRED_ROWS]
+        return result
+
+    if rows_graded < required_graded_rows:
+        result["status"] = POWER_STATUS_FAIL
+        result["reasons"] = [POWER_REASON_UNDERPOWERED]
+        return result
+
+    result["status"] = POWER_STATUS_PASS
+    return result

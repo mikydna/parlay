@@ -3220,6 +3220,8 @@ def _render_backtest_summary_markdown(report: dict[str, Any]) -> str:
     lines.append(f"- baseline_strategy_id: `{summary.get('baseline_strategy_id', '')}`")
     lines.append(f"- baseline_found: `{summary.get('baseline_found', False)}`")
     lines.append(f"- require_scored_fraction: `{summary.get('require_scored_fraction', '')}`")
+    lines.append(f"- power_target_uplift_gate: `{summary.get('power_target_uplift_gate', '')}`")
+    lines.append(f"- require_power_gate: `{summary.get('require_power_gate', False)}`")
     if bool(summary.get("all_complete_days", False)):
         lines.append(f"- dataset_id: `{summary.get('dataset_id', '')}`")
         lines.append(f"- complete_days: `{summary.get('complete_days', 0)}`")
@@ -3229,21 +3231,23 @@ def _render_backtest_summary_markdown(report: dict[str, Any]) -> str:
     if rows:
         lines.append(
             "| Strategy | Graded | Scored | ROI | W | L | P | Brier | BrierLow | "
-            "LogLoss | ECE | MCE | AvgQ | AvgEVLow | Actionability | Gate |"
+            "LogLoss | ECE | MCE | AvgQ | AvgEVLow | Actionability | Gate | PowerGate |"
         )
         lines.append(
             "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |"
-            " --- | --- | --- | --- |"
+            " --- | --- | --- | --- | --- |"
         )
         for row in rows:
             if not isinstance(row, dict):
                 continue
             gate = row.get("promotion_gate", {})
             gate_status = gate.get("status", "") if isinstance(gate, dict) else ""
+            power_gate = row.get("power_gate", {})
+            power_gate_status = power_gate.get("status", "") if isinstance(power_gate, dict) else ""
             lines.append(
                 (
                     "| {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} |"
-                    " {} |"
+                    " {} | {} |"
                 ).format(
                     row.get("strategy_id", ""),
                     row.get("rows_graded", 0),
@@ -3261,6 +3265,7 @@ def _render_backtest_summary_markdown(report: dict[str, Any]) -> str:
                     row.get("avg_ev_low", ""),
                     row.get("actionability_rate", ""),
                     gate_status,
+                    power_gate_status,
                 )
             )
         lines.append("")
@@ -3646,7 +3651,7 @@ def _cmd_strategy_abalation(args: argparse.Namespace) -> int:
     cap_workers = max(1, int(getattr(args, "cap_workers", 3)))
     cap_workers = min(cap_workers, len(caps))
 
-    min_graded = max(0, int(getattr(args, "min_graded", 20)))
+    min_graded = max(0, int(getattr(args, "min_graded", 0)))
     bin_size = float(getattr(args, "bin_size", 0.1))
     require_scored_fraction = float(getattr(args, "require_scored_fraction", 0.9))
     ece_slack = float(getattr(args, "ece_slack", 0.01))
@@ -3654,6 +3659,10 @@ def _cmd_strategy_abalation(args: argparse.Namespace) -> int:
     power_alpha = float(getattr(args, "power_alpha", 0.05))
     power_level = float(getattr(args, "power_level", 0.8))
     power_target_uplifts = str(getattr(args, "power_target_uplifts", "0.01,0.02,0.03,0.05")).strip()
+    power_target_uplift_gate = float(getattr(args, "power_target_uplift_gate", 0.02))
+    if power_target_uplift_gate <= 0.0:
+        raise CLIError("--power-target-uplift-gate must be > 0")
+    require_power_gate = bool(getattr(args, "require_power_gate", False))
     calibration_map_mode = str(getattr(args, "calibration_map_mode", "walk_forward")).strip()
     analysis_prefix_raw = str(getattr(args, "analysis_run_prefix", "abalation")).strip()
     analysis_prefix = _sanitize_analysis_run_id(analysis_prefix_raw)
@@ -3937,6 +3946,8 @@ def _cmd_strategy_abalation(args: argparse.Namespace) -> int:
             str(cap),
             "--power-target-uplifts",
             power_target_uplifts,
+            "--power-target-uplift-gate",
+            str(power_target_uplift_gate),
             "--write-analysis-scoreboard",
             "--analysis-run-id",
             analysis_run_id,
@@ -3944,6 +3955,8 @@ def _cmd_strategy_abalation(args: argparse.Namespace) -> int:
             "--calibration-map-mode",
             calibration_map_mode,
         ]
+        if require_power_gate:
+            summarize_cmd.append("--require-power-gate")
         summarize_stdout = _run_cli_subcommand(
             args=summarize_cmd,
             env=cap_env,
@@ -4013,6 +4026,7 @@ def _cmd_strategy_backtest_summarize(args: argparse.Namespace) -> int:
     from prop_ev.calibration_map import CalibrationMode, build_calibration_map
     from prop_ev.eval_scoreboard import (
         PromotionThresholds,
+        build_power_gate,
         build_promotion_gate,
         pick_promotion_winner,
         resolve_baseline_strategy_id,
@@ -4057,6 +4071,10 @@ def _cmd_strategy_backtest_summarize(args: argparse.Namespace) -> int:
         default=[0.01, 0.02, 0.03, 0.05],
         flag_name="--power-target-uplifts",
     )
+    power_target_uplift_gate = float(getattr(args, "power_target_uplift_gate", 0.02))
+    if power_target_uplift_gate <= 0.0:
+        raise CLIError("--power-target-uplift-gate must be > 0")
+    require_power_gate = bool(getattr(args, "require_power_gate", False))
     write_analysis_scoreboard = bool(getattr(args, "write_analysis_scoreboard", False))
     analysis_run_id_raw = str(getattr(args, "analysis_run_id", "")).strip()
     all_complete_days = bool(getattr(args, "all_complete_days", False))
@@ -4188,16 +4206,44 @@ def _cmd_strategy_backtest_summarize(args: argparse.Namespace) -> int:
         ece_slack=ece_slack,
         brier_slack=brier_slack,
     )
+    power_guidance: dict[str, Any] = {}
+    if all_complete_days and baseline_summary is not None and daily_pnl_by_strategy:
+        power_guidance = build_power_guidance(
+            daily_pnl_by_strategy=daily_pnl_by_strategy,
+            baseline_strategy_id=baseline_strategy_id,
+            assumptions=PowerGuidanceAssumptions(
+                alpha=power_alpha,
+                power=power_level,
+                picks_per_day=power_picks_per_day,
+                target_roi_uplifts_per_bet=tuple(power_target_uplifts),
+            ),
+        )
 
     strategy_rows: list[dict[str, Any]] = []
     for summary in computed:
         row = summary.to_dict()
-        row["promotion_gate"] = build_promotion_gate(
+        promotion_gate = build_promotion_gate(
             summary=summary,
             baseline_summary=baseline_summary,
             baseline_required=bool(baseline_strategy_id),
             thresholds=thresholds,
         )
+        row["promotion_gate"] = promotion_gate
+        if power_guidance:
+            power_gate = build_power_gate(
+                summary=summary,
+                power_guidance=power_guidance,
+                target_roi_uplift_per_bet=power_target_uplift_gate,
+            )
+            row["power_gate"] = power_gate
+            if bool(require_power_gate) and power_gate.get("status") == "fail":
+                reasons = promotion_gate.get("reasons", [])
+                if not isinstance(reasons, list):
+                    reasons = []
+                if "underpowered_for_target_uplift" not in reasons:
+                    reasons = [*reasons, "underpowered_for_target_uplift"]
+                promotion_gate["status"] = "fail"
+                promotion_gate["reasons"] = sorted({str(value) for value in reasons if value})
         strategy_rows.append(row)
 
     winner = pick_promotion_winner(strategy_rows)
@@ -4215,24 +4261,15 @@ def _cmd_strategy_backtest_summarize(args: argparse.Namespace) -> int:
             "require_scored_fraction": require_scored_fraction,
             "ece_slack": ece_slack,
             "brier_slack": brier_slack,
+            "power_target_uplift_gate": power_target_uplift_gate,
+            "require_power_gate": require_power_gate,
             **day_coverage,
         },
         "strategies": sorted(strategy_rows, key=lambda row: row.get("strategy_id", "")),
         "winner": winner if winner is not None else {},
     }
-    if all_complete_days and baseline_summary is not None and daily_pnl_by_strategy:
-        power_guidance = build_power_guidance(
-            daily_pnl_by_strategy=daily_pnl_by_strategy,
-            baseline_strategy_id=baseline_strategy_id,
-            assumptions=PowerGuidanceAssumptions(
-                alpha=power_alpha,
-                power=power_level,
-                picks_per_day=power_picks_per_day,
-                target_roi_uplifts_per_bet=tuple(power_target_uplifts),
-            ),
-        )
-        if power_guidance:
-            report["power_guidance"] = power_guidance
+    if power_guidance:
+        report["power_guidance"] = power_guidance
     calibration_map_payload: dict[str, Any] | None = None
     if write_calibration_map and rows_for_map:
         calibration_map_payload = build_calibration_map(
@@ -6023,7 +6060,7 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     strategy_abalation.add_argument("--max-workers", type=int, default=6)
     strategy_abalation.add_argument("--cap-workers", type=int, default=3)
-    strategy_abalation.add_argument("--min-graded", type=int, default=20)
+    strategy_abalation.add_argument("--min-graded", type=int, default=0)
     strategy_abalation.add_argument("--bin-size", type=float, default=0.1)
     strategy_abalation.add_argument("--require-scored-fraction", type=float, default=0.9)
     strategy_abalation.add_argument("--ece-slack", type=float, default=0.01)
@@ -6033,6 +6070,17 @@ def _build_parser() -> argparse.ArgumentParser:
     strategy_abalation.add_argument(
         "--power-target-uplifts",
         default="0.01,0.02,0.03,0.05",
+    )
+    strategy_abalation.add_argument(
+        "--power-target-uplift-gate",
+        type=float,
+        default=0.02,
+        help="Target ROI uplift per bet used for per-strategy power gate status.",
+    )
+    strategy_abalation.add_argument(
+        "--require-power-gate",
+        action="store_true",
+        help="Fail promotion gate when the strategy is underpowered at the selected uplift.",
     )
     strategy_abalation.add_argument(
         "--calibration-map-mode",
@@ -6172,7 +6220,23 @@ def _build_parser() -> argparse.ArgumentParser:
         default="0.01,0.02,0.03,0.05",
         help="Comma-separated ROI uplift targets per bet used in power guidance.",
     )
-    strategy_backtest_summarize.add_argument("--min-graded", type=int, default=200)
+    strategy_backtest_summarize.add_argument(
+        "--power-target-uplift-gate",
+        type=float,
+        default=0.02,
+        help=(
+            "Power gate target ROI uplift per bet used for per-strategy power status "
+            "(requires --all-complete-days)."
+        ),
+    )
+    strategy_backtest_summarize.add_argument(
+        "--require-power-gate",
+        action="store_true",
+        help=(
+            "Fail promotion gate when power gate is underpowered for --power-target-uplift-gate."
+        ),
+    )
+    strategy_backtest_summarize.add_argument("--min-graded", type=int, default=0)
     strategy_backtest_summarize.add_argument("--bin-size", type=float, default=0.05)
     strategy_backtest_summarize.add_argument(
         "--write-calibration-map",
