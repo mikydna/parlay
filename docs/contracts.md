@@ -46,6 +46,9 @@ Candidate pricing-quality fields:
 - `p_hit_high`
 - `ev_low`
 - `ev_high`
+- `baseline_used` (`best_sides`, `best_sides_fallback`, `median_book`, `median_book_interpolated`)
+- `reference_line_method` (`exact`, `interpolated`, `clamped_low`, `clamped_high`, `missing`)
+- `reference_points_count`
 
 ## Brief Artifact Contract
 

@@ -168,3 +168,10 @@ Rollback is low risk:
 - Remove `s008` from strategy registry if needed.
 
 No data migration or odds re-download is required for rollback.
+
+## 12) Current implementation notes
+
+- `median_book` baseline now supports deterministic nearby-line fallback when exact per-book pairs are missing.
+- Candidate rows now include provenance for reference probability selection:
+  - `reference_line_method`
+  - `reference_points_count`
