@@ -35,3 +35,23 @@ play-by-play, possessions, and boxscore lake building.
 `prop-ev` modules (settlement, strategy context, playbook context) should use the unified
 NBA repository interface instead of calling source fetchers directly. This keeps source policy,
 cache behavior, and fallback semantics in one place.
+
+## Minutes/Usage Baseline Artifact
+
+`nba-data` now includes an offline modeling helper to build deterministic minutes baseline artifacts
+from clean parquet:
+
+```bash
+uv run nba-data minutes-usage \
+  --data-dir /path/to/nba_data \
+  --seasons 2025-26 \
+  --season-type \"Regular Season\" \
+  --history-games 10 \
+  --min-history-games 3 \
+  --eval-days 30 \
+  --out-dir reports/analysis/minutes_usage
+```
+
+Outputs:
+- `predictions.parquet` (per-player/game minutes predictions with errors)
+- `summary.json` (model version, windows, MAE/RMSE/Bias, artifact paths)
