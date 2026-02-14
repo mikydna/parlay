@@ -14,6 +14,10 @@ from prop_ev.nba_data.export import export_clean_artifacts, export_raw_archives
 from prop_ev.nba_data.ingest.discover import discover_games
 from prop_ev.nba_data.ingest.fetch import ingest_resources, parse_resources
 from prop_ev.nba_data.io_utils import atomic_write_json
+from prop_ev.nba_data.minutes_usage import (
+    MinutesUsageBuildConfig,
+    build_minutes_usage_baseline_artifact,
+)
 from prop_ev.nba_data.schema_version import SCHEMA_VERSION
 from prop_ev.nba_data.store.layout import build_layout
 from prop_ev.nba_data.store.lock import LockConfig, lock_root
@@ -246,6 +250,48 @@ def _cmd_export_raw_archive(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_minutes_usage_baseline(args: argparse.Namespace) -> int:
+    source_config = load_config(data_dir=getattr(args, "data_dir", None))
+    source_layout = build_layout(source_config.data_dir)
+    out_dir_raw = str(getattr(args, "out_dir", "")).strip()
+    if out_dir_raw:
+        out_dir = Path(out_dir_raw).expanduser()
+    else:
+        out_dir = source_layout.reports_dir / "analysis" / "minutes_usage"
+
+    summary = build_minutes_usage_baseline_artifact(
+        layout=source_layout,
+        config=MinutesUsageBuildConfig(
+            seasons=_parse_seasons(args.seasons),
+            season_type=str(args.season_type),
+            history_games=int(args.history_games),
+            eval_days=int(args.eval_days),
+            min_history_games=int(args.min_history_games),
+            schema_version=int(args.schema_version),
+        ),
+        out_dir=out_dir,
+    )
+
+    if args.json_output:
+        print(json.dumps(summary, sort_keys=True, indent=2))
+    else:
+        metrics_raw = summary.get("metrics")
+        artifacts_raw = summary.get("artifacts")
+        metrics = metrics_raw if isinstance(metrics_raw, dict) else {}
+        artifacts = artifacts_raw if isinstance(artifacts_raw, dict) else {}
+        print(
+            ("run_id={} rows_eval_scored={} mae={} rmse={} bias={} summary={}").format(
+                summary.get("run_id", ""),
+                summary.get("rows_eval_scored", 0),
+                metrics.get("mae"),
+                metrics.get("rmse"),
+                metrics.get("bias"),
+                artifacts.get("summary", ""),
+            )
+        )
+    return 0
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="nba-data")
     subparsers = parser.add_subparsers(dest="command")
@@ -322,6 +368,21 @@ def _build_parser() -> argparse.ArgumentParser:
     export_raw_archive.add_argument("--compression-level", type=int, default=19)
     export_raw_archive.add_argument("--overwrite", action="store_true")
     export_raw_archive.add_argument("--json", dest="json_output", action="store_true")
+
+    minutes_usage = subparsers.add_parser(
+        "minutes-usage",
+        help="Build deterministic minutes/usage baseline artifacts from clean NBA parquet",
+    )
+    minutes_usage.set_defaults(func=_cmd_minutes_usage_baseline)
+    minutes_usage.add_argument("--data-dir", default="")
+    minutes_usage.add_argument("--out-dir", default="")
+    minutes_usage.add_argument("--seasons", default="2023-24,2024-25,2025-26")
+    minutes_usage.add_argument("--season-type", default="Regular Season")
+    minutes_usage.add_argument("--schema-version", type=int, default=SCHEMA_VERSION)
+    minutes_usage.add_argument("--history-games", type=int, default=10)
+    minutes_usage.add_argument("--min-history-games", type=int, default=3)
+    minutes_usage.add_argument("--eval-days", type=int, default=30)
+    minutes_usage.add_argument("--json", dest="json_output", action="store_true")
 
     return parser
 
