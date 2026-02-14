@@ -274,3 +274,110 @@ def test_strategy_backtest_summarize_writes_walk_forward_calibration_map(
     assert strategy_payload["rows_scored"] == 2
     assert strategy_payload["by_day"]["2026-02-01"]["rows_scored"] == 0
     assert strategy_payload["by_day"]["2026-02-02"]["rows_scored"] == 1
+
+
+def test_strategy_backtest_summarize_writes_power_guidance_for_complete_days(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    data_root = tmp_path / "data" / "odds_api"
+    store = SnapshotStore(data_root)
+    spec = DatasetSpec(
+        sport_key="basketball_nba",
+        markets=["player_points"],
+        regions="us",
+        bookmakers="draftkings,fanduel",
+        include_links=False,
+        include_sids=False,
+        historical=True,
+        historical_anchor_hour_local=12,
+        historical_pre_tip_minutes=60,
+    )
+    save_dataset_spec(data_root, spec)
+
+    snapshot_day_one = "day-a-2026-02-01"
+    snapshot_day_two = "day-b-2026-02-02"
+    store.ensure_snapshot(snapshot_day_one)
+    store.ensure_snapshot(snapshot_day_two)
+    save_day_status(
+        data_root,
+        spec,
+        "2026-02-01",
+        _complete_day_status(day="2026-02-01", snapshot_id_for_day=snapshot_day_one),
+    )
+    save_day_status(
+        data_root,
+        spec,
+        "2026-02-02",
+        _complete_day_status(day="2026-02-02", snapshot_id_for_day=snapshot_day_two),
+    )
+
+    for snapshot_id, baseline_result, candidate_result in [
+        (snapshot_day_one, "win", "win"),
+        (snapshot_day_two, "loss", "win"),
+    ]:
+        reports_dir = snapshot_reports_dir(store, snapshot_id)
+        _write_backtest_csv(
+            reports_dir / "backtest-results-template.s007.csv",
+            [
+                {
+                    "snapshot_id": snapshot_id,
+                    "strategy_id": "s007",
+                    "market": "player_points",
+                    "recommended_side": "over",
+                    "selected_price_american": 100,
+                    "stake_units": 1,
+                    "result": baseline_result,
+                }
+            ],
+        )
+        _write_backtest_csv(
+            reports_dir / "backtest-results-template.s010.csv",
+            [
+                {
+                    "snapshot_id": snapshot_id,
+                    "strategy_id": "s010",
+                    "market": "player_points",
+                    "recommended_side": "over",
+                    "selected_price_american": 100,
+                    "stake_units": 1,
+                    "result": candidate_result,
+                }
+            ],
+        )
+
+    code = main(
+        [
+            "--data-dir",
+            str(data_root),
+            "strategy",
+            "backtest-summarize",
+            "--snapshot-id",
+            snapshot_day_two,
+            "--strategies",
+            "s007,s010",
+            "--all-complete-days",
+            "--dataset-id",
+            dataset_id(spec),
+            "--min-graded",
+            "1",
+        ]
+    )
+    out = capsys.readouterr().out
+
+    assert code == 0
+    summary_path = ""
+    for line in out.splitlines():
+        if line.startswith("summary_json="):
+            summary_path = line.split("=", 1)[1].strip()
+            break
+    assert summary_path
+    payload = json.loads(Path(summary_path).read_text(encoding="utf-8"))
+    power_guidance = payload.get("power_guidance", {})
+    assert power_guidance["baseline_strategy_id"] == "s007"
+    strategy_rows = power_guidance.get("strategies", [])
+    assert len(strategy_rows) == 1
+    strategy_row = strategy_rows[0]
+    assert strategy_row["strategy_id"] == "s010"
+    assert strategy_row["overlap_days"] == 2
+    assert strategy_row["required_days_by_target"]
