@@ -71,7 +71,7 @@ def snapshot_reports_dir(
 ) -> Path:
     """Canonical report directory for one snapshot."""
     root = reports_root or report_outputs_root(store)
-    return root / "by-snapshot" / snapshot_report_label(store, snapshot_id)
+    return root / "by-snapshot" / _sanitize_snapshot_label(snapshot_id)
 
 
 def legacy_snapshot_reports_dir(store: SnapshotStore, snapshot_id: str) -> Path:
