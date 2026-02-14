@@ -103,6 +103,9 @@ def test_strategy_backtest_summarize_all_complete_days_aggregates_rows(
             dataset_id(spec),
             "--min-graded",
             "1",
+            "--write-analysis-scoreboard",
+            "--analysis-run-id",
+            "eval-smoke",
         ]
     )
     out = capsys.readouterr().out
@@ -361,6 +364,9 @@ def test_strategy_backtest_summarize_writes_power_guidance_for_complete_days(
             dataset_id(spec),
             "--min-graded",
             "1",
+            "--write-analysis-scoreboard",
+            "--analysis-run-id",
+            "eval-smoke",
         ]
     )
     out = capsys.readouterr().out
@@ -381,3 +387,12 @@ def test_strategy_backtest_summarize_writes_power_guidance_for_complete_days(
     assert strategy_row["strategy_id"] == "s010"
     assert strategy_row["overlap_days"] == 2
     assert strategy_row["required_days_by_target"]
+    analysis_path = ""
+    for line in out.splitlines():
+        if line.startswith("analysis_scoreboard_json="):
+            analysis_path = line.split("=", 1)[1].strip()
+            break
+    assert analysis_path
+    analysis_payload = json.loads(Path(analysis_path).read_text(encoding="utf-8"))
+    assert analysis_payload["report_kind"] == "aggregate_scoreboard"
+    assert analysis_payload["analysis_run_id"] == "eval-smoke"

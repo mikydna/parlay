@@ -191,6 +191,8 @@ uv run prop-ev strategy backtest-summarize \
   --dataset-id <DATASET_ID> \
   --power-picks-per-day 5 \
   --power-target-uplifts 0.01,0.02,0.03,0.05 \
+  --write-analysis-scoreboard \
+  --analysis-run-id eval-scoreboard-max5 \
   --write-calibration-map \
   --calibration-map-mode walk_forward
 ```
@@ -198,6 +200,7 @@ uv run prop-ev strategy backtest-summarize \
 Outputs:
 - `<REPORTS_DIR>/by-snapshot/<snapshot_id>/backtest-summary.json`
 - `<REPORTS_DIR>/by-snapshot/<snapshot_id>/backtest-calibration-map.json` (when `--write-calibration-map` is enabled)
+- `<REPORTS_DIR>/analysis/<run_id>/aggregate-scoreboard.json` (when `--write-analysis-scoreboard` is enabled)
 - `backtest-summary.json` includes `power_guidance` with required-day / required-row estimates versus baseline for each strategy.
 
 Use calibration map during brief render (optional):

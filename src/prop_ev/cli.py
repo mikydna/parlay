@@ -278,6 +278,12 @@ def _parse_positive_float_csv(value: str, *, default: list[float], flag_name: st
     return sorted(set(parsed_values))
 
 
+def _sanitize_analysis_run_id(value: str) -> str:
+    cleaned = re.sub(r"[^A-Za-z0-9._-]+", "-", value.strip())
+    cleaned = re.sub(r"-{2,}", "-", cleaned).strip("._-")
+    return cleaned
+
+
 def _resolve_days(
     *,
     days: int,
@@ -3168,6 +3174,8 @@ def _cmd_strategy_backtest_summarize(args: argparse.Namespace) -> int:
         default=[0.01, 0.02, 0.03, 0.05],
         flag_name="--power-target-uplifts",
     )
+    write_analysis_scoreboard = bool(getattr(args, "write_analysis_scoreboard", False))
+    analysis_run_id_raw = str(getattr(args, "analysis_run_id", "")).strip()
     all_complete_days = bool(getattr(args, "all_complete_days", False))
     write_calibration_map = bool(getattr(args, "write_calibration_map", False))
     calibration_map_mode = (
@@ -3304,6 +3312,8 @@ def _cmd_strategy_backtest_summarize(args: argparse.Namespace) -> int:
 
     winner = pick_promotion_winner(strategy_rows)
     report = {
+        "schema_version": 1,
+        "report_kind": "backtest_summary",
         "generated_at_utc": _iso(_utc_now()),
         "summary": {
             "snapshot_id": snapshot_id,
@@ -3351,6 +3361,8 @@ def _cmd_strategy_backtest_summarize(args: argparse.Namespace) -> int:
     json_path = reports_dir / "backtest-summary.json"
     md_path = reports_dir / "backtest-summary.md"
     calibration_map_path = reports_dir / "backtest-calibration-map.json"
+    analysis_json_path: Path | None = None
+    analysis_md_path: Path | None = None
     json_path.write_text(json.dumps(report, sort_keys=True, indent=2) + "\n", encoding="utf-8")
     if calibration_map_payload is not None:
         calibration_map_path.write_text(
@@ -3364,12 +3376,43 @@ def _cmd_strategy_backtest_summarize(args: argparse.Namespace) -> int:
     elif md_path.exists():
         md_path.unlink()
 
+    if write_analysis_scoreboard:
+        if analysis_run_id_raw:
+            analysis_run_id = _sanitize_analysis_run_id(analysis_run_id_raw)
+            if not analysis_run_id:
+                raise CLIError("--analysis-run-id must contain letters, numbers, '_' '-' or '.'")
+        elif all_complete_days and dataset_id_value:
+            analysis_run_id = f"eval-scoreboard-dataset-{dataset_id_value[:8]}"
+        else:
+            analysis_run_id = f"eval-scoreboard-snapshot-{snapshot_id}"
+
+        analysis_dir = report_outputs_root(store) / "analysis" / analysis_run_id
+        analysis_dir.mkdir(parents=True, exist_ok=True)
+        analysis_json_path = analysis_dir / "aggregate-scoreboard.json"
+        analysis_payload = dict(report)
+        analysis_payload["report_kind"] = "aggregate_scoreboard"
+        analysis_payload["analysis_run_id"] = analysis_run_id
+        analysis_json_path.write_text(
+            json.dumps(analysis_payload, sort_keys=True, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        if write_markdown:
+            analysis_md_path = analysis_dir / "aggregate-scoreboard.md"
+            analysis_md_path.write_text(
+                _render_backtest_summary_markdown(analysis_payload),
+                encoding="utf-8",
+            )
+
     print(f"snapshot_id={snapshot_id}")
     print(f"summary_json={json_path}")
     if calibration_map_payload is not None:
         print(f"calibration_map_json={calibration_map_path}")
     if write_markdown:
         print(f"summary_md={md_path}")
+    if analysis_json_path is not None:
+        print(f"analysis_scoreboard_json={analysis_json_path}")
+    if analysis_md_path is not None:
+        print(f"analysis_scoreboard_md={analysis_md_path}")
     if winner is not None:
         print(
             "winner_strategy_id={} roi={} graded={}".format(
@@ -5109,6 +5152,22 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Write backtest summary markdown artifact (disabled by default).",
     )
+    strategy_backtest_summarize.add_argument(
+        "--write-analysis-scoreboard",
+        action="store_true",
+        help=(
+            "Write aggregate scoreboard artifact under "
+            "`reports/odds/analysis/<run_id>/aggregate-scoreboard.json`."
+        ),
+    )
+    strategy_backtest_summarize.add_argument(
+        "--analysis-run-id",
+        default="",
+        help=(
+            "Optional analysis run id used with --write-analysis-scoreboard. "
+            "When omitted, a deterministic id is derived from dataset/snapshot."
+        ),
+    )
 
     playbook = subparsers.add_parser("playbook", help="Run playbook briefs")
     playbook_subparsers = playbook.add_subparsers(dest="playbook_command")
@@ -5130,7 +5189,12 @@ def _build_parser() -> argparse.ArgumentParser:
         "--include-sids", dest="include_sids", action="store_true", default=True
     )
     playbook_run.add_argument("--no-include-sids", dest="include_sids", action="store_false")
-    playbook_run.add_argument("--max-events", type=int, default=10)
+    playbook_run.add_argument(
+        "--max-events",
+        type=int,
+        default=0,
+        help="Maximum events to fetch for props snapshot (0 means no cap).",
+    )
     playbook_run.add_argument("--max-credits", type=int, default=20)
     playbook_run.add_argument("--force", action="store_true")
     playbook_run.add_argument("--refresh", action="store_true")
@@ -5272,7 +5336,12 @@ def _build_parser() -> argparse.ArgumentParser:
     playbook_discover_execute.add_argument(
         "--no-include-sids", dest="include_sids", action="store_false"
     )
-    playbook_discover_execute.add_argument("--max-events", type=int, default=6)
+    playbook_discover_execute.add_argument(
+        "--max-events",
+        type=int,
+        default=0,
+        help="Maximum events to fetch for discovery/execution snapshots (0 means no cap).",
+    )
     playbook_discover_execute.add_argument("--max-credits", type=int, default=40)
     playbook_discover_execute.add_argument("--force", action="store_true")
     playbook_discover_execute.add_argument("--refresh", action="store_true")
