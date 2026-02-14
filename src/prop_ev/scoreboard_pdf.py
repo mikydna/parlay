@@ -92,18 +92,43 @@ def _strategy_row_cells(row: Mapping[str, Any]) -> list[str]:
     ]
 
 
-def _render_table(headers: Sequence[str], rows: Sequence[Sequence[str]]) -> list[str]:
+def _table_colspec(*, headers: Sequence[str], kind: str) -> str:
+    if kind == "strategies" and len(headers) == 15:
+        return (
+            "@{}L{0.12\\linewidth}R{0.045\\linewidth}R{0.045\\linewidth}R{0.055\\linewidth}"
+            "R{0.06\\linewidth}R{0.035\\linewidth}R{0.035\\linewidth}R{0.035\\linewidth}"
+            "R{0.06\\linewidth}R{0.06\\linewidth}R{0.06\\linewidth}R{0.06\\linewidth}"
+            "R{0.06\\linewidth}R{0.07\\linewidth}L{0.11\\linewidth}@{}"
+        )
+    if kind == "power" and len(headers) == 6:
+        return (
+            "@{}L{0.19\\linewidth}R{0.12\\linewidth}R{0.20\\linewidth}R{0.20\\linewidth}"
+            "R{0.14\\linewidth}R{0.14\\linewidth}@{}"
+        )
+    fallback_cols = ["L{0.16\\linewidth}"] + ["R{0.08\\linewidth}"] * max(0, len(headers) - 1)
+    return "@{}" + "".join(fallback_cols) + "@{}"
+
+
+def _render_table(
+    headers: Sequence[str],
+    rows: Sequence[Sequence[str]],
+    *,
+    kind: str,
+) -> list[str]:
     header_cells = [rf"\textbf{{{escape_latex(cell)}}}" for cell in headers]
     header_row = " & ".join(header_cells) + r" \\"
+    colspec = _table_colspec(headers=headers, kind=kind)
     lines: list[str] = [
-        r"{\scriptsize",
-        r"\setlength{\tabcolsep}{3pt}",
+        r"{\small",
+        r"\setlength{\tabcolsep}{2.5pt}",
         r"\setlength{\LTleft}{0pt}",
         r"\setlength{\LTright}{0pt}",
-        r"\begin{longtable}{lrrrrrrrrrrrrrl}",
+        rf"\begin{{longtable}}{{{colspec}}}",
+        r"\hline",
         header_row,
         r"\hline",
         r"\endfirsthead",
+        r"\hline",
         header_row,
         r"\hline",
         r"\endhead",
@@ -173,6 +198,7 @@ def _render_power_guidance(power_guidance: Mapping[str, Any]) -> list[str]:
                 "RequiredDays",
             ],
             rows,
+            kind="power",
         )
     )
     return lines
@@ -197,11 +223,16 @@ def render_aggregate_scoreboard_latex(analysis_payload: Mapping[str, Any]) -> st
 
     lines: list[str] = [
         r"\documentclass[10pt]{article}",
-        r"\usepackage[margin=0.6in,landscape]{geometry}",
+        r"\usepackage[margin=0.5in,landscape]{geometry}",
         r"\usepackage[T1]{fontenc}",
         r"\usepackage[utf8]{inputenc}",
         r"\usepackage{lmodern}",
         r"\usepackage{longtable}",
+        r"\usepackage{array}",
+        r"\usepackage{ragged2e}",
+        r"\newcolumntype{L}[1]{>{\RaggedRight\arraybackslash}p{#1}}",
+        r"\newcolumntype{R}[1]{>{\RaggedLeft\arraybackslash}p{#1}}",
+        r"\renewcommand{\arraystretch}{1.08}",
         r"\setlength{\parindent}{0pt}",
         r"\setlength{\parskip}{4pt}",
         r"\begin{document}",
@@ -229,6 +260,7 @@ def render_aggregate_scoreboard_latex(analysis_payload: Mapping[str, Any]) -> st
                 "Gate",
             ],
             strategy_rows,
+            kind="strategies",
         )
     )
     if winner:

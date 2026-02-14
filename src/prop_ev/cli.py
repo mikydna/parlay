@@ -3209,6 +3209,11 @@ def _render_backtest_summary_markdown(report: dict[str, Any]) -> str:
     summary = report.get("summary", {}) if isinstance(report.get("summary"), dict) else {}
     rows = report.get("strategies", []) if isinstance(report.get("strategies"), list) else []
     winner = report.get("winner", {}) if isinstance(report.get("winner"), dict) else {}
+    promotion_winner = (
+        report.get("promotion_winner", {})
+        if isinstance(report.get("promotion_winner"), dict)
+        else {}
+    )
 
     lines: list[str] = []
     lines.append("# Backtest Summary")
@@ -3332,6 +3337,15 @@ def _render_backtest_summary_markdown(report: dict[str, Any]) -> str:
         lines.append(f"- strategy_id: `{winner.get('strategy_id', '')}`")
         lines.append(f"- roi: `{winner.get('roi', '')}`")
         lines.append(f"- rows_graded: `{winner.get('rows_graded', 0)}`")
+        lines.append(f"- promotion_gate_status: `{winner.get('promotion_gate_status', '')}`")
+        lines.append("")
+
+    if promotion_winner:
+        lines.append("## Promotion Winner")
+        lines.append("")
+        lines.append(f"- strategy_id: `{promotion_winner.get('strategy_id', '')}`")
+        lines.append(f"- roi: `{promotion_winner.get('roi', '')}`")
+        lines.append(f"- rows_graded: `{promotion_winner.get('rows_graded', 0)}`")
         lines.append("")
 
     return "\n".join(lines)
@@ -4088,6 +4102,7 @@ def _cmd_strategy_backtest_summarize(args: argparse.Namespace) -> int:
         PromotionThresholds,
         build_power_gate,
         build_promotion_gate,
+        pick_execution_winner,
         pick_promotion_winner,
         resolve_baseline_strategy_id,
     )
@@ -4308,7 +4323,8 @@ def _cmd_strategy_backtest_summarize(args: argparse.Namespace) -> int:
                 promotion_gate["reasons"] = sorted({str(value) for value in reasons if value})
         strategy_rows.append(row)
 
-    winner = pick_promotion_winner(strategy_rows)
+    winner = pick_execution_winner(strategy_rows)
+    promotion_winner = pick_promotion_winner(strategy_rows)
     report = {
         "schema_version": 1,
         "report_kind": "backtest_summary",
@@ -4330,6 +4346,7 @@ def _cmd_strategy_backtest_summarize(args: argparse.Namespace) -> int:
         },
         "strategies": sorted(strategy_rows, key=lambda row: row.get("strategy_id", "")),
         "winner": winner if winner is not None else {},
+        "promotion_winner": promotion_winner if promotion_winner is not None else {},
     }
     if power_guidance:
         report["power_guidance"] = power_guidance
@@ -4440,6 +4457,14 @@ def _cmd_strategy_backtest_summarize(args: argparse.Namespace) -> int:
                 winner.get("strategy_id", ""),
                 winner.get("roi", ""),
                 winner.get("rows_graded", 0),
+            )
+        )
+    if promotion_winner is not None:
+        print(
+            "promotion_winner_strategy_id={} roi={} graded={}".format(
+                promotion_winner.get("strategy_id", ""),
+                promotion_winner.get("roi", ""),
+                promotion_winner.get("rows_graded", 0),
             )
         )
     return 0

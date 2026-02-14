@@ -3,6 +3,7 @@ from prop_ev.eval_scoreboard import (
     PromotionThresholds,
     build_power_gate,
     build_promotion_gate,
+    pick_execution_winner,
     pick_promotion_winner,
     resolve_baseline_strategy_id,
 )
@@ -144,6 +145,32 @@ def test_pick_promotion_winner_sorts_deterministically() -> None:
     )
     assert winner is not None
     assert winner["strategy_id"] == "s011"
+
+
+def test_pick_execution_winner_uses_gate_as_advisory() -> None:
+    winner = pick_execution_winner(
+        [
+            {
+                "strategy_id": "s010",
+                "roi": 0.2,
+                "rows_graded": 40,
+                "ece": 0.2,
+                "brier": 0.2,
+                "promotion_gate": {"status": "pass"},
+            },
+            {
+                "strategy_id": "s012",
+                "roi": 0.3,
+                "rows_graded": 10,
+                "ece": 0.9,
+                "brier": 0.9,
+                "promotion_gate": {"status": "fail"},
+            },
+        ]
+    )
+    assert winner is not None
+    assert winner["strategy_id"] == "s012"
+    assert winner["promotion_gate_status"] == "fail"
 
 
 def test_build_power_gate_marks_underpowered_for_target() -> None:

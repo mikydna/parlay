@@ -455,6 +455,8 @@ def test_strategy_backtest_summarize_writes_power_guidance_for_complete_days(
     assert summary_path
     payload = json.loads(Path(summary_path).read_text(encoding="utf-8"))
     power_guidance = payload.get("power_guidance", {})
+    assert isinstance(payload.get("winner"), dict)
+    assert isinstance(payload.get("promotion_winner"), dict)
     assert power_guidance["baseline_strategy_id"] == "s007"
     strategy_rows = power_guidance.get("strategies", [])
     assert len(strategy_rows) == 1

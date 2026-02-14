@@ -51,6 +51,8 @@ def test_render_aggregate_scoreboard_latex_contains_expected_sections() -> None:
     assert r"\begin{longtable}" in latex
     assert r"s010\_alpha" in latex
     assert r"basketball\_nba\_player\_points" in latex
+    assert r"\usepackage[margin=0.5in,landscape]{geometry}" in latex
+    assert r"\newcolumntype{L}[1]" in latex
 
 
 def test_render_aggregate_scoreboard_pdf_keeps_tex_when_tool_missing(
