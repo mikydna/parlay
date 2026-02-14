@@ -11,10 +11,6 @@ DEFAULT_CONFIG_PATH = Path(__file__).resolve().parents[2] / "config" / "runtime.
 DEFAULT_LOCAL_OVERRIDE_PATH = Path(__file__).resolve().parents[2] / "config" / "runtime.local.toml"
 
 MANAGED_ENV_KEYS: tuple[str, ...] = (
-    "ODDS_API_KEY",
-    "PROP_EV_ODDS_API_KEY",
-    "OPENAI_API_KEY",
-    "PROP_EV_OPENAI_API_KEY",
     "PROP_EV_DATA_DIR",
     "PROP_EV_NBA_DATA_DIR",
     "PROP_EV_REPORTS_DIR",

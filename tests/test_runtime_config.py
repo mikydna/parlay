@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from prop_ev.runtime_config import load_runtime_config, runtime_env_overrides
+from prop_ev.runtime_config import DEFAULT_CONFIG_PATH, load_runtime_config, runtime_env_overrides
 
 
 def test_load_runtime_config_resolves_relative_paths(tmp_path: Path) -> None:
@@ -66,3 +66,9 @@ def test_runtime_env_overrides_projects_key_fields(tmp_path: Path) -> None:
     assert projected["PROP_EV_REPORTS_DIR"] == str((tmp_path / "reports" / "odds").resolve())
     assert projected["PROP_EV_RUNTIME_DIR"] == str((tmp_path / "runtime").resolve())
     assert projected["PROP_EV_ODDS_API_KEY_FILE_CANDIDATES"] == "ODDS_API_KEY.ignore"
+
+
+def test_default_runtime_config_bookmakers_path_is_repo_config() -> None:
+    config = load_runtime_config(DEFAULT_CONFIG_PATH)
+    expected = (DEFAULT_CONFIG_PATH.parent / "bookmakers.json").resolve()
+    assert config.bookmakers_config_path == expected

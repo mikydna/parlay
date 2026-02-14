@@ -3,7 +3,7 @@ odds_data_dir = "../../parlay-data/odds_api"
 nba_data_dir = "../../parlay-data/nba_data"
 reports_dir = "../../parlay-data/reports/odds"
 runtime_dir = "../../parlay-data/runtime"
-bookmakers_config_path = "config/bookmakers.json"
+bookmakers_config_path = "bookmakers.json"
 
 [odds_api]
 base_url = "https://api.the-odds-api.com/v4"
