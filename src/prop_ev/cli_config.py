@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from prop_ev.cli_internal import env_bool, env_float, env_int
 from prop_ev.odds_client import parse_csv
 from prop_ev.runtime_config import RuntimeConfig, current_runtime_config
 
@@ -67,6 +66,10 @@ def runtime_strategy_probabilistic_profile() -> str:
     return runtime_config().strategy_probabilistic_profile
 
 
+def runtime_odds_api_default_max_credits() -> int:
+    return int(runtime_config().odds_api_default_max_credits)
+
+
 def runtime_override_value(name: str) -> bool | int | float | str | None:
     config = runtime_config()
     value_map: dict[str, bool | int | float | str] = {
@@ -97,7 +100,7 @@ def env_bool_from_runtime(name: str, default: bool) -> bool:
         return runtime_value
     if runtime_value is not None:
         return str(runtime_value).strip().lower() in {"1", "true", "yes", "y", "on"}
-    return env_bool(name, default)
+    return default
 
 
 def env_int_from_runtime(name: str, default: int) -> int:
@@ -111,7 +114,7 @@ def env_int_from_runtime(name: str, default: int) -> int:
             return int(str(runtime_value).strip())
         except ValueError:
             return default
-    return env_int(name, default)
+    return default
 
 
 def env_float_from_runtime(name: str, default: float) -> float:
@@ -125,4 +128,4 @@ def env_float_from_runtime(name: str, default: float) -> float:
             return float(str(runtime_value).strip())
         except ValueError:
             return default
-    return env_float(name, default)
+    return default

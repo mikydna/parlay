@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import re
 import subprocess
@@ -13,12 +12,48 @@ from collections.abc import Callable, Sequence
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
-from shutil import copy2, rmtree
+from shutil import copy2
 from typing import Any, cast
 from zoneinfo import ZoneInfo
 
 from prop_ev.backtest import ROW_SELECTIONS, build_backtest_seed_rows, write_backtest_artifacts
 from prop_ev.budget import current_month_utc
+from prop_ev.cli_ablation_helpers import (
+    ablation_compare_cache_valid as _ablation_compare_cache_valid,
+)
+from prop_ev.cli_ablation_helpers import (
+    ablation_count_seed_rows as _ablation_count_seed_rows,
+)
+from prop_ev.cli_ablation_helpers import (
+    ablation_git_head as _ablation_git_head,
+)
+from prop_ev.cli_ablation_helpers import (
+    ablation_prune_cap_root as _ablation_prune_cap_root,
+)
+from prop_ev.cli_ablation_helpers import (
+    ablation_state_dir as _ablation_state_dir,
+)
+from prop_ev.cli_ablation_helpers import (
+    ablation_strategy_cache_valid as _ablation_strategy_cache_valid,
+)
+from prop_ev.cli_ablation_helpers import (
+    ablation_write_state as _ablation_write_state,
+)
+from prop_ev.cli_ablation_helpers import (
+    build_ablation_analysis_run_id as _build_ablation_analysis_run_id,
+)
+from prop_ev.cli_ablation_helpers import (
+    build_ablation_input_hash as _build_ablation_input_hash,
+)
+from prop_ev.cli_ablation_helpers import (
+    parse_cli_kv as _parse_cli_kv,
+)
+from prop_ev.cli_ablation_helpers import (
+    parse_positive_int_csv as _parse_positive_int_csv_impl,
+)
+from prop_ev.cli_ablation_helpers import (
+    sha256_file as _sha256_file,
+)
 from prop_ev.cli_config import (
     env_bool_from_runtime,
     env_float_from_runtime,
@@ -31,6 +66,9 @@ from prop_ev.cli_config import (
     runtime_nba_data_dir as _runtime_nba_data_dir_impl,
 )
 from prop_ev.cli_config import (
+    runtime_odds_api_default_max_credits as _runtime_odds_api_default_max_credits_impl,
+)
+from prop_ev.cli_config import (
     runtime_odds_data_dir as _runtime_odds_data_dir_impl,
 )
 from prop_ev.cli_config import (
@@ -40,6 +78,12 @@ from prop_ev.cli_config import (
     runtime_strategy_probabilistic_profile as _runtime_strategy_probabilistic_profile_impl,
 )
 from prop_ev.cli_internal import default_window, teams_in_scope_from_events
+from prop_ev.cli_markdown import (
+    render_backtest_summary_markdown as _render_backtest_summary_markdown,
+)
+from prop_ev.cli_markdown import (
+    render_strategy_compare_markdown as _render_strategy_compare_markdown,
+)
 from prop_ev.cli_parser import build_parser as _build_parser_impl
 from prop_ev.context_health import (
     official_rows_count,
@@ -164,6 +208,10 @@ def _runtime_runtime_dir() -> str:
 
 def _runtime_strategy_probabilistic_profile() -> str:
     return _runtime_strategy_probabilistic_profile_impl()
+
+
+def _runtime_odds_api_default_max_credits() -> int:
+    return _runtime_odds_api_default_max_credits_impl()
 
 
 def _env_bool(name: str, default: bool) -> bool:
@@ -2964,49 +3012,6 @@ def _ranked_key(row: dict[str, Any]) -> tuple[str, str, str, float, str]:
     return (event_id, player, market, point, side)
 
 
-def _render_strategy_compare_markdown(report: dict[str, Any]) -> str:
-    summary = report.get("summary", {}) if isinstance(report.get("summary"), dict) else {}
-    rows = report.get("strategies", []) if isinstance(report.get("strategies"), list) else []
-    overlap = (
-        report.get("ranked_overlap", {}) if isinstance(report.get("ranked_overlap"), dict) else {}
-    )
-
-    lines: list[str] = []
-    lines.append("# Strategy Compare")
-    lines.append("")
-    lines.append(f"- snapshot_id: `{summary.get('snapshot_id', '')}`")
-    lines.append(f"- strategies: `{summary.get('strategy_count', 0)}`")
-    lines.append(f"- ranked_top_n: `{summary.get('top_n', 0)}`")
-    lines.append(f"- max_picks: `{summary.get('max_picks', 0)}`")
-    lines.append("")
-
-    if rows:
-        lines.append("| Strategy | Mode | Eligible | Candidate | TierA | TierB | Gates |")
-        lines.append("| --- | --- | --- | --- | --- | --- | --- |")
-        for row in rows:
-            if not isinstance(row, dict):
-                continue
-            lines.append(
-                "| {} | {} | {} | {} | {} | {} | {} |".format(
-                    row.get("strategy_id", ""),
-                    row.get("strategy_mode", ""),
-                    row.get("eligible_lines", 0),
-                    row.get("candidate_lines", 0),
-                    row.get("tier_a_lines", 0),
-                    row.get("tier_b_lines", 0),
-                    row.get("health_gate_count", 0),
-                )
-            )
-        lines.append("")
-
-    lines.append("## Ranked Overlap")
-    lines.append("")
-    lines.append(f"- intersection_all: `{overlap.get('intersection_all', 0)}`")
-    lines.append(f"- union_all: `{overlap.get('union_all', 0)}`")
-    lines.append("")
-    return "\n".join(lines)
-
-
 def _cmd_strategy_compare(args: argparse.Namespace) -> int:
     store = SnapshotStore(_runtime_odds_data_dir())
     snapshot_id = args.snapshot_id or _latest_snapshot_id(store)
@@ -3194,152 +3199,6 @@ def _cmd_strategy_compare(args: argparse.Namespace) -> int:
     return 0
 
 
-def _render_backtest_summary_markdown(report: dict[str, Any]) -> str:
-    summary = report.get("summary", {}) if isinstance(report.get("summary"), dict) else {}
-    rows = report.get("strategies", []) if isinstance(report.get("strategies"), list) else []
-    winner = report.get("winner", {}) if isinstance(report.get("winner"), dict) else {}
-    promotion_winner = (
-        report.get("promotion_winner", {})
-        if isinstance(report.get("promotion_winner"), dict)
-        else {}
-    )
-
-    lines: list[str] = []
-    lines.append("# Backtest Summary")
-    lines.append("")
-    lines.append(f"- snapshot_id: `{summary.get('snapshot_id', '')}`")
-    lines.append(f"- strategies: `{summary.get('strategy_count', 0)}`")
-    lines.append(f"- min_graded: `{summary.get('min_graded', 0)}`")
-    lines.append(f"- bin_size: `{summary.get('bin_size', '')}`")
-    lines.append(f"- baseline_strategy_id: `{summary.get('baseline_strategy_id', '')}`")
-    lines.append(f"- baseline_found: `{summary.get('baseline_found', False)}`")
-    lines.append(f"- require_scored_fraction: `{summary.get('require_scored_fraction', '')}`")
-    lines.append(f"- power_target_uplift_gate: `{summary.get('power_target_uplift_gate', '')}`")
-    lines.append(f"- require_power_gate: `{summary.get('require_power_gate', False)}`")
-    if bool(summary.get("all_complete_days", False)):
-        lines.append(f"- dataset_id: `{summary.get('dataset_id', '')}`")
-        lines.append(f"- complete_days: `{summary.get('complete_days', 0)}`")
-        lines.append(f"- days_with_any_results: `{summary.get('days_with_any_results', 0)}`")
-    lines.append("")
-
-    if rows:
-        lines.append(
-            "| Strategy | Graded | Scored | ROI | W | L | P | Brier | BrierLow | "
-            "LogLoss | ECE | MCE | AvgQ | AvgEVLow | Actionability | Gate | PowerGate |"
-        )
-        lines.append(
-            "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |"
-            " --- | --- | --- | --- | --- |"
-        )
-        for row in rows:
-            if not isinstance(row, dict):
-                continue
-            gate = row.get("promotion_gate", {})
-            gate_status = gate.get("status", "") if isinstance(gate, dict) else ""
-            power_gate = row.get("power_gate", {})
-            power_gate_status = power_gate.get("status", "") if isinstance(power_gate, dict) else ""
-            lines.append(
-                (
-                    "| {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} |"
-                    " {} | {} |"
-                ).format(
-                    row.get("strategy_id", ""),
-                    row.get("rows_graded", 0),
-                    row.get("rows_scored", 0),
-                    row.get("roi", ""),
-                    row.get("wins", 0),
-                    row.get("losses", 0),
-                    row.get("pushes", 0),
-                    row.get("brier", ""),
-                    row.get("brier_low", ""),
-                    row.get("log_loss", ""),
-                    row.get("ece", ""),
-                    row.get("mce", ""),
-                    row.get("avg_quality_score", ""),
-                    row.get("avg_ev_low", ""),
-                    row.get("actionability_rate", ""),
-                    gate_status,
-                    power_gate_status,
-                )
-            )
-        lines.append("")
-
-    power_guidance = (
-        report.get("power_guidance", {}) if isinstance(report.get("power_guidance"), dict) else {}
-    )
-    if power_guidance:
-        assumptions = (
-            power_guidance.get("assumptions", {})
-            if isinstance(power_guidance.get("assumptions"), dict)
-            else {}
-        )
-        lines.append("## Power Guidance")
-        lines.append("")
-        lines.append(f"- baseline_strategy_id: `{power_guidance.get('baseline_strategy_id', '')}`")
-        lines.append(f"- alpha: `{assumptions.get('alpha', '')}`")
-        lines.append(f"- power: `{assumptions.get('power', '')}`")
-        lines.append(f"- picks_per_day: `{assumptions.get('picks_per_day', '')}`")
-        lines.append("")
-        lines.append(
-            "| Strategy | Overlap Days | Mean Daily ΔPnL | "
-            "Std Daily ΔPnL | Target | Required Days |"
-        )
-        lines.append("| --- | --- | --- | --- | --- | --- |")
-        for row in power_guidance.get("strategies", []):
-            if not isinstance(row, dict):
-                continue
-            required_rows = (
-                row.get("required_days_by_target", [])
-                if isinstance(row.get("required_days_by_target"), list)
-                else []
-            )
-            if not required_rows:
-                lines.append(
-                    "| {} | {} | {} | {} | n/a | n/a |".format(
-                        row.get("strategy_id", ""),
-                        row.get("overlap_days", 0),
-                        row.get("mean_daily_pnl_diff", ""),
-                        row.get("std_daily_pnl_diff", ""),
-                    )
-                )
-                continue
-            first = True
-            for target_row in required_rows:
-                if not isinstance(target_row, dict):
-                    continue
-                lines.append(
-                    "| {} | {} | {} | {} | {} | {} |".format(
-                        row.get("strategy_id", "") if first else "",
-                        row.get("overlap_days", 0) if first else "",
-                        row.get("mean_daily_pnl_diff", "") if first else "",
-                        row.get("std_daily_pnl_diff", "") if first else "",
-                        target_row.get("target_roi_uplift_per_bet", ""),
-                        target_row.get("required_days", ""),
-                    )
-                )
-                first = False
-        lines.append("")
-
-    if winner:
-        lines.append("## Winner")
-        lines.append("")
-        lines.append(f"- strategy_id: `{winner.get('strategy_id', '')}`")
-        lines.append(f"- roi: `{winner.get('roi', '')}`")
-        lines.append(f"- rows_graded: `{winner.get('rows_graded', 0)}`")
-        lines.append(f"- promotion_gate_status: `{winner.get('promotion_gate_status', '')}`")
-        lines.append("")
-
-    if promotion_winner:
-        lines.append("## Promotion Winner")
-        lines.append("")
-        lines.append(f"- strategy_id: `{promotion_winner.get('strategy_id', '')}`")
-        lines.append(f"- roi: `{promotion_winner.get('roi', '')}`")
-        lines.append(f"- rows_graded: `{promotion_winner.get('rows_graded', 0)}`")
-        lines.append("")
-
-    return "\n".join(lines)
-
-
 def _resolve_complete_day_dataset_id(data_root: Path, requested: str) -> str:
     dataset_id_value = requested.strip()
     if dataset_id_value:
@@ -3375,174 +3234,10 @@ def _complete_day_snapshots(data_root: Path, dataset_id_value: str) -> list[tupl
 
 
 def _parse_positive_int_csv(value: str, *, default: list[int], flag_name: str) -> list[int]:
-    raw = [item.strip() for item in value.split(",") if item.strip()]
-    if not raw:
-        return list(default)
-    parsed: list[int] = []
-    for item in raw:
-        try:
-            parsed_value = int(item)
-        except ValueError as exc:
-            raise CLIError(f"{flag_name} expects comma-separated integers") from exc
-        if parsed_value <= 0:
-            raise CLIError(f"{flag_name} values must be > 0")
-        parsed.append(parsed_value)
-    return list(dict.fromkeys(parsed))
-
-
-def _sha256_text(value: str) -> str:
-    return hashlib.sha256(value.encode("utf-8")).hexdigest()
-
-
-def _sha256_file(path: Path) -> str:
-    if not path.exists():
-        return ""
-    return hashlib.sha256(path.read_bytes()).hexdigest()
-
-
-def _build_ablation_input_hash(*, payload: dict[str, Any]) -> str:
-    normalized = json.dumps(payload, sort_keys=True, separators=(",", ":"))
-    return _sha256_text(normalized)
-
-
-def _ablation_git_head() -> str:
     try:
-        proc = subprocess.run(
-            ["git", "rev-parse", "HEAD"],
-            check=False,
-            capture_output=True,
-            text=True,
-        )
-    except OSError:
-        return "unknown"
-    if proc.returncode != 0:
-        return "unknown"
-    head = proc.stdout.strip()
-    return head or "unknown"
-
-
-def _ablation_state_dir(reports_root: Path) -> Path:
-    return reports_root / "_ablation_state"
-
-
-def _ablation_load_state(path: Path) -> dict[str, Any] | None:
-    return _load_json_object(path)
-
-
-def _ablation_write_state(path: Path, payload: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(payload, sort_keys=True, indent=2) + "\n", encoding="utf-8")
-
-
-def _ablation_prune_cap_root(cap_root: Path) -> dict[str, int]:
-    removed_dirs = 0
-    removed_files = 0
-    for relative in ("by-snapshot", "_ablation_state"):
-        target = cap_root / relative
-        if not target.exists():
-            continue
-        removed_files += sum(1 for item in target.rglob("*") if item.is_file())
-        rmtree(target)
-        removed_dirs += 1
-    return {"removed_dirs": removed_dirs, "removed_files": removed_files}
-
-
-def _ablation_count_seed_rows(path: Path) -> int:
-    if not path.exists():
-        return 0
-    count = 0
-    with path.open("r", encoding="utf-8") as handle:
-        for line in handle:
-            if line.strip():
-                count += 1
-    return count
-
-
-def _build_ablation_analysis_run_id(*, analysis_prefix: str, run_id: str, cap: int) -> str:
-    run_id_clean = run_id.strip()
-    prefix_clean = analysis_prefix.strip()
-    if run_id_clean.startswith(f"{prefix_clean}-") or run_id_clean == prefix_clean:
-        base = run_id_clean
-    else:
-        base = f"{prefix_clean}-{run_id_clean}"
-    return f"{base}-max{cap}"
-
-
-def _ablation_strategy_artifacts_exist(
-    *,
-    reports_dir: Path,
-    strategy_id: str,
-    seed_rows: int,
-) -> bool:
-    required = [
-        reports_dir / f"strategy-report.{strategy_id}.json",
-        reports_dir / f"backtest-seed.{strategy_id}.jsonl",
-        reports_dir / f"backtest-results-template.{strategy_id}.csv",
-    ]
-    if seed_rows > 0:
-        required.append(reports_dir / f"settlement.{strategy_id}.csv")
-    return all(path.exists() for path in required)
-
-
-def _ablation_strategy_cache_valid(
-    *,
-    reports_dir: Path,
-    state_path: Path,
-    expected_hash: str,
-    strategy_id: str,
-) -> bool:
-    payload = _ablation_load_state(state_path)
-    if not isinstance(payload, dict):
-        return False
-    input_hash = str(payload.get("input_hash", "")).strip()
-    if input_hash != expected_hash:
-        return False
-    seed_rows = int(payload.get("seed_rows", 1) or 0)
-    return _ablation_strategy_artifacts_exist(
-        reports_dir=reports_dir,
-        strategy_id=strategy_id,
-        seed_rows=seed_rows,
-    )
-
-
-def _ablation_compare_artifacts_exist(*, reports_dir: Path, strategy_ids: Sequence[str]) -> bool:
-    required = [
-        reports_dir / "strategy-compare.json",
-        reports_dir / "strategy-compare.md",
-    ]
-    for strategy_id in strategy_ids:
-        required.append(reports_dir / f"strategy-report.{strategy_id}.json")
-        required.append(reports_dir / f"backtest-seed.{strategy_id}.jsonl")
-    return all(path.exists() for path in required)
-
-
-def _ablation_compare_cache_valid(
-    *,
-    reports_dir: Path,
-    state_path: Path,
-    expected_hash: str,
-    strategy_ids: Sequence[str],
-) -> bool:
-    payload = _ablation_load_state(state_path)
-    if not isinstance(payload, dict):
-        return False
-    input_hash = str(payload.get("input_hash", "")).strip()
-    if input_hash != expected_hash:
-        return False
-    return _ablation_compare_artifacts_exist(reports_dir=reports_dir, strategy_ids=strategy_ids)
-
-
-def _parse_cli_kv(stdout: str) -> dict[str, str]:
-    payload: dict[str, str] = {}
-    for line in stdout.splitlines():
-        key, sep, value = line.partition("=")
-        if not sep:
-            continue
-        normalized = key.strip()
-        if not normalized:
-            continue
-        payload[normalized] = value.strip()
-    return payload
+        return _parse_positive_int_csv_impl(value, default=default, flag_name=flag_name)
+    except RuntimeError as exc:
+        raise CLIError(str(exc)) from exc
 
 
 def _run_cli_subcommand(
@@ -5587,7 +5282,7 @@ def _extract_global_overrides(argv: list[str]) -> tuple[list[str], str, str, str
 def _build_parser() -> argparse.ArgumentParser:
     return _build_parser_impl(
         handlers=sys.modules[__name__],
-        env_int=_env_int,
+        odds_api_default_max_credits=_runtime_odds_api_default_max_credits(),
         row_selections=ROW_SELECTIONS,
     )
 

@@ -3,14 +3,14 @@
 from __future__ import annotations
 
 import argparse
-from collections.abc import Callable, Iterable
+from collections.abc import Iterable
 from typing import Any
 
 
 def build_parser(
     *,
     handlers: Any,
-    env_int: Callable[[str, int], int],
+    odds_api_default_max_credits: int,
     row_selections: Iterable[str],
 ) -> argparse.ArgumentParser:
     _cmd_credits_budget = handlers._cmd_credits_budget
@@ -337,7 +337,7 @@ def build_parser(
     data_backfill.add_argument(
         "--max-credits",
         type=int,
-        default=env_int("PROP_EV_ODDS_API_DEFAULT_MAX_CREDITS", 20),
+        default=odds_api_default_max_credits,
     )
     data_backfill.add_argument("--no-spend", action="store_true")
     data_backfill.add_argument("--offline", action="store_true")
