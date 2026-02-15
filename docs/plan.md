@@ -438,14 +438,14 @@ Done when:
 - before/after delta is reviewed in one integration PR,
 - rollback path is explicit (flag/config) with no schema rollback required.
 
-### Integration Milestone Live Status (as of 2026-02-14)
+### Integration Milestone Live Status (as of 2026-02-15)
 
 | Milestone | Status | Evidence | Remaining to close |
 | --- | --- | --- | --- |
 | IM1 | Closed | `main` includes pricing/de-vig contract hardening through PR #31 (`feat(pricing): extract core de-vig and baseline provenance`) | none |
 | IM2 | Closed | probabilistic minutes engine + `s020` merged on `main` (PR #32), minutes-prob artifacts seeded in `parlay-data` (PR #7), runtime default remains `probabilistic_profile=\"off\"` | none |
-| IM3 | Closed | deterministic replay proof + execution-plan exclusion reasons + pricing provenance evidence captured in `docs/integration-evidence-2026-02-14.md` | none |
-| IM4 | Closed | aggregate scoreboard + promotion-gate reproducibility packet captured in `docs/integration-evidence-2026-02-14.md` (`max_picks=1,2,5` deterministic reruns) | none |
+| IM3 | Closed | deterministic replay proof + execution-plan exclusion reasons + pricing provenance evidence captured in `docs/archive/integration-evidence-2026-02-14.md` | none |
+| IM4 | Closed | aggregate scoreboard + promotion-gate reproducibility packet captured in `docs/archive/integration-evidence-2026-02-14.md` (`max_picks=1,2,5` deterministic reruns) | none |
 | IM5 | Deferred | no default-on promotion PR merged; evidence remains mixed for safe default flip | re-open only with explicit before/after gate pass + rollback PR |
 
 ## 8) Delivery Tracks (parallelizable, worktree-friendly)
@@ -455,7 +455,7 @@ boundaries.
 
 ### Track A — Pricing core + neutralize-vig (start now)
 
-- Detailed implementation spec: `docs/track-stage2-pricing-fixed-point.md`.
+- Historical implementation spec: `docs/archive/track-stage2-pricing-fixed-point.md`.
 
 - **Owner worktree**: `wt-pricing-neutralize-vig` (branch prefix: `codex/pricing-*`).
 - **Stage coverage**: Stage 1, 2, 3, and Stage 4 pricing primitives.
@@ -650,33 +650,33 @@ For each track, Codex should generate:
 
 ## 10) Immediate Next Execution Sequence
 
-1. Run offline ablation comparisons (`s016`–`s020`) across complete indexed days.
-2. Refresh aggregate scoreboards/calibration maps (`max_picks=1,2,5`) and publish comparison packet.
-3. Keep IM5 deferred until a dedicated default-flip packet clears promotion gates with rollback documented.
+1. Continue offline ablation refreshes (`s007,s008,s016,s017,s018,s019,s020`) across complete indexed days via `strategy ablation`.
+2. Keep aggregate scoreboards and PDFs in sync for `max_picks=1,2,5` and publish compact run artifacts under `reports/odds/ablation/<run_id>/...`.
+3. Keep IM5 deferred until a dedicated default-flip packet clears promotion criteria with explicit rollback.
 4. Continue Track E hygiene improvements (data/layout/report guardrails) without changing strategy defaults.
 
-### Execution Update (2026-02-14)
+### Execution Update (2026-02-15)
 
-Items 1 and 2 are complete on branch `codex/ablation-scoreboard-refresh`.
+Items 1 and 2 are complete on `main`.
 
 - Dataset window: `bdfa890a...`, complete indexed days from `2026-01-22` to `2026-02-12` (20 snapshots).
-- Run profile: offline replay + settle for `s016,s017,s018,s019,s020`, with `max_picks=1,2,5`.
+- Run profile: offline replay + settle for `s007,s008,s016,s017,s018,s019,s020`, with `max_picks=1,2,5`.
 - Comparison artifacts:
-  - `/Users/andy/Documents/Code/parlay-data/reports/odds/analysis/ablation-s016-s020-max1-2026-02-14/aggregate-scoreboard.json`
-  - `/Users/andy/Documents/Code/parlay-data/reports/odds/analysis/ablation-s016-s020-max2-2026-02-14/aggregate-scoreboard.json`
-  - `/Users/andy/Documents/Code/parlay-data/reports/odds/analysis/ablation-s016-s020-max5-2026-02-14/aggregate-scoreboard.json`
-- Winners by cap:
-  - `max_picks=1`: `s016` (`roi=0.69217`, `rows_graded=20`).
-  - `max_picks=2`: `s017` (`roi=0.585`, `rows_graded=40`).
-  - `max_picks=5`: `s017` (`roi=0.240731`, `rows_graded=100`).
-- Promotion-gate status snapshot:
-  - `max_picks=1`: pass=`s016`; fail=`s017,s018,s019,s020`.
-  - `max_picks=2`: pass=`s016,s017,s020`; fail=`s018,s019`.
-  - `max_picks=5`: pass=`s016,s017,s018,s020`; fail=`s019`.
-- Observed data condition:
-  - `day-bdfa890a-2026-02-08` emitted `no seed rows found` for `s018` and `s020` (no candidate rows for those runs).
+  - `/Users/andy/Documents/Code/parlay-data/reports/odds/ablation/ablation-s007-s020-smoke-20260214-r3/ablation-run.json`
+  - `/Users/andy/Documents/Code/parlay-data/reports/odds/ablation/ablation-s007-s020-smoke-20260214-r3/cap-max1/analysis/ablation-s007-s020-smoke-20260214-r3-max1/aggregate-scoreboard.json`
+  - `/Users/andy/Documents/Code/parlay-data/reports/odds/ablation/ablation-s007-s020-smoke-20260214-r3/cap-max2/analysis/ablation-s007-s020-smoke-20260214-r3-max2/aggregate-scoreboard.json`
+  - `/Users/andy/Documents/Code/parlay-data/reports/odds/ablation/ablation-s007-s020-smoke-20260214-r3/cap-max5/analysis/ablation-s007-s020-smoke-20260214-r3-max5/aggregate-scoreboard.json`
+  - corresponding `aggregate-scoreboard.pdf` files for each cap.
+- Execution winners by cap (`winner`, gate-advisory):
+  - `max_picks=1`: `s017`
+  - `max_picks=2`: `s017`
+  - `max_picks=5`: `s017`
+- Promotion winners by cap (`promotion_winner`, gate-pass only):
+  - `max_picks=1`: `s007`
+  - `max_picks=2`: `s007`
+  - `max_picks=5`: `s016`
 
-Immediate next action remains item 3 (IM5 stays deferred until dedicated promotion packet).
+Immediate next action remains item 3 (IM5 stays deferred until dedicated default-flip packet).
 
 ## 11) Out of Scope (current horizon)
 

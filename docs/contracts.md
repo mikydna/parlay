@@ -136,6 +136,7 @@ Top-level required keys:
 - `summary`
 - `strategies`
 - `winner`
+- `promotion_winner`
 
 Summary-level required keys:
 - `snapshot_id`
@@ -169,6 +170,10 @@ Per-strategy required fields:
 - `mce`
 - `calibration` (bucket list with `bucket_low`, `bucket_high`, `count`, `avg_p`, `hit_rate`, `brier`)
 - `promotion_gate` (`status`, `reasons`, `rows_win_loss`, `rows_scored`, `scored_fraction`, `thresholds`)
+
+Winner semantics:
+- `winner` = execution winner (gate-advisory ranking winner used for run-level comparison).
+- `promotion_winner` = promotion-gate pass winner (governance/policy winner only).
 
 ## Settlement Contract
 
