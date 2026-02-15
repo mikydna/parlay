@@ -143,9 +143,7 @@ def _cmd_strategy_health(args: argparse.Namespace) -> int:
     else:
         official_parse_coverage = 0.0
 
-    injury_check_pass = (official_ready_for_policy or injury_override_active) and len(
-        _coerce_list(official.get("pdf_links"))
-    ) > 0
+    injury_check_pass = official_ready_for_policy or injury_override_active
     roster_check_pass = (
         str(roster_details.get("status", "")) == "ok"
         and int(roster_details.get("count_teams", 0)) > 0

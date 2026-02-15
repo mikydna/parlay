@@ -197,6 +197,56 @@ def test_strategy_health_healthy_with_missing_injury_informational(
     assert payload["checks"]["event_mapping"]["pass"] is True
 
 
+def test_strategy_health_healthy_when_official_rows_exist_without_pdf_links(
+    local_data_dir: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    store = SnapshotStore(local_data_dir)
+    snapshot_id = "2026-02-11T10-25-00Z"
+    now_utc = _iso(datetime.now(UTC))
+    _seed_snapshot(
+        store=store,
+        snapshot_id=snapshot_id,
+        with_event_context=True,
+        injuries_fetched_at=now_utc,
+        roster_fetched_at=now_utc,
+        injuries_payload_override={
+            "fetched_at_utc": now_utc,
+            "official": {
+                "source": "official_nba_historical_boxscore",
+                "url": "",
+                "status": "ok",
+                "count": 0,
+                "fetched_at_utc": now_utc,
+                "pdf_links": [],
+                "pdf_download_status": "",
+                "selected_pdf_url": "",
+                "parse_status": "ok",
+                "parse_coverage": 0.0,
+                "rows_count": 1,
+                "rows": [
+                    {
+                        "player": "Someone Else",
+                        "player_norm": "someoneelse",
+                        "team": "Boston Celtics",
+                        "team_norm": "boston celtics",
+                        "status": "out",
+                        "note": "historical_boxscore_status",
+                        "source": "historical_boxscore",
+                    }
+                ],
+            },
+            "secondary": {"status": "ok", "rows": [], "count": 0},
+        },
+    )
+
+    code = main(["strategy", "health", "--snapshot-id", snapshot_id, "--offline"])
+    payload = json.loads(capsys.readouterr().out)
+
+    assert code == 0
+    assert payload["status"] == "healthy"
+    assert payload["checks"]["injuries"]["pass"] is True
+
+
 def test_strategy_health_broken_when_event_mapping_missing(
     local_data_dir: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
