@@ -669,6 +669,12 @@ def build_parser(
         help="Target ROI uplift per bet used for per-strategy power gate status.",
     )
     strategy_ablation.add_argument(
+        "--segment-by",
+        choices=("none", "market"),
+        default="none",
+        help="Controls summary segmentation strategy. Choices: none or market.",
+    )
+    strategy_ablation.add_argument(
         "--require-power-gate",
         action="store_true",
         help="Fail promotion gate when the strategy is underpowered at the selected uplift.",
@@ -865,6 +871,15 @@ def build_parser(
         "--write-analysis-pdf",
         action="store_true",
         help=("Write direct LaTeX/PDF aggregate scoreboard artifacts in the analysis directory."),
+    )
+    strategy_backtest_summarize.add_argument(
+        "--segment-by",
+        choices=("none", "market"),
+        default="none",
+        help=(
+            "Optional segmentation for additional aggregate scoreboards "
+            "(market writes per-market summaries)."
+        ),
     )
     strategy_backtest_summarize.add_argument(
         "--keep-analysis-tex",

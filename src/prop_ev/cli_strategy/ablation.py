@@ -219,6 +219,9 @@ def _cmd_strategy_ablation(args: argparse.Namespace) -> int:
     max_workers = max(1, int(getattr(args, "max_workers", 6)))
     cap_workers = max(1, int(getattr(args, "cap_workers", 3)))
     cap_workers = min(cap_workers, len(caps))
+    segment_by = str(getattr(args, "segment_by", "none")).strip().lower() or "none"
+    if segment_by not in {"none", "market"}:
+        raise CLIError("--segment-by must be one of: none,market")
 
     min_graded = max(0, int(getattr(args, "min_graded", 0)))
     bin_size = float(getattr(args, "bin_size", 0.1))
@@ -545,6 +548,7 @@ def _cmd_strategy_ablation(args: argparse.Namespace) -> int:
             summarize_cmd.append("--write-analysis-pdf")
         if keep_scoreboard_tex:
             summarize_cmd.append("--keep-analysis-tex")
+        summarize_cmd.extend(["--segment-by", segment_by])
         if require_power_gate:
             summarize_cmd.append("--require-power-gate")
         summarize_stdout = _run_cli_subcommand(
@@ -558,6 +562,9 @@ def _cmd_strategy_ablation(args: argparse.Namespace) -> int:
         cap_summary["analysis_scoreboard_json"] = kv.get("analysis_scoreboard_json", "")
         cap_summary["analysis_scoreboard_pdf"] = kv.get("analysis_scoreboard_pdf", "")
         cap_summary["analysis_scoreboard_pdf_status"] = kv.get("analysis_scoreboard_pdf_status", "")
+        cap_summary["analysis_scoreboard_by_market_json"] = kv.get(
+            "analysis_scoreboard_by_market_json", ""
+        )
         cap_summary["calibration_map_json"] = kv.get("calibration_map_json", "")
         cap_summary["winner_strategy_id"] = kv.get("winner_strategy_id", "")
         cap_summary["reports_root"] = str(cap_root)
@@ -577,6 +584,11 @@ def _cmd_strategy_ablation(args: argparse.Namespace) -> int:
             print(f"ablation_cap_scoreboard_json={cap_summary['analysis_scoreboard_json']}")
         if cap_summary["analysis_scoreboard_pdf"]:
             print(f"ablation_cap_scoreboard_pdf={cap_summary['analysis_scoreboard_pdf']}")
+        if cap_summary["analysis_scoreboard_by_market_json"]:
+            print(
+                "ablation_cap_scoreboard_by_market_json="
+                f"{cap_summary['analysis_scoreboard_by_market_json']}"
+            )
         if cap_summary["analysis_scoreboard_pdf_status"]:
             print(
                 "ablation_cap_scoreboard_pdf_status="
@@ -595,6 +607,7 @@ def _cmd_strategy_ablation(args: argparse.Namespace) -> int:
         "report_kind": "ablation_run",
         "generated_at_utc": _iso(_utc_now()),
         "run_id": run_id,
+        "segment_by": segment_by,
         "dataset_id": dataset_id_value,
         "snapshot_count": len(complete_rows),
         "strategies": list(strategy_ids),
