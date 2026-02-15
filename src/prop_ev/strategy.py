@@ -35,6 +35,8 @@ from prop_ev.pricing_reference import ReferencePoint, estimate_reference_probabi
 from prop_ev.rolling_priors import calibration_feedback
 from prop_ev.state_keys import strategy_report_state_key
 from prop_ev.time_utils import parse_iso_z, utc_now_str
+from prop_ev.util.parsing import safe_float as _safe_float
+from prop_ev.util.parsing import to_price as _to_price
 
 ET_ZONE = ZoneInfo("America/New_York")
 PORTFOLIO_MAX_PER_PLAYER = 1
@@ -119,42 +121,6 @@ def load_jsonl(path: Path) -> list[dict[str, Any]]:
         if isinstance(row, dict):
             rows.append(row)
     return rows
-
-
-def _to_price(value: Any) -> int | None:
-    if isinstance(value, bool):
-        return None
-    if isinstance(value, int):
-        return value
-    if isinstance(value, float):
-        return int(value)
-    if isinstance(value, str):
-        raw = value.strip()
-        if not raw:
-            return None
-        if raw.startswith("+"):
-            raw = raw[1:]
-        try:
-            return int(raw)
-        except ValueError:
-            return None
-    return None
-
-
-def _safe_float(value: Any) -> float | None:
-    if isinstance(value, bool):
-        return None
-    if isinstance(value, (int, float)):
-        return float(value)
-    if isinstance(value, str):
-        raw = value.strip()
-        if not raw:
-            return None
-        try:
-            return float(raw)
-        except ValueError:
-            return None
-    return None
 
 
 def _fmt_point(value: Any) -> str:
@@ -246,6 +212,19 @@ def _execution_plan_row(row: dict[str, Any]) -> dict[str, Any]:
         "portfolio_reason": str(row.get("portfolio_reason", "")),
         "portfolio_rank": int(row.get("portfolio_rank", 0) or 0),
     }
+
+
+def _execution_plan_sort_key(row: dict[str, Any]) -> tuple[Any, ...]:
+    return (
+        int(row.get("portfolio_rank", 0) or 0),
+        str(row.get("event_id", "")),
+        str(row.get("market", "")),
+        str(row.get("player", "")),
+        str(row.get("recommended_side", "")),
+        _safe_float(row.get("point")) or 0.0,
+        str(row.get("selected_book", "")),
+        _to_price(row.get("selected_price")) or 0,
+    )
 
 
 def _resolve_max_picks(*, top_n: int, max_picks: int) -> int:
@@ -2711,8 +2690,13 @@ def build_strategy_report(
             "selected_lines": len(ranked),
             "excluded_lines": len(portfolio_exclusions),
         },
-        "selected": [_execution_plan_row(row) for row in ranked],
-        "excluded": [_execution_plan_row(row) for row in portfolio_exclusions],
+        "selected": [
+            _execution_plan_row(row) for row in sorted(ranked, key=_execution_plan_sort_key)
+        ],
+        "excluded": [
+            _execution_plan_row(row)
+            for row in sorted(portfolio_exclusions, key=_execution_plan_sort_key)
+        ],
         "exclusion_reason_counts": dict(sorted(exclusion_reason_counts.items())),
     }
     assert_execution_plan(execution_plan)

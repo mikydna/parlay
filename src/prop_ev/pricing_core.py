@@ -9,6 +9,7 @@ from typing import Any
 from prop_ev.odds_math import implied_prob_from_american, normalize_prob_pair
 from prop_ev.pricing_reference import ReferenceEstimate
 from prop_ev.time_utils import parse_iso_z
+from prop_ev.util.parsing import to_price as _to_price
 
 
 @dataclass(frozen=True)
@@ -56,26 +57,6 @@ class BaselineSelection:
     baseline_used: str
     reference_line_method: str
     line_source: str
-
-
-def _to_price(value: Any) -> int | None:
-    if isinstance(value, bool):
-        return None
-    if isinstance(value, int):
-        return value
-    if isinstance(value, float):
-        return int(value)
-    if isinstance(value, str):
-        raw = value.strip()
-        if not raw:
-            return None
-        if raw.startswith("+"):
-            raw = raw[1:]
-        try:
-            return int(raw)
-        except ValueError:
-            return None
-    return None
 
 
 def _clamp(value: float, low: float, high: float) -> float:

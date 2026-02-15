@@ -3,27 +3,13 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Any, Literal
 
+from prop_ev.util.parsing import safe_float as _safe_float
+
 CALIBRATION_MAP_SCHEMA_VERSION = 1
 
 _MODELED_DATE_FORMATS = ("%A, %b %d, %Y (ET)", "%Y-%m-%d")
 
 CalibrationMode = Literal["in_sample", "walk_forward"]
-
-
-def _safe_float(value: Any) -> float | None:
-    if isinstance(value, bool):
-        return None
-    if isinstance(value, (int, float)):
-        return float(value)
-    if isinstance(value, str):
-        raw = value.strip()
-        if not raw:
-            return None
-        try:
-            return float(raw)
-        except ValueError:
-            return None
-    return None
 
 
 def _normalize_result(value: Any) -> str:

@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from prop_ev.backtest_summary import BacktestSummary
+from prop_ev.util.parsing import safe_float as _safe_float
 
 DEFAULT_BASELINE_STRATEGY_ID = "s007"
 
@@ -39,22 +40,6 @@ class PromotionThresholds:
             "ece_slack": float(self.ece_slack),
             "brier_slack": float(self.brier_slack),
         }
-
-
-def _safe_float(value: Any) -> float | None:
-    if isinstance(value, bool):
-        return None
-    if isinstance(value, (int, float)):
-        return float(value)
-    if isinstance(value, str):
-        raw = value.strip()
-        if not raw:
-            return None
-        try:
-            return float(raw)
-        except ValueError:
-            return None
-    return None
 
 
 def resolve_baseline_strategy_id(*, requested: str, available_strategy_ids: list[str]) -> str:

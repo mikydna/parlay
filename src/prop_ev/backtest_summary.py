@@ -8,21 +8,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-
-def _safe_float(value: Any) -> float | None:
-    if isinstance(value, bool):
-        return None
-    if isinstance(value, (int, float)):
-        return float(value)
-    if isinstance(value, str):
-        raw = value.strip()
-        if not raw:
-            return None
-        try:
-            return float(raw)
-        except ValueError:
-            return None
-    return None
+from prop_ev.util.parsing import safe_float as _safe_float
 
 
 def _safe_int(value: Any) -> int | None:

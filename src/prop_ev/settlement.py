@@ -15,6 +15,7 @@ from prop_ev.nba_data.context_cache import now_utc
 from prop_ev.nba_data.normalize import canonical_team_name, normalize_person_name
 from prop_ev.nba_data.repo import NBARepository
 from prop_ev.nba_data.source_policy import ResultsSourceMode, normalize_results_source_mode
+from prop_ev.util.parsing import safe_float as _safe_float
 
 RESULTS_SOURCE = "nba_results"
 MARKET_SHORT_LABELS = {
@@ -44,22 +45,6 @@ RESULT_REASON_LABELS = {
     "unsupported_side": "side_unsupported",
 }
 NAME_SUFFIXES = ("jr", "sr", "ii", "iii", "iv", "v")
-
-
-def _safe_float(value: Any) -> float | None:
-    if isinstance(value, bool):
-        return None
-    if isinstance(value, (int, float)):
-        return float(value)
-    if isinstance(value, str):
-        raw = value.strip()
-        if not raw:
-            return None
-        try:
-            return float(raw)
-        except ValueError:
-            return None
-    return None
 
 
 def _safe_int(value: Any) -> int | None:

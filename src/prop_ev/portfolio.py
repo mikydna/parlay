@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Any, Literal
 
 from prop_ev.nba_data.normalize import normalize_person_name
+from prop_ev.util.parsing import safe_float as _safe_float
 
 PORTFOLIO_REASON_DAILY_CAP = "portfolio_cap_daily"
 PORTFOLIO_REASON_PLAYER_CAP = "portfolio_cap_player"
@@ -21,22 +22,6 @@ class PortfolioConstraints:
     max_picks: int
     max_per_player: int = 1
     max_per_game: int = 2
-
-
-def _safe_float(value: Any) -> float | None:
-    if isinstance(value, bool):
-        return None
-    if isinstance(value, (int, float)):
-        return float(value)
-    if isinstance(value, str):
-        raw = value.strip()
-        if not raw:
-            return None
-        try:
-            return float(raw)
-        except ValueError:
-            return None
-    return None
 
 
 def _selection_sort_key(row: dict[str, Any], ranking: PortfolioRanking) -> tuple[Any, ...]:
