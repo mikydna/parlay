@@ -16,7 +16,6 @@ from prop_ev.data_paths import (
     resolve_nba_data_root as resolve_nba_data_root_from_odds,
 )
 from prop_ev.nba_data.cache_store import NBADataCacheStore
-from prop_ev.nba_data.config import resolve_data_dir
 from prop_ev.nba_data.context_cache import load_or_fetch_context
 from prop_ev.nba_data.context_fetchers import (
     fetch_official_injury_links,
@@ -119,8 +118,7 @@ def _seed_teams(seed_rows: list[dict[str, Any]]) -> set[str]:
 
 
 def _resolve_nba_data_root(odds_data_root: Path) -> Path:
-    configured = resolve_data_dir(None).resolve()
-    return resolve_nba_data_root_from_odds(odds_data_root, configured=configured)
+    return resolve_nba_data_root_from_odds(odds_data_root)
 
 
 class NBARepository:

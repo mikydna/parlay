@@ -8,6 +8,7 @@ from prop_ev.llm_client import (
     MissingOpenAIKeyError,
     resolve_openai_api_key,
 )
+from prop_ev.runtime_config import load_runtime_config, set_current_runtime_config
 from prop_ev.settings import Settings
 
 
@@ -60,3 +61,45 @@ def test_openai_key_file_fallback(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
 
     resolved = resolve_openai_api_key(settings, root=tmp_path)
     assert resolved == "test-file-key"
+
+
+def test_openai_key_file_resolution_is_relative_to_runtime_config(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("PROP_EV_OPENAI_API_KEY", raising=False)
+    config_dir = tmp_path / "config-root"
+    config_dir.mkdir(parents=True, exist_ok=True)
+    config_path = config_dir / "runtime.toml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "[paths]",
+                'odds_data_dir = "odds_api"',
+                'nba_data_dir = "nba_data"',
+                'reports_dir = "reports/odds"',
+                'runtime_dir = "runtime"',
+                "",
+                "[odds_api]",
+                'key_files = ["ODDS_API_KEY.ignore"]',
+                "",
+                "[openai]",
+                'key_files = ["OPENAI_KEY.ignore"]',
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (config_dir / "OPENAI_KEY.ignore").write_text("OPENAI_API_KEY=config-key\n", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+
+    runtime = load_runtime_config(config_path)
+    set_current_runtime_config(runtime)
+    try:
+        monkeypatch.setenv("ODDS_API_KEY", "odds-test")
+        settings = Settings.from_runtime()
+        resolved = resolve_openai_api_key(settings)
+    finally:
+        set_current_runtime_config(None)
+
+    assert resolved == "config-key"

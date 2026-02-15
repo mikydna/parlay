@@ -100,6 +100,38 @@ def test_playbook_run_offline_uses_latest_snapshot(
     assert "mode=offline_forced_latest" in out
 
 
+def test_playbook_run_offline_does_not_require_odds_api_key(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    data_dir = tmp_path / "data" / "odds_api"
+    _set_runtime_config(monkeypatch=monkeypatch, tmp_path=tmp_path, data_dir=data_dir)
+    monkeypatch.delenv("ODDS_API_KEY", raising=False)
+    monkeypatch.delenv("PROP_EV_ODDS_API_KEY", raising=False)
+
+    store = SnapshotStore(data_dir)
+    offline_snapshot = "2026-02-11T10-00-00Z"
+    _write_props_snapshot(store, offline_snapshot)
+
+    monkeypatch.setattr(cli, "_run_strategy_for_playbook", lambda **kwargs: 0)
+    monkeypatch.setattr(
+        cli,
+        "generate_brief_for_snapshot",
+        lambda **kwargs: {
+            "report_markdown": "",
+            "report_tex": "",
+            "report_pdf": "x.pdf",
+            "report_meta": "x.meta.json",
+            "llm_pass1_status": "fallback",
+            "llm_pass2_status": "fallback",
+            "pdf_status": "missing_tool",
+        },
+    )
+
+    code = main(["playbook", "run", "--offline", "--month", "2026-02"])
+
+    assert code == 0
+
+
 def test_playbook_run_live_mode_creates_snapshot(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys
 ) -> None:

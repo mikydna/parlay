@@ -126,8 +126,14 @@ class OddsAPIClient:
         self.close()
 
     def _request(self, *, path: str, params: dict[str, Any]) -> OddsResponse:
+        api_key = str(self.settings.odds_api_key).strip()
+        if not api_key:
+            raise OddsAPIError(
+                "missing Odds API key; set ODDS_API_KEY or configure "
+                "odds_api.key_files in runtime.toml"
+            )
         params_with_key = dict(params)
-        params_with_key["apiKey"] = self.settings.odds_api_key
+        params_with_key["apiKey"] = api_key
         url = f"{self._base_url}/{path.lstrip('/')}"
         retries = 0
         started = perf_counter()

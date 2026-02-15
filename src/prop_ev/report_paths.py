@@ -3,12 +3,16 @@
 from __future__ import annotations
 
 import json
-import os
 import re
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from prop_ev.data_paths import canonical_reports_root, data_home_from_odds_root
+from prop_ev.data_paths import (
+    canonical_reports_root,
+    data_home_from_odds_root,
+    runtime_config_for_odds_root,
+)
+from prop_ev.runtime_config import current_runtime_config
 from prop_ev.storage import SnapshotStore
 from prop_ev.time_utils import parse_iso_z
 
@@ -31,10 +35,9 @@ def legacy_report_outputs_root(store: SnapshotStore) -> Path:
 
 
 def report_outputs_root(store: SnapshotStore) -> Path:
-    """Return user-facing report root outside odds snapshot storage."""
-    override = os.environ.get("PROP_EV_REPORTS_DIR", "").strip()
-    if override:
-        return Path(override).expanduser().resolve()
+    """Return user-facing report root from runtime config or canonical location."""
+    if runtime_config_for_odds_root(store.root) is not None:
+        return current_runtime_config().reports_dir.resolve()
     return canonical_report_outputs_root(store)
 
 

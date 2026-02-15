@@ -46,7 +46,9 @@ def normalize_featured_odds(
             for market in markets:
                 market_dict = _expect_dict(market, "featured_market")
                 market_key = str(market_dict.get("key", ""))
-                last_update = str(market_dict.get("last_update", ""))
+                last_update = str(
+                    market_dict.get("last_update") or book_dict.get("last_update") or ""
+                )
                 outcomes = _expect_list(market_dict.get("outcomes", []), "featured_market.outcomes")
                 for outcome in outcomes:
                     outcome_dict = _expect_dict(outcome, "featured_outcome")
@@ -82,7 +84,7 @@ def normalize_event_odds(payload: Any, *, snapshot_id: str, provider: str) -> li
         for market in markets:
             market_dict = _expect_dict(market, "event_market")
             market_key = str(market_dict.get("key", ""))
-            last_update = str(market_dict.get("last_update", ""))
+            last_update = str(market_dict.get("last_update") or book_dict.get("last_update") or "")
             outcomes = _expect_list(market_dict.get("outcomes", []), "event_market.outcomes")
             for outcome in outcomes:
                 outcome_dict = _expect_dict(outcome, "event_outcome")

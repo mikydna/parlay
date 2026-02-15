@@ -63,6 +63,14 @@ def test_runtime_env_overrides_projects_key_fields(tmp_path: Path) -> None:
                 "[strategy]",
                 "max_picks_default = 6",
                 'probabilistic_profile = "minutes_v1"',
+                "rolling_prior_window_days = 30",
+                "rolling_prior_min_samples = 40",
+                "rolling_prior_max_delta = 0.03",
+                "calibration_bin_size = 0.15",
+                "calibration_min_bin_samples = 12",
+                "calibration_max_delta = 0.04",
+                "calibration_shrink_k = 120",
+                "calibration_bucket_weight = 0.25",
             ]
         )
         + "\n",
@@ -78,6 +86,14 @@ def test_runtime_env_overrides_projects_key_fields(tmp_path: Path) -> None:
     assert projected["PROP_EV_ODDS_API_KEY_FILE_CANDIDATES"] == "ODDS_API_KEY.ignore"
     assert projected["PROP_EV_STRATEGY_MAX_PICKS_DEFAULT"] == "6"
     assert projected["PROP_EV_STRATEGY_PROBABILISTIC_PROFILE"] == "minutes_v1"
+    assert projected["PROP_EV_STRATEGY_ROLLING_PRIOR_WINDOW_DAYS"] == "30"
+    assert projected["PROP_EV_STRATEGY_ROLLING_PRIOR_MIN_SAMPLES"] == "40"
+    assert projected["PROP_EV_STRATEGY_ROLLING_PRIOR_MAX_DELTA"] == "0.03"
+    assert projected["PROP_EV_STRATEGY_CALIBRATION_BIN_SIZE"] == "0.15"
+    assert projected["PROP_EV_STRATEGY_CALIBRATION_MIN_BIN_SAMPLES"] == "12"
+    assert projected["PROP_EV_STRATEGY_CALIBRATION_MAX_DELTA"] == "0.04"
+    assert projected["PROP_EV_STRATEGY_CALIBRATION_SHRINK_K"] == "120"
+    assert projected["PROP_EV_STRATEGY_CALIBRATION_BUCKET_WEIGHT"] == "0.25"
 
 
 def test_default_runtime_config_bookmakers_path_is_repo_config() -> None:

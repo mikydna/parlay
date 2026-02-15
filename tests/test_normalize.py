@@ -13,6 +13,7 @@ def test_normalize_featured_odds_fixture() -> None:
     assert rows[0]["provider"] == "odds_api"
     assert rows[0]["snapshot_id"] == "snap-1"
     assert rows[0]["market"] == "spreads"
+    assert rows[0]["last_update"] == "2026-02-11T15:00:00Z"
 
 
 def test_normalize_event_odds_fixture() -> None:
@@ -24,3 +25,4 @@ def test_normalize_event_odds_fixture() -> None:
     assert rows[0]["event_id"] == "event-1"
     assert rows[0]["market"] == "player_points"
     assert rows[0]["provider"] == "odds_api"
+    assert rows[0]["last_update"] == "2026-02-11T15:00:00Z"

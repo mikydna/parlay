@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass
 from pathlib import Path
+
+from prop_ev.runtime_config import current_runtime_config
 
 
 @dataclass(frozen=True)
@@ -16,12 +17,13 @@ class NBADataConfig:
 
 
 def resolve_data_dir(cli_value: str | None) -> Path:
-    """Resolve nba-data root from CLI/env/default."""
+    """Resolve nba-data root from CLI/runtime config/default."""
     if cli_value and cli_value.strip():
         return Path(cli_value.strip()).expanduser()
-    env_value = os.environ.get("PROP_EV_NBA_DATA_DIR", "").strip()
-    if env_value:
-        return Path(env_value).expanduser()
+    try:
+        return current_runtime_config().nba_data_dir.resolve()
+    except RuntimeError:
+        pass
     return Path("data/nba_data")
 
 

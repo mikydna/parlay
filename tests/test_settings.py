@@ -1,8 +1,8 @@
 from pathlib import Path
 
 import pytest
-from pydantic import ValidationError
 
+from prop_ev.runtime_config import load_runtime_config, set_current_runtime_config
 from prop_ev.settings import Settings
 
 
@@ -27,15 +27,12 @@ def test_settings_load_with_odds_api_key(monkeypatch: pytest.MonkeyPatch) -> Non
     assert settings.data_dir == "data/odds_api"
 
 
-def test_settings_error_when_missing_key(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_settings_allows_missing_key(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("ODDS_API_KEY", raising=False)
     monkeypatch.delenv("PROP_EV_ODDS_API_KEY", raising=False)
 
-    with pytest.raises(ValidationError) as exc_info:
-        Settings(_env_file=None)
-
-    err = str(exc_info.value)
-    assert "ODDS_API_KEY" in err or "odds_api_key" in err
+    settings = Settings(_env_file=None)
+    assert settings.odds_api_key == ""
 
 
 def test_settings_from_runtime_uses_key_file_fallback(
@@ -43,10 +40,73 @@ def test_settings_from_runtime_uses_key_file_fallback(
 ) -> None:
     monkeypatch.delenv("ODDS_API_KEY", raising=False)
     monkeypatch.delenv("PROP_EV_ODDS_API_KEY", raising=False)
-    monkeypatch.setenv("PROP_EV_ODDS_API_KEY_FILE_CANDIDATES", "ODDS_API_KEY")
-    monkeypatch.chdir(tmp_path)
+    config_path = tmp_path / "runtime.toml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "[paths]",
+                'odds_data_dir = "odds_api"',
+                'nba_data_dir = "nba_data"',
+                'reports_dir = "reports/odds"',
+                'runtime_dir = "runtime"',
+                "",
+                "[odds_api]",
+                'key_files = ["ODDS_API_KEY"]',
+                "",
+                "[openai]",
+                'key_files = ["OPENAI_KEY.ignore"]',
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
     (tmp_path / "ODDS_API_KEY").write_text("file-key\n", encoding="utf-8")
 
-    settings = Settings.from_runtime()
+    runtime_config = load_runtime_config(config_path)
+    set_current_runtime_config(runtime_config)
+    try:
+        settings = Settings.from_runtime()
+    finally:
+        set_current_runtime_config(None)
 
     assert settings.odds_api_key == "file-key"
+
+
+def test_settings_from_runtime_resolves_key_relative_to_config_dir(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("ODDS_API_KEY", raising=False)
+    monkeypatch.delenv("PROP_EV_ODDS_API_KEY", raising=False)
+    nested = tmp_path / "nested"
+    nested.mkdir(parents=True, exist_ok=True)
+    config_path = nested / "runtime.toml"
+    config_path.write_text(
+        "\n".join(
+            [
+                "[paths]",
+                'odds_data_dir = "odds_api"',
+                'nba_data_dir = "nba_data"',
+                'reports_dir = "reports/odds"',
+                'runtime_dir = "runtime"',
+                "",
+                "[odds_api]",
+                'key_files = ["ODDS_API_KEY.ignore"]',
+                "",
+                "[openai]",
+                'key_files = ["OPENAI_KEY.ignore"]',
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (nested / "ODDS_API_KEY.ignore").write_text("relative-key\n", encoding="utf-8")
+    monkeypatch.chdir(tmp_path)
+
+    runtime_config = load_runtime_config(config_path)
+    set_current_runtime_config(runtime_config)
+    try:
+        settings = Settings.from_runtime()
+    finally:
+        set_current_runtime_config(None)
+
+    assert settings.odds_api_key == "relative-key"

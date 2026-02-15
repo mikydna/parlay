@@ -5,7 +5,6 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import os
 import re
 import subprocess
 import sys
@@ -76,9 +75,9 @@ from prop_ev.report_paths import (
 )
 from prop_ev.rolling_priors import build_rolling_priors
 from prop_ev.runtime_config import (
-    MANAGED_ENV_KEYS,
+    RuntimeConfig,
+    current_runtime_config,
     load_runtime_config,
-    runtime_env_overrides,
     set_current_runtime_config,
 )
 from prop_ev.settings import Settings
@@ -156,9 +155,7 @@ def _resolve_bookmakers(explicit: str, *, allow_config: bool = True) -> tuple[st
     if not allow_config:
         return "", "none"
 
-    config_path = Path(
-        os.environ.get("PROP_EV_BOOKMAKERS_CONFIG_PATH", "config/bookmakers.json")
-    ).resolve()
+    config_path = current_runtime_config().bookmakers_config_path.resolve()
     books = _load_bookmaker_whitelist(config_path)
     if books:
         return ",".join(books), f"config:{config_path}"
@@ -177,15 +174,84 @@ def _default_window() -> tuple[str, str]:
     return default_window()
 
 
+def _runtime_config() -> RuntimeConfig:
+    return current_runtime_config()
+
+
+def _runtime_odds_data_dir() -> str:
+    return str(_runtime_config().odds_data_dir)
+
+
+def _runtime_nba_data_dir() -> str:
+    return str(_runtime_config().nba_data_dir)
+
+
+def _runtime_runtime_dir() -> str:
+    return str(_runtime_config().runtime_dir)
+
+
+def _runtime_strategy_probabilistic_profile() -> str:
+    return _runtime_config().strategy_probabilistic_profile
+
+
+def _runtime_override_value(name: str) -> bool | int | float | str | None:
+    config = _runtime_config()
+    value_map: dict[str, bool | int | float | str] = {
+        "PROP_EV_ODDS_API_DEFAULT_MAX_CREDITS": config.odds_api_default_max_credits,
+        "PROP_EV_STRATEGY_REQUIRE_OFFICIAL_INJURIES": config.strategy_require_official_injuries,
+        "PROP_EV_STRATEGY_ALLOW_SECONDARY_INJURIES": config.strategy_allow_secondary_injuries,
+        "PROP_EV_STRATEGY_REQUIRE_FRESH_CONTEXT": config.strategy_require_fresh_context,
+        "PROP_EV_STRATEGY_STALE_QUOTE_MINUTES": config.strategy_stale_quote_minutes,
+        "PROP_EV_STRATEGY_MAX_PICKS_DEFAULT": config.strategy_max_picks_default,
+        "PROP_EV_STRATEGY_PROBABILISTIC_PROFILE": config.strategy_probabilistic_profile,
+        "PROP_EV_STRATEGY_ROLLING_PRIOR_WINDOW_DAYS": config.strategy_rolling_prior_window_days,
+        "PROP_EV_STRATEGY_ROLLING_PRIOR_MIN_SAMPLES": config.strategy_rolling_prior_min_samples,
+        "PROP_EV_STRATEGY_ROLLING_PRIOR_MAX_DELTA": config.strategy_rolling_prior_max_delta,
+        "PROP_EV_STRATEGY_CALIBRATION_BIN_SIZE": config.strategy_calibration_bin_size,
+        "PROP_EV_STRATEGY_CALIBRATION_MIN_BIN_SAMPLES": config.strategy_calibration_min_bin_samples,
+        "PROP_EV_STRATEGY_CALIBRATION_MAX_DELTA": config.strategy_calibration_max_delta,
+        "PROP_EV_STRATEGY_CALIBRATION_SHRINK_K": config.strategy_calibration_shrink_k,
+        "PROP_EV_STRATEGY_CALIBRATION_BUCKET_WEIGHT": config.strategy_calibration_bucket_weight,
+        "PROP_EV_CONTEXT_INJURIES_STALE_HOURS": config.context_injuries_stale_hours,
+        "PROP_EV_CONTEXT_ROSTER_STALE_HOURS": config.context_roster_stale_hours,
+    }
+    return value_map.get(name)
+
+
 def _env_bool(name: str, default: bool) -> bool:
+    runtime_value = _runtime_override_value(name)
+    if isinstance(runtime_value, bool):
+        return runtime_value
+    if runtime_value is not None:
+        return str(runtime_value).strip().lower() in {"1", "true", "yes", "y", "on"}
     return env_bool(name, default)
 
 
 def _env_int(name: str, default: int) -> int:
+    runtime_value = _runtime_override_value(name)
+    if isinstance(runtime_value, bool):
+        return default
+    if isinstance(runtime_value, int):
+        return runtime_value
+    if runtime_value is not None:
+        try:
+            return int(str(runtime_value).strip())
+        except ValueError:
+            return default
     return env_int(name, default)
 
 
 def _env_float(name: str, default: float) -> float:
+    runtime_value = _runtime_override_value(name)
+    if isinstance(runtime_value, bool):
+        return default
+    if isinstance(runtime_value, (int, float)):
+        return float(runtime_value)
+    if runtime_value is not None:
+        try:
+            return float(str(runtime_value).strip())
+        except ValueError:
+            return default
     return env_float(name, default)
 
 
@@ -373,7 +439,7 @@ def _write_derived(
 
 
 def _cmd_snapshot_slate(args: argparse.Namespace) -> int:
-    store = SnapshotStore(os.environ.get("PROP_EV_DATA_DIR", "data/odds_api"))
+    store = SnapshotStore(_runtime_odds_data_dir())
     cache = GlobalCacheStore(store.root)
     snapshot_id = args.snapshot_id or make_snapshot_id()
     default_from, default_to = _default_window()
@@ -462,7 +528,7 @@ def _cmd_snapshot_slate(args: argparse.Namespace) -> int:
 
 
 def _cmd_snapshot_props(args: argparse.Namespace) -> int:
-    store = SnapshotStore(os.environ.get("PROP_EV_DATA_DIR", "data/odds_api"))
+    store = SnapshotStore(_runtime_odds_data_dir())
     cache = GlobalCacheStore(store.root)
     snapshot_id = args.snapshot_id or make_snapshot_id()
     default_from, default_to = _default_window()
@@ -637,7 +703,7 @@ def _cmd_snapshot_props(args: argparse.Namespace) -> int:
 
 
 def _cmd_snapshot_ls(args: argparse.Namespace) -> int:
-    store = SnapshotStore(os.environ.get("PROP_EV_DATA_DIR", "data/odds_api"))
+    store = SnapshotStore(_runtime_odds_data_dir())
     if not store.snapshots_dir.exists():
         print("no snapshots")
         return 0
@@ -659,7 +725,7 @@ def _cmd_snapshot_ls(args: argparse.Namespace) -> int:
 
 
 def _cmd_snapshot_show(args: argparse.Namespace) -> int:
-    store = SnapshotStore(os.environ.get("PROP_EV_DATA_DIR", "data/odds_api"))
+    store = SnapshotStore(_runtime_odds_data_dir())
     manifest = store.load_manifest(args.snapshot_id)
     requests = manifest.get("requests", {})
     counts: Counter[str] = Counter()
@@ -681,7 +747,7 @@ def _cmd_snapshot_show(args: argparse.Namespace) -> int:
 
 
 def _cmd_snapshot_diff(args: argparse.Namespace) -> int:
-    store = SnapshotStore(os.environ.get("PROP_EV_DATA_DIR", "data/odds_api"))
+    store = SnapshotStore(_runtime_odds_data_dir())
     a_dir = store.derived_path(args.a, "")
     b_dir = store.derived_path(args.b, "")
     a_files = {path.name for path in a_dir.glob("*.jsonl")} if a_dir.exists() else set()
@@ -702,7 +768,7 @@ def _cmd_snapshot_diff(args: argparse.Namespace) -> int:
 
 
 def _cmd_snapshot_verify(args: argparse.Namespace) -> int:
-    store = SnapshotStore(os.environ.get("PROP_EV_DATA_DIR", "data/odds_api"))
+    store = SnapshotStore(_runtime_odds_data_dir())
     snapshot_dir = store.snapshot_dir(args.snapshot_id)
     manifest = store.load_manifest(args.snapshot_id)
     requests = manifest.get("requests", {})
@@ -757,7 +823,7 @@ def _cmd_snapshot_verify(args: argparse.Namespace) -> int:
 
 
 def _cmd_snapshot_lake(args: argparse.Namespace) -> int:
-    store = SnapshotStore(os.environ.get("PROP_EV_DATA_DIR", "data/odds_api"))
+    store = SnapshotStore(_runtime_odds_data_dir())
     snapshot_dir = store.snapshot_dir(args.snapshot_id)
     parquet_paths = lake_snapshot_derived(snapshot_dir)
     print(f"snapshot_id={args.snapshot_id} parquet_files={len(parquet_paths)}")
@@ -767,7 +833,7 @@ def _cmd_snapshot_lake(args: argparse.Namespace) -> int:
 
 
 def _cmd_snapshot_pack(args: argparse.Namespace) -> int:
-    store = SnapshotStore(os.environ.get("PROP_EV_DATA_DIR", "data/odds_api"))
+    store = SnapshotStore(_runtime_odds_data_dir())
     out_path = Path(str(args.out)).expanduser() if str(args.out).strip() else None
     bundle_path, sidecar_path = pack_snapshot(
         data_root=store.root,
@@ -781,7 +847,7 @@ def _cmd_snapshot_pack(args: argparse.Namespace) -> int:
 
 
 def _cmd_snapshot_unpack(args: argparse.Namespace) -> int:
-    store = SnapshotStore(os.environ.get("PROP_EV_DATA_DIR", "data/odds_api"))
+    store = SnapshotStore(_runtime_odds_data_dir())
     payload = unpack_snapshot(
         data_root=store.root,
         bundle_path=Path(str(args.bundle)).expanduser(),
@@ -795,7 +861,7 @@ def _cmd_snapshot_unpack(args: argparse.Namespace) -> int:
 
 
 def _cmd_credits_report(args: argparse.Namespace) -> int:
-    store = SnapshotStore(os.environ.get("PROP_EV_DATA_DIR", "data/odds_api"))
+    store = SnapshotStore(_runtime_odds_data_dir())
     month = args.month or _utc_now().strftime("%Y-%m")
     usage_path = store.usage_dir / f"usage-{month}.jsonl"
     if not usage_path.exists():
@@ -1094,7 +1160,7 @@ def _print_warnings(warnings: list[dict[str, str]]) -> None:
 
 
 def _cmd_data_datasets_ls(args: argparse.Namespace) -> int:
-    data_root = Path(os.environ.get("PROP_EV_DATA_DIR", "data/odds_api"))
+    data_root = Path(_runtime_odds_data_dir())
     dataset_ids = _discover_dataset_ids(data_root)
     summaries: list[dict[str, Any]] = []
     warnings: list[dict[str, str]] = []
@@ -1228,7 +1294,7 @@ def _cmd_data_datasets_ls(args: argparse.Namespace) -> int:
 
 
 def _cmd_data_datasets_show(args: argparse.Namespace) -> int:
-    data_root = Path(os.environ.get("PROP_EV_DATA_DIR", "data/odds_api"))
+    data_root = Path(_runtime_odds_data_dir())
     dataset_id_value = str(getattr(args, "dataset_id", "")).strip()
     if not dataset_id_value:
         raise CLIError("--dataset-id is required")
@@ -1307,7 +1373,7 @@ def _cmd_data_datasets_show(args: argparse.Namespace) -> int:
 
 
 def _cmd_data_status(args: argparse.Namespace) -> int:
-    data_root = Path(os.environ.get("PROP_EV_DATA_DIR", "data/odds_api"))
+    data_root = Path(_runtime_odds_data_dir())
     store = SnapshotStore(data_root)
     cache = GlobalCacheStore(data_root)
     warnings: list[dict[str, str]] = []
@@ -1392,7 +1458,7 @@ def _cmd_data_status(args: argparse.Namespace) -> int:
 
 
 def _cmd_data_done_days(args: argparse.Namespace) -> int:
-    data_root = Path(os.environ.get("PROP_EV_DATA_DIR", "data/odds_api"))
+    data_root = Path(_runtime_odds_data_dir())
     dataset_id_value = str(getattr(args, "dataset_id", "")).strip()
     if not dataset_id_value:
         raise CLIError("--dataset-id is required")
@@ -1530,7 +1596,7 @@ def _cmd_data_done_days(args: argparse.Namespace) -> int:
 
 
 def _cmd_data_backfill(args: argparse.Namespace) -> int:
-    data_root = Path(os.environ.get("PROP_EV_DATA_DIR", "data/odds_api"))
+    data_root = Path(_runtime_odds_data_dir())
     spec = _dataset_spec_from_args(args)
     try:
         days = _resolve_days(
@@ -1580,7 +1646,7 @@ def _cmd_data_backfill(args: argparse.Namespace) -> int:
 
 
 def _cmd_data_verify(args: argparse.Namespace) -> int:
-    data_root = Path(os.environ.get("PROP_EV_DATA_DIR", "data/odds_api"))
+    data_root = Path(_runtime_odds_data_dir())
     dataset_id_value = str(getattr(args, "dataset_id", "")).strip()
     if not dataset_id_value:
         raise CLIError("--dataset-id is required")
@@ -1750,7 +1816,7 @@ def _cmd_data_verify(args: argparse.Namespace) -> int:
 
 
 def _cmd_data_repair_derived(args: argparse.Namespace) -> int:
-    data_root = Path(os.environ.get("PROP_EV_DATA_DIR", "data/odds_api"))
+    data_root = Path(_runtime_odds_data_dir())
     dataset_id_value = str(getattr(args, "dataset_id", "")).strip()
     if not dataset_id_value:
         raise CLIError("--dataset-id is required")
@@ -1936,7 +2002,7 @@ def _cmd_data_repair_derived(args: argparse.Namespace) -> int:
 
 
 def _cmd_data_guardrails(args: argparse.Namespace) -> int:
-    store = SnapshotStore(os.environ.get("PROP_EV_DATA_DIR", "data/odds_api"))
+    store = SnapshotStore(_runtime_odds_data_dir())
     report = build_guardrail_report(store.root)
     violations = report.get("violations", [])
     violation_count = int(report.get("violation_count", 0))
@@ -1959,7 +2025,7 @@ def _cmd_data_guardrails(args: argparse.Namespace) -> int:
 
 
 def _cmd_data_migrate_layout(args: argparse.Namespace) -> int:
-    store = SnapshotStore(os.environ.get("PROP_EV_DATA_DIR", "data/odds_api"))
+    store = SnapshotStore(_runtime_odds_data_dir())
     snapshot_ids = [str(value) for value in getattr(args, "snapshot_id", []) if str(value).strip()]
     report = migrate_layout(
         odds_root=store.root,
@@ -2039,8 +2105,8 @@ def _secondary_source_ready(secondary: dict[str, Any]) -> bool:
     return secondary_source_ready(secondary)
 
 
-def _allow_secondary_injuries_override(*, cli_flag: bool) -> bool:
-    return cli_flag or _env_bool("PROP_EV_STRATEGY_ALLOW_SECONDARY_INJURIES", False)
+def _allow_secondary_injuries_override(*, cli_flag: bool, default: bool) -> bool:
+    return cli_flag or default
 
 
 def _resolve_probabilistic_profile(value: str) -> str:
@@ -2137,7 +2203,7 @@ def _preflight_context_for_snapshot(
     }
 
 
-def _strategy_policy_from_env() -> dict[str, Any]:
+def _strategy_policy_from_runtime() -> dict[str, Any]:
     return {
         "require_official_injuries": _env_bool("PROP_EV_STRATEGY_REQUIRE_OFFICIAL_INJURIES", True),
         "allow_secondary_injuries": _env_bool(
@@ -2146,7 +2212,7 @@ def _strategy_policy_from_env() -> dict[str, Any]:
         ),
         "stale_quote_minutes": _env_int("PROP_EV_STRATEGY_STALE_QUOTE_MINUTES", 20),
         "probabilistic_profile": _resolve_probabilistic_profile(
-            str(os.environ.get("PROP_EV_STRATEGY_PROBABILISTIC_PROFILE", "off"))
+            str(_runtime_strategy_probabilistic_profile())
         ),
         "injuries_stale_hours": _env_float("PROP_EV_CONTEXT_INJURIES_STALE_HOURS", 6.0),
         "roster_stale_hours": _env_float("PROP_EV_CONTEXT_ROSTER_STALE_HOURS", 24.0),
@@ -2301,7 +2367,7 @@ def _health_recommendations(
 
 
 def _cmd_strategy_health(args: argparse.Namespace) -> int:
-    store = SnapshotStore(os.environ.get("PROP_EV_DATA_DIR", "data/odds_api"))
+    store = SnapshotStore(_runtime_odds_data_dir())
     snapshot_id = args.snapshot_id or _latest_snapshot_id(store)
     snapshot_dir = store.snapshot_dir(snapshot_id)
     manifest = store.load_manifest(snapshot_id)
@@ -2312,9 +2378,10 @@ def _cmd_strategy_health(args: argparse.Namespace) -> int:
     rows = load_jsonl(derived_path)
     event_context = _load_event_context(store, snapshot_id, manifest)
     slate_rows = _load_slate_rows(store, snapshot_id)
-    policy = _strategy_policy_from_env()
+    policy = _strategy_policy_from_runtime()
     allow_secondary_injuries = _allow_secondary_injuries_override(
-        cli_flag=bool(getattr(args, "allow_secondary_injuries", False))
+        cli_flag=bool(getattr(args, "allow_secondary_injuries", False)),
+        default=bool(policy["allow_secondary_injuries"]),
     )
     teams_in_scope = sorted(_teams_in_scope(event_context))
     injuries, roster, injuries_path, roster_path = _load_strategy_context(
@@ -2675,9 +2742,7 @@ def _load_strategy_inputs(
     )
     player_identity_map = load_identity_map(identity_map_path)
     minutes_probabilities = load_minutes_prob_index_for_snapshot(
-        layout=build_nba_layout(
-            Path(os.environ.get("PROP_EV_NBA_DATA_DIR", "data/nba_data")).expanduser().resolve()
-        ),
+        layout=build_nba_layout(Path(_runtime_nba_data_dir()).expanduser().resolve()),
         snapshot_day=_snapshot_date(snapshot_id),
         probabilistic_profile=probabilistic_profile,
         auto_build=True,
@@ -2696,19 +2761,20 @@ def _load_strategy_inputs(
 
 
 def _cmd_strategy_run(args: argparse.Namespace) -> int:
-    store = SnapshotStore(os.environ.get("PROP_EV_DATA_DIR", "data/odds_api"))
+    store = SnapshotStore(_runtime_odds_data_dir())
     snapshot_id = args.snapshot_id or _latest_snapshot_id(store)
     strategy_requested = str(getattr(args, "strategy", "s001"))
     plugin = get_strategy(strategy_requested)
     strategy_id = normalize_strategy_id(plugin.info.id)
     require_official_injuries = _env_bool("PROP_EV_STRATEGY_REQUIRE_OFFICIAL_INJURIES", True)
     allow_secondary_injuries = _allow_secondary_injuries_override(
-        cli_flag=bool(getattr(args, "allow_secondary_injuries", False))
+        cli_flag=bool(getattr(args, "allow_secondary_injuries", False)),
+        default=_env_bool("PROP_EV_STRATEGY_ALLOW_SECONDARY_INJURIES", False),
     )
     stale_quote_minutes_env = _env_int("PROP_EV_STRATEGY_STALE_QUOTE_MINUTES", 20)
     require_fresh_context_env = _env_bool("PROP_EV_STRATEGY_REQUIRE_FRESH_CONTEXT", True)
     probabilistic_profile = _resolve_input_probabilistic_profile(
-        default_profile=str(os.environ.get("PROP_EV_STRATEGY_PROBABILISTIC_PROFILE", "off")),
+        default_profile=str(_runtime_strategy_probabilistic_profile()),
         probabilistic_profile_arg=str(getattr(args, "probabilistic_profile", "")),
         strategy_ids=[strategy_id],
     )
@@ -3019,7 +3085,7 @@ def _render_strategy_compare_markdown(report: dict[str, Any]) -> str:
 
 
 def _cmd_strategy_compare(args: argparse.Namespace) -> int:
-    store = SnapshotStore(os.environ.get("PROP_EV_DATA_DIR", "data/odds_api"))
+    store = SnapshotStore(_runtime_odds_data_dir())
     snapshot_id = args.snapshot_id or _latest_snapshot_id(store)
     reports_dir = snapshot_reports_dir(store, snapshot_id)
     write_markdown = bool(getattr(args, "write_markdown", False))
@@ -3032,7 +3098,7 @@ def _cmd_strategy_compare(args: argparse.Namespace) -> int:
     stale_quote_minutes_env = _env_int("PROP_EV_STRATEGY_STALE_QUOTE_MINUTES", 20)
     require_fresh_context_env = _env_bool("PROP_EV_STRATEGY_REQUIRE_FRESH_CONTEXT", True)
     probabilistic_profile = _resolve_input_probabilistic_profile(
-        default_profile=str(os.environ.get("PROP_EV_STRATEGY_PROBABILISTIC_PROFILE", "off")),
+        default_profile=str(_runtime_strategy_probabilistic_profile()),
         probabilistic_profile_arg=str(getattr(args, "probabilistic_profile", "")),
         strategy_ids=strategy_ids,
     )
@@ -3559,7 +3625,7 @@ def _parse_cli_kv(stdout: str) -> dict[str, str]:
 def _run_cli_subcommand(
     *,
     args: list[str],
-    env: dict[str, str],
+    env: dict[str, str] | None,
     cwd: Path,
     global_cli_args: Sequence[str] | None = None,
 ) -> str:
@@ -3584,7 +3650,7 @@ def _run_cli_subcommand(
 
 
 def _cmd_strategy_ablation(args: argparse.Namespace) -> int:
-    store = SnapshotStore(os.environ.get("PROP_EV_DATA_DIR", "data/odds_api"))
+    store = SnapshotStore(_runtime_odds_data_dir())
     data_root = store.root
     dataset_id_value = _resolve_complete_day_dataset_id(
         data_root, str(getattr(args, "dataset_id", ""))
@@ -3608,7 +3674,7 @@ def _cmd_strategy_ablation(args: argparse.Namespace) -> int:
     force_all = bool(getattr(args, "force", False))
     reuse_existing = bool(getattr(args, "reuse_existing", True)) and not force_all
 
-    default_profile = str(os.environ.get("PROP_EV_STRATEGY_PROBABILISTIC_PROFILE", "off"))
+    default_profile = str(_runtime_strategy_probabilistic_profile())
     probabilistic_profile = _resolve_input_probabilistic_profile(
         default_profile=default_profile,
         probabilistic_profile_arg=str(getattr(args, "probabilistic_profile", "")),
@@ -3633,16 +3699,10 @@ def _cmd_strategy_ablation(args: argparse.Namespace) -> int:
     run_root = base_reports_root / "ablation" / run_id
     run_root.mkdir(parents=True, exist_ok=True)
 
-    base_env = dict(os.environ)
-    base_env["PROP_EV_DATA_DIR"] = str(store.root)
     cwd = Path.cwd()
     code_revision = _ablation_git_head()
-    nba_data_dir = str(
-        Path(os.environ.get("PROP_EV_NBA_DATA_DIR", "data/nba_data")).expanduser().resolve()
-    )
-    runtime_dir = str(
-        Path(os.environ.get("PROP_EV_RUNTIME_DIR", "data/runtime")).expanduser().resolve()
-    )
+    nba_data_dir = str(Path(_runtime_nba_data_dir()).expanduser().resolve())
+    runtime_dir = str(Path(_runtime_runtime_dir()).expanduser().resolve())
 
     manifest_hashes = {
         snapshot_id: _sha256_file(store.snapshot_dir(snapshot_id) / "manifest.json")
@@ -3651,9 +3711,7 @@ def _cmd_strategy_ablation(args: argparse.Namespace) -> int:
 
     prebuild_minutes_cache = bool(getattr(args, "prebuild_minutes_cache", True))
     if prebuild_minutes_cache and probabilistic_profile == "minutes_v1":
-        nba_dir = (
-            Path(os.environ.get("PROP_EV_NBA_DATA_DIR", "data/nba_data")).expanduser().resolve()
-        )
+        nba_dir = Path(_runtime_nba_data_dir()).expanduser().resolve()
         nba_layout = build_nba_layout(nba_dir)
         prebuild_workers = max(1, int(getattr(args, "max_workers", 6)))
 
@@ -3713,8 +3771,6 @@ def _cmd_strategy_ablation(args: argparse.Namespace) -> int:
     def _cap_worker(cap: int) -> dict[str, Any]:
         cap_root = run_root / f"cap-max{cap}"
         cap_root.mkdir(parents=True, exist_ok=True)
-        cap_env = dict(base_env)
-        cap_env["PROP_EV_REPORTS_DIR"] = str(cap_root)
         cap_global_cli_args = [
             "--data-dir",
             str(store.root),
@@ -3856,7 +3912,7 @@ def _cmd_strategy_ablation(args: argparse.Namespace) -> int:
                     compare_cmd.append("--refresh-context")
                 _run_cli_subcommand(
                     args=compare_cmd,
-                    env=cap_env,
+                    env=None,
                     cwd=cwd,
                     global_cli_args=cap_global_cli_args,
                 )
@@ -3927,7 +3983,7 @@ def _cmd_strategy_ablation(args: argparse.Namespace) -> int:
                     settle_cmd.append("--offline")
                 _run_cli_subcommand(
                     args=settle_cmd,
-                    env=cap_env,
+                    env=None,
                     cwd=cwd,
                     global_cli_args=cap_global_cli_args,
                 )
@@ -4020,7 +4076,7 @@ def _cmd_strategy_ablation(args: argparse.Namespace) -> int:
             summarize_cmd.append("--require-power-gate")
         summarize_stdout = _run_cli_subcommand(
             args=summarize_cmd,
-            env=cap_env,
+            env=None,
             cwd=cwd,
             global_cli_args=cap_global_cli_args,
         )
@@ -4108,7 +4164,7 @@ def _cmd_strategy_backtest_summarize(args: argparse.Namespace) -> int:
     )
     from prop_ev.power_guidance import PowerGuidanceAssumptions, build_power_guidance
 
-    store = SnapshotStore(os.environ.get("PROP_EV_DATA_DIR", "data/odds_api"))
+    store = SnapshotStore(_runtime_odds_data_dir())
     snapshot_id = args.snapshot_id or _latest_snapshot_id(store)
     reports_dir = snapshot_reports_dir(store, snapshot_id)
 
@@ -4471,7 +4527,7 @@ def _cmd_strategy_backtest_summarize(args: argparse.Namespace) -> int:
 
 
 def _cmd_strategy_backtest_prep(args: argparse.Namespace) -> int:
-    store = SnapshotStore(os.environ.get("PROP_EV_DATA_DIR", "data/odds_api"))
+    store = SnapshotStore(_runtime_odds_data_dir())
     snapshot_id = args.snapshot_id or _latest_snapshot_id(store)
     snapshot_dir = store.snapshot_dir(snapshot_id)
     reports_dir = snapshot_reports_dir(store, snapshot_id)
@@ -4556,7 +4612,7 @@ def _resolve_settlement_strategy_report_path(
 
 
 def _cmd_strategy_settle(args: argparse.Namespace) -> int:
-    store = SnapshotStore(os.environ.get("PROP_EV_DATA_DIR", "data/odds_api"))
+    store = SnapshotStore(_runtime_odds_data_dir())
     snapshot_id = args.snapshot_id or _latest_snapshot_id(store)
     snapshot_dir = store.snapshot_dir(snapshot_id)
     reports_dir = snapshot_reports_dir(store, snapshot_id)
@@ -4901,7 +4957,7 @@ def _run_strategy_for_playbook(
 
 
 def _cmd_playbook_run(args: argparse.Namespace) -> int:
-    store = SnapshotStore(os.environ.get("PROP_EV_DATA_DIR", "data/odds_api"))
+    store = SnapshotStore(_runtime_odds_data_dir())
     settings = Settings.from_runtime()
     month = args.month or current_month_utc()
     strategy_id = _resolve_strategy_id(
@@ -4915,7 +4971,8 @@ def _cmd_playbook_run(args: argparse.Namespace) -> int:
     start_budget = budget_snapshot(store=store, settings=settings, month=month)
     require_official_injuries = _env_bool("PROP_EV_STRATEGY_REQUIRE_OFFICIAL_INJURIES", True)
     allow_secondary_injuries = _allow_secondary_injuries_override(
-        cli_flag=bool(getattr(args, "allow_secondary_injuries", False))
+        cli_flag=bool(getattr(args, "allow_secondary_injuries", False)),
+        default=settings.strategy_allow_secondary_injuries,
     )
     require_fresh_context = _env_bool("PROP_EV_STRATEGY_REQUIRE_FRESH_CONTEXT", True)
     injuries_stale_hours = _env_float("PROP_EV_CONTEXT_INJURIES_STALE_HOURS", 6.0)
@@ -5152,7 +5209,7 @@ def _cmd_playbook_run(args: argparse.Namespace) -> int:
 
 
 def _cmd_playbook_render(args: argparse.Namespace) -> int:
-    store = SnapshotStore(os.environ.get("PROP_EV_DATA_DIR", "data/odds_api"))
+    store = SnapshotStore(_runtime_odds_data_dir())
     settings = Settings.from_runtime()
     month = args.month or current_month_utc()
     strategy_id = _resolve_strategy_id(
@@ -5213,7 +5270,8 @@ def _cmd_playbook_render(args: argparse.Namespace) -> int:
                 refresh_context=refresh_context,
                 strategy_mode=str(getattr(args, "strategy_mode", "auto")),
                 allow_secondary_injuries=_allow_secondary_injuries_override(
-                    cli_flag=bool(getattr(args, "allow_secondary_injuries", False))
+                    cli_flag=bool(getattr(args, "allow_secondary_injuries", False)),
+                    default=settings.strategy_allow_secondary_injuries,
                 ),
                 write_canonical=True,
             )
@@ -5309,7 +5367,7 @@ def _publish_compact_playbook_outputs(
 
 
 def _cmd_playbook_publish(args: argparse.Namespace) -> int:
-    store = SnapshotStore(os.environ.get("PROP_EV_DATA_DIR", "data/odds_api"))
+    store = SnapshotStore(_runtime_odds_data_dir())
     published, daily_dir, latest_dir, latest_json = _publish_compact_playbook_outputs(
         store=store,
         snapshot_id=args.snapshot_id,
@@ -5323,7 +5381,7 @@ def _cmd_playbook_publish(args: argparse.Namespace) -> int:
 
 
 def _cmd_playbook_budget(args: argparse.Namespace) -> int:
-    store = SnapshotStore(os.environ.get("PROP_EV_DATA_DIR", "data/odds_api"))
+    store = SnapshotStore(_runtime_odds_data_dir())
     settings = Settings.from_runtime()
     month = args.month or current_month_utc()
     payload = budget_snapshot(store=store, settings=settings, month=month)
@@ -5332,7 +5390,7 @@ def _cmd_playbook_budget(args: argparse.Namespace) -> int:
 
 
 def _cmd_playbook_discover_execute(args: argparse.Namespace) -> int:
-    store = SnapshotStore(os.environ.get("PROP_EV_DATA_DIR", "data/odds_api"))
+    store = SnapshotStore(_runtime_odds_data_dir())
     settings = Settings.from_runtime()
     month = args.month or current_month_utc()
     strategy_id = _resolve_strategy_id(
@@ -5434,7 +5492,8 @@ def _cmd_playbook_discover_execute(args: argparse.Namespace) -> int:
             refresh_context=args.refresh_context,
             strategy_mode=str(getattr(args, "strategy_mode", "auto")),
             allow_secondary_injuries=_allow_secondary_injuries_override(
-                cli_flag=bool(getattr(args, "allow_secondary_injuries", False))
+                cli_flag=bool(getattr(args, "allow_secondary_injuries", False)),
+                default=settings.strategy_allow_secondary_injuries,
             ),
             write_canonical=True,
         )
@@ -5458,7 +5517,8 @@ def _cmd_playbook_discover_execute(args: argparse.Namespace) -> int:
             refresh_context=args.refresh_context,
             strategy_mode=str(getattr(args, "strategy_mode", "auto")),
             allow_secondary_injuries=_allow_secondary_injuries_override(
-                cli_flag=bool(getattr(args, "allow_secondary_injuries", False))
+                cli_flag=bool(getattr(args, "allow_secondary_injuries", False)),
+                default=settings.strategy_allow_secondary_injuries,
             ),
             write_canonical=True,
         )
@@ -6677,13 +6737,7 @@ def main(argv: list[str] | None = None) -> int:
         if runtime_dir_override
         else None,
     )
-    prev_managed_env = {key: os.environ.get(key) for key in MANAGED_ENV_KEYS}
-
     try:
-        for key in MANAGED_ENV_KEYS:
-            os.environ.pop(key, None)
-        for key, value in runtime_env_overrides(runtime_config).items():
-            os.environ[key] = value
         set_current_runtime_config(runtime_config)
 
         parser = _build_parser()
@@ -6707,11 +6761,6 @@ def main(argv: list[str] | None = None) -> int:
             return 2
     finally:
         set_current_runtime_config(None)
-        for key, value in prev_managed_env.items():
-            if value is None:
-                os.environ.pop(key, None)
-            else:
-                os.environ[key] = value
 
 
 if __name__ == "__main__":
