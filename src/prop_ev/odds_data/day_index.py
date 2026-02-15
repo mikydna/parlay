@@ -15,7 +15,7 @@ from prop_ev.odds_data.cache_store import GlobalCacheStore
 from prop_ev.odds_data.spec import DatasetSpec, canonical_dict, dataset_id
 from prop_ev.odds_data.window import day_window
 from prop_ev.storage import SnapshotStore, request_hash
-from prop_ev.time_utils import utc_now_str
+from prop_ev.time_utils import parse_iso_z, utc_now_str
 
 DAY_STATUS_SCHEMA_VERSION = 1
 
@@ -62,20 +62,6 @@ def _iso_z(dt: datetime) -> str:
     return dt.astimezone(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
-def _parse_iso_utc(raw_value: str) -> datetime | None:
-    value = raw_value.strip()
-    if not value:
-        return None
-    candidate = value[:-1] + "+00:00" if value.endswith("Z") else value
-    try:
-        parsed = datetime.fromisoformat(candidate)
-    except ValueError:
-        return None
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=UTC)
-    return parsed.astimezone(UTC)
-
-
 def _historical_events_timestamp(day: str, tz_name: str, anchor_hour_local: int) -> str:
     parsed_day = date.fromisoformat(day)
     tz = ZoneInfo(tz_name)
@@ -90,7 +76,7 @@ def _historical_event_odds_timestamp(
     fallback_timestamp: str,
     pre_tip_minutes: int,
 ) -> str:
-    commence = _parse_iso_utc(str(event_row.get("commence_time", "")))
+    commence = parse_iso_z(str(event_row.get("commence_time", "")))
     if commence is None:
         return fallback_timestamp
     safe_minutes = max(0, int(pre_tip_minutes))

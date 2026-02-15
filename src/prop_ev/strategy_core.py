@@ -107,17 +107,13 @@ def _now_utc() -> str:
     return utc_now_str()
 
 
-def _parse_iso_utc(value: str) -> datetime | None:
-    return parse_iso_z(value)
-
-
 def _et_date_label(event_context: dict[str, dict[str, str]] | None) -> str:
     tips: list[datetime] = []
     if isinstance(event_context, dict):
         for row in event_context.values():
             if not isinstance(row, dict):
                 continue
-            tip = _parse_iso_utc(str(row.get("commence_time", "")))
+            tip = parse_iso_z(str(row.get("commence_time", "")))
             if tip is not None:
                 tips.append(tip)
     anchor = min(tips) if tips else datetime.now(UTC)
@@ -568,7 +564,7 @@ def _bool(value: bool) -> str:
 
 
 def _parse_quote_time(value: str) -> datetime | None:
-    return _parse_iso_utc(value)
+    return parse_iso_z(value)
 
 
 def _quote_age_minutes(*, quote_utc: str, now_utc: datetime) -> float | None:
@@ -705,7 +701,7 @@ def _prop_label(player: str, side: str, point: float, market: str) -> str:
 
 
 def _tip_et(value: str) -> str:
-    tip = _parse_iso_utc(value)
+    tip = parse_iso_z(value)
     if tip is None:
         return ""
     return tip.astimezone(ET_ZONE).strftime("%I:%M %p ET")
@@ -761,7 +757,7 @@ def _event_line_index(
         commence = ""
         if isinstance(event_context, dict):
             commence = str(event_context.get(event_id, {}).get("commence_time", ""))
-        parsed = _parse_iso_utc(commence)
+        parsed = parse_iso_z(commence)
         if parsed is None:
             return (2, event_id)
         return (1, parsed.isoformat())
@@ -1144,7 +1140,7 @@ def build_strategy_report(
         else:
             strategy_now_utc = quote_now_utc.astimezone(UTC)
     elif isinstance(quote_now_utc, str):
-        parsed_quote_now_utc = _parse_iso_utc(quote_now_utc)
+        parsed_quote_now_utc = parse_iso_z(quote_now_utc)
         if isinstance(parsed_quote_now_utc, datetime):
             strategy_now_utc = parsed_quote_now_utc
     resolved_max_picks = _resolve_max_picks(top_n=top_n, max_picks=max_picks)

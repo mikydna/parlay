@@ -16,15 +16,11 @@ def now_utc() -> str:
     return utc_now_str()
 
 
-def _parse_iso_utc(value: str) -> datetime | None:
-    return parse_iso_z(value)
-
-
 def _apply_stale_flag(payload: dict[str, Any], stale_after_hours: float | None) -> dict[str, Any]:
     if stale_after_hours is None:
         return payload
     copy = dict(payload)
-    fetched_at = _parse_iso_utc(str(copy.get("fetched_at_utc", "")))
+    fetched_at = parse_iso_z(str(copy.get("fetched_at_utc", "")))
     if fetched_at is None:
         copy["stale"] = True
         copy["stale_reason"] = "missing_fetched_at_utc"
