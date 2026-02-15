@@ -32,7 +32,13 @@ When `--bookmakers` is omitted, snapshot/playbook commands use this whitelist au
 - CLI entrypoint wrappers:
   - `src/prop_ev/cli.py`
   - `src/prop_ev/cli_commands.py`
-- CLI helper modules:
+- CLI command modules:
+  - `src/prop_ev/cli_shared.py`
+  - `src/prop_ev/cli_snapshot_impl.py`
+  - `src/prop_ev/cli_data_impl.py`
+  - `src/prop_ev/cli_strategy_impl.py`
+  - `src/prop_ev/cli_playbook_impl.py`
+- CLI support modules:
   - `src/prop_ev/cli_parser.py`
   - `src/prop_ev/cli_config.py`
   - `src/prop_ev/cli_global_overrides.py`
@@ -42,6 +48,11 @@ When `--bookmakers` is omitted, snapshot/playbook commands use this whitelist au
 - Strategy engine wrappers:
   - `src/prop_ev/strategy.py`
   - `src/prop_ev/strategy_core.py`
+- Strategy implementation modules:
+  - `src/prop_ev/strategy_report_impl.py`
+  - `src/prop_ev/strategy_pricing_impl.py`
+  - `src/prop_ev/strategy_gating_impl.py`
+  - `src/prop_ev/strategy_ranking_impl.py`
 - Strategy helper modules:
   - `src/prop_ev/strategy_output_impl.py`
   - `src/prop_ev/strategy_context_impl.py`
