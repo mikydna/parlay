@@ -268,7 +268,7 @@ No data migration and no odds re-download required.
 This is an optional follow-on that makes the calibration work visible at the **pick** level
 (not only at the strategy level).
 
-### 10.0 Current implementation status (2026-02-14)
+### 10.0 Current implementation status (2026-02-15)
 
 Implemented:
 - `strategy backtest-summarize` can emit
@@ -276,11 +276,18 @@ Implemented:
 - `strategy backtest-summarize` can emit aggregate scoreboard artifacts under
   `reports/odds/analysis/<run_id>/aggregate-scoreboard.json` via
   `--write-analysis-scoreboard [--analysis-run-id <id>]`.
+- `strategy backtest-summarize` can emit direct LaTeX/PDF scoreboard artifacts via
+  `--write-analysis-pdf [--keep-analysis-tex]`.
+- `strategy ablation` orchestrates multi-cap compare/settle/summarize flows and emits per-cap
+  scoreboard JSON/PDF outputs under `reports/odds/ablation/<run_id>/...`.
 - Calibration map mode supports `walk_forward` (default) and `in_sample`.
 - Pure calibration-map application utilities exist in
   `src/prop_ev/calibration_map.py`.
 - Backtest summary payloads now include `schema_version` and `report_kind`
   for stable parsing.
+- Backtest summary now emits both:
+  - `winner` (execution winner, gate-advisory),
+  - `promotion_winner` (promotion-gate pass winner, governance-only).
 - `generate_brief_for_snapshot` auto-loads sibling
   `backtest-calibration-map.json` (or explicit path) and annotates rows with:
   - `p_conservative`,

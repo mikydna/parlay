@@ -38,6 +38,14 @@ MANAGED_ENV_KEYS: tuple[str, ...] = (
     "PROP_EV_STRATEGY_MAX_PICKS_DEFAULT",
     "PROP_EV_STRATEGY_DEFAULT_ID",
     "PROP_EV_STRATEGY_PROBABILISTIC_PROFILE",
+    "PROP_EV_STRATEGY_ROLLING_PRIOR_WINDOW_DAYS",
+    "PROP_EV_STRATEGY_ROLLING_PRIOR_MIN_SAMPLES",
+    "PROP_EV_STRATEGY_ROLLING_PRIOR_MAX_DELTA",
+    "PROP_EV_STRATEGY_CALIBRATION_BIN_SIZE",
+    "PROP_EV_STRATEGY_CALIBRATION_MIN_BIN_SAMPLES",
+    "PROP_EV_STRATEGY_CALIBRATION_MAX_DELTA",
+    "PROP_EV_STRATEGY_CALIBRATION_SHRINK_K",
+    "PROP_EV_STRATEGY_CALIBRATION_BUCKET_WEIGHT",
     "PROP_EV_CONTEXT_INJURIES_STALE_HOURS",
     "PROP_EV_CONTEXT_ROSTER_STALE_HOURS",
 )
@@ -75,6 +83,14 @@ class RuntimeConfig:
     strategy_stale_quote_minutes: int
     strategy_max_picks_default: int
     strategy_probabilistic_profile: str
+    strategy_rolling_prior_window_days: int
+    strategy_rolling_prior_min_samples: int
+    strategy_rolling_prior_max_delta: float
+    strategy_calibration_bin_size: float
+    strategy_calibration_min_bin_samples: int
+    strategy_calibration_max_delta: float
+    strategy_calibration_shrink_k: int
+    strategy_calibration_bucket_weight: float
     context_injuries_stale_hours: float
     context_roster_stale_hours: float
 
@@ -314,6 +330,38 @@ def load_runtime_config(config_path: Path | None = None) -> RuntimeConfig:
             strategy.get("probabilistic_profile"),
             default="off",
         ),
+        strategy_rolling_prior_window_days=_as_int(
+            strategy.get("rolling_prior_window_days"),
+            default=21,
+        ),
+        strategy_rolling_prior_min_samples=_as_int(
+            strategy.get("rolling_prior_min_samples"),
+            default=25,
+        ),
+        strategy_rolling_prior_max_delta=_as_float(
+            strategy.get("rolling_prior_max_delta"),
+            default=0.02,
+        ),
+        strategy_calibration_bin_size=_as_float(
+            strategy.get("calibration_bin_size"),
+            default=0.1,
+        ),
+        strategy_calibration_min_bin_samples=_as_int(
+            strategy.get("calibration_min_bin_samples"),
+            default=10,
+        ),
+        strategy_calibration_max_delta=_as_float(
+            strategy.get("calibration_max_delta"),
+            default=0.02,
+        ),
+        strategy_calibration_shrink_k=_as_int(
+            strategy.get("calibration_shrink_k"),
+            default=100,
+        ),
+        strategy_calibration_bucket_weight=_as_float(
+            strategy.get("calibration_bucket_weight"),
+            default=0.3,
+        ),
         context_injuries_stale_hours=_as_float(
             strategy.get("context_injuries_stale_hours"),
             default=6.0,
@@ -361,6 +409,22 @@ def runtime_env_overrides(config: RuntimeConfig) -> dict[str, str]:
         "PROP_EV_STRATEGY_STALE_QUOTE_MINUTES": str(config.strategy_stale_quote_minutes),
         "PROP_EV_STRATEGY_MAX_PICKS_DEFAULT": str(config.strategy_max_picks_default),
         "PROP_EV_STRATEGY_PROBABILISTIC_PROFILE": config.strategy_probabilistic_profile,
+        "PROP_EV_STRATEGY_ROLLING_PRIOR_WINDOW_DAYS": str(
+            config.strategy_rolling_prior_window_days
+        ),
+        "PROP_EV_STRATEGY_ROLLING_PRIOR_MIN_SAMPLES": str(
+            config.strategy_rolling_prior_min_samples
+        ),
+        "PROP_EV_STRATEGY_ROLLING_PRIOR_MAX_DELTA": str(config.strategy_rolling_prior_max_delta),
+        "PROP_EV_STRATEGY_CALIBRATION_BIN_SIZE": str(config.strategy_calibration_bin_size),
+        "PROP_EV_STRATEGY_CALIBRATION_MIN_BIN_SAMPLES": str(
+            config.strategy_calibration_min_bin_samples
+        ),
+        "PROP_EV_STRATEGY_CALIBRATION_MAX_DELTA": str(config.strategy_calibration_max_delta),
+        "PROP_EV_STRATEGY_CALIBRATION_SHRINK_K": str(config.strategy_calibration_shrink_k),
+        "PROP_EV_STRATEGY_CALIBRATION_BUCKET_WEIGHT": str(
+            config.strategy_calibration_bucket_weight
+        ),
         "PROP_EV_CONTEXT_INJURIES_STALE_HOURS": str(config.context_injuries_stale_hours),
         "PROP_EV_CONTEXT_ROSTER_STALE_HOURS": str(config.context_roster_stale_hours),
     }

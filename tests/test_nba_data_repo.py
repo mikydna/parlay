@@ -363,20 +363,18 @@ def test_context_paths_use_canonical_nba_root_only(tmp_path: Path) -> None:
     assert results_path == repo.context_dir / "results.json"
 
 
-def test_repo_uses_configured_nba_data_dir_env(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_repo_uses_explicit_nba_data_dir(tmp_path: Path) -> None:
     odds_root = tmp_path / "odds_api"
     snapshot_id = "daily-20260212T000000Z"
     snapshot_dir = odds_root / "snapshots" / snapshot_id
     snapshot_dir.mkdir(parents=True, exist_ok=True)
     configured_root = tmp_path / "configured_nba_data"
-    monkeypatch.setenv("PROP_EV_NBA_DATA_DIR", str(configured_root))
 
     repo = NBARepository(
         odds_data_root=odds_root,
         snapshot_id=snapshot_id,
         snapshot_dir=snapshot_dir,
+        nba_data_root=configured_root,
     )
 
     assert repo.nba_data_root == configured_root.resolve()

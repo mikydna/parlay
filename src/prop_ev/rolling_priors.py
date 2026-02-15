@@ -8,23 +8,9 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from prop_ev.util.parsing import safe_float as _safe_float
+
 _DAY_SUFFIX_RE = re.compile(r"(?P<day>\d{4}-\d{2}-\d{2})$")
-
-
-def _safe_float(value: Any) -> float | None:
-    if isinstance(value, bool):
-        return None
-    if isinstance(value, (int, float)):
-        return float(value)
-    if isinstance(value, str):
-        raw = value.strip()
-        if not raw:
-            return None
-        try:
-            return float(raw)
-        except ValueError:
-            return None
-    return None
 
 
 def _clamp_probability(value: float, *, eps: float = 0.01) -> float:

@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from statistics import NormalDist, fmean, stdev
 from typing import Any
 
+from prop_ev.util.parsing import safe_float as _safe_float_impl
+
 DEFAULT_TARGET_ROI_UPLIFTS_PER_BET: tuple[float, ...] = (0.01, 0.02, 0.03, 0.05)
 
 
@@ -58,21 +60,10 @@ class PowerGuidanceAssumptions:
 
 
 def _safe_float(value: Any) -> float | None:
-    if isinstance(value, bool):
+    parsed = _safe_float_impl(value)
+    if parsed is None:
         return None
-    if isinstance(value, (float, int)):
-        parsed = float(value)
-        return parsed if math.isfinite(parsed) else None
-    if isinstance(value, str):
-        raw = value.strip()
-        if not raw:
-            return None
-        try:
-            parsed = float(raw)
-        except ValueError:
-            return None
-        return parsed if math.isfinite(parsed) else None
-    return None
+    return parsed if math.isfinite(parsed) else None
 
 
 def _required_days_for_effect(

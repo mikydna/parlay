@@ -27,6 +27,39 @@ All runtime settings now come from `config/runtime.toml` (hard cutover, no env c
 Bookmaker whitelist defaults are in `config/bookmakers.json` (currently DraftKings + FanDuel).
 When `--bookmakers` is omitted, snapshot/playbook commands use this whitelist automatically.
 
+## Code Layout
+
+- CLI entrypoint wrappers:
+  - `src/prop_ev/cli.py`
+  - `src/prop_ev/cli_commands.py`
+- CLI command modules:
+  - `src/prop_ev/cli_shared.py`
+  - `src/prop_ev/cli_snapshot_impl.py`
+  - `src/prop_ev/cli_data_impl.py`
+  - `src/prop_ev/cli_strategy_impl.py` (compat wrapper)
+  - `src/prop_ev/cli_strategy/` (strategy command package)
+  - `src/prop_ev/cli_playbook_impl.py`
+- CLI support modules:
+  - `src/prop_ev/cli_parser.py`
+  - `src/prop_ev/cli_config.py`
+  - `src/prop_ev/cli_global_overrides.py`
+  - `src/prop_ev/cli_data_helpers.py`
+  - `src/prop_ev/cli_ablation_helpers.py`
+  - `src/prop_ev/cli_markdown.py`
+- Strategy engine wrappers:
+  - `src/prop_ev/strategy.py`
+  - `src/prop_ev/strategy_core.py`
+- Strategy implementation modules:
+  - `src/prop_ev/strategy_report_impl.py` (compat wrapper)
+  - `src/prop_ev/strategy_report/` (report package)
+  - `src/prop_ev/strategy_pricing_impl.py`
+  - `src/prop_ev/strategy_gating_impl.py`
+  - `src/prop_ev/strategy_ranking_impl.py`
+- Strategy helper modules:
+  - `src/prop_ev/strategy_output_impl.py`
+  - `src/prop_ev/strategy_context_impl.py`
+  - `src/prop_ev/strategy_minutes_impl.py`
+
 ## Run
 
 ```bash

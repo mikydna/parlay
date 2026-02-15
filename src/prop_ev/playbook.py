@@ -65,12 +65,8 @@ def _now_utc() -> str:
     return utc_now_str()
 
 
-def _parse_iso_utc(value: str) -> datetime | None:
-    return parse_iso_z(value)
-
-
 def _format_et(value: str) -> str:
-    parsed = _parse_iso_utc(value)
+    parsed = parse_iso_z(value)
     if parsed is None:
         return ""
     return parsed.astimezone(ET_ZONE).strftime("%Y-%m-%d %I:%M:%S %p %Z")
@@ -197,7 +193,7 @@ def compute_live_window(
     for event in events:
         if not isinstance(event, dict):
             continue
-        tip = _parse_iso_utc(str(event.get("commence_time", "")))
+        tip = parse_iso_z(str(event.get("commence_time", "")))
         if tip is not None:
             tips.append(tip)
 

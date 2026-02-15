@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import json
 import re
-from datetime import UTC, datetime
 from typing import Any
 from zoneinfo import ZoneInfo
 
 from prop_ev.nba_data.normalize import canonical_team_name
+from prop_ev.time_utils import parse_iso_z
 
 REQUIRED_PASS1_KEYS = {
     "slate_summary",
@@ -90,24 +90,9 @@ def _to_float(value: Any) -> float | None:
     return None
 
 
-def _parse_iso_datetime(value: str) -> datetime | None:
-    raw = value.strip()
-    if not raw:
-        return None
-    if raw.endswith("Z"):
-        raw = raw[:-1] + "+00:00"
-    try:
-        parsed = datetime.fromisoformat(raw)
-    except ValueError:
-        return None
-    if parsed.tzinfo is None:
-        return parsed.replace(tzinfo=UTC)
-    return parsed
-
-
 def _format_timestamp_et(value: Any) -> str:
     raw = _to_str(value)
-    parsed = _parse_iso_datetime(raw)
+    parsed = parse_iso_z(raw)
     if parsed is None:
         return ""
     local = parsed.astimezone(ET_ZONE)

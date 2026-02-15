@@ -16,7 +16,6 @@ from prop_ev.data_paths import (
     resolve_nba_data_root as resolve_nba_data_root_from_odds,
 )
 from prop_ev.nba_data.cache_store import NBADataCacheStore
-from prop_ev.nba_data.config import resolve_data_dir
 from prop_ev.nba_data.context_cache import load_or_fetch_context
 from prop_ev.nba_data.context_fetchers import (
     fetch_official_injury_links,
@@ -31,6 +30,7 @@ from prop_ev.nba_data.request import NBADataRequest
 from prop_ev.nba_data.source_policy import ResultsSourceMode
 from prop_ev.storage import SnapshotStore
 from prop_ev.time_utils import utc_now_str
+from prop_ev.util.parsing import safe_float as _safe_float
 
 RESULTS_SOURCE_LIVE = "nba_live_scoreboard_boxscore"
 RESULTS_SOURCE_HISTORICAL = "nba_data_schedule_plus_boxscore"
@@ -38,22 +38,6 @@ RESULTS_SOURCE_HISTORICAL = "nba_data_schedule_plus_boxscore"
 
 def _now_utc() -> str:
     return utc_now_str()
-
-
-def _safe_float(value: Any) -> float | None:
-    if isinstance(value, bool):
-        return None
-    if isinstance(value, (int, float)):
-        return float(value)
-    if isinstance(value, str):
-        raw = value.strip()
-        if not raw:
-            return None
-        try:
-            return float(raw)
-        except ValueError:
-            return None
-    return None
 
 
 def _game_status(code: Any, text: str) -> str:
@@ -119,8 +103,7 @@ def _seed_teams(seed_rows: list[dict[str, Any]]) -> set[str]:
 
 
 def _resolve_nba_data_root(odds_data_root: Path) -> Path:
-    configured = resolve_data_dir(None).resolve()
-    return resolve_nba_data_root_from_odds(odds_data_root, configured=configured)
+    return resolve_nba_data_root_from_odds(odds_data_root)
 
 
 class NBARepository:

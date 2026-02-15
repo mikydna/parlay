@@ -9,6 +9,8 @@ from typing import Any
 from prop_ev.nba_data.normalize import normalize_person_name
 from prop_ev.odds_math import american_to_decimal, ev_from_prob_and_price
 from prop_ev.time_utils import utc_now_str
+from prop_ev.util.parsing import safe_float as _to_float
+from prop_ev.util.parsing import to_price as _to_price
 
 
 @dataclass(frozen=True)
@@ -21,42 +23,6 @@ class ExecutionProjectionConfig:
     requires_meets_play_to: bool
     tier_a_min_ev: float
     tier_b_min_ev: float
-
-
-def _to_float(value: Any) -> float | None:
-    if isinstance(value, bool):
-        return None
-    if isinstance(value, (int, float)):
-        return float(value)
-    if isinstance(value, str):
-        raw = value.strip()
-        if not raw:
-            return None
-        try:
-            return float(raw)
-        except ValueError:
-            return None
-    return None
-
-
-def _to_price(value: Any) -> int | None:
-    if isinstance(value, bool):
-        return None
-    if isinstance(value, int):
-        return value
-    if isinstance(value, float):
-        return int(value)
-    if isinstance(value, str):
-        raw = value.strip()
-        if not raw:
-            return None
-        if raw.startswith("+"):
-            raw = raw[1:]
-        try:
-            return int(raw)
-        except ValueError:
-            return None
-    return None
 
 
 def _normalize_side(raw: Any) -> str:

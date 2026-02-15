@@ -11,6 +11,7 @@ from prop_ev.odds_math import american_to_decimal, ev_from_prob_and_price
 from prop_ev.report_paths import snapshot_reports_dir
 from prop_ev.storage import SnapshotStore
 from prop_ev.time_utils import iso_z, utc_now
+from prop_ev.util.parsing import to_price as _to_price
 
 
 def _utc_now() -> datetime:
@@ -19,26 +20,6 @@ def _utc_now() -> datetime:
 
 def _iso(dt: datetime) -> str:
     return iso_z(dt)
-
-
-def _to_price(value: Any) -> int | None:
-    if isinstance(value, bool):
-        return None
-    if isinstance(value, int):
-        return value
-    if isinstance(value, float):
-        return int(value)
-    if isinstance(value, str):
-        raw = value.strip()
-        if not raw:
-            return None
-        if raw.startswith("+"):
-            raw = raw[1:]
-        try:
-            return int(raw)
-        except ValueError:
-            return None
-    return None
 
 
 def _american_to_decimal(price: int | None) -> float | None:

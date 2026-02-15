@@ -36,6 +36,7 @@ from prop_ev.odds_data.spec import DatasetSpec, dataset_id
 from prop_ev.odds_data.window import day_window
 from prop_ev.settings import Settings
 from prop_ev.storage import SnapshotStore, request_hash
+from prop_ev.time_utils import parse_iso_z
 
 HISTORICAL_ODDS_CREDIT_MULTIPLIER = 10
 
@@ -47,20 +48,6 @@ def _iso_z(dt: datetime) -> str:
 def _sanitize_error_message(raw_message: str) -> str:
     message = str(raw_message)
     return re.sub(r"([?&](?:apiKey|api_key)=)[^&\s'\"]+", r"\1REDACTED", message)
-
-
-def _parse_iso_utc(raw_value: str) -> datetime | None:
-    value = raw_value.strip()
-    if not value:
-        return None
-    candidate = value[:-1] + "+00:00" if value.endswith("Z") else value
-    try:
-        parsed = datetime.fromisoformat(candidate)
-    except ValueError:
-        return None
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=UTC)
-    return parsed.astimezone(UTC)
 
 
 def _reason_code_for_exception(exc: Exception) -> str:
@@ -111,7 +98,7 @@ def _historical_event_odds_timestamp(
     fallback_timestamp: str,
     pre_tip_minutes: int,
 ) -> str:
-    commence = _parse_iso_utc(str(event_row.get("commence_time", "")))
+    commence = parse_iso_z(str(event_row.get("commence_time", "")))
     if commence is None:
         return fallback_timestamp
     safe_minutes = max(0, int(pre_tip_minutes))

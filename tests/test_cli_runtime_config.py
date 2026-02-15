@@ -6,10 +6,21 @@ from pathlib import Path
 
 import pytest
 
+import prop_ev.cli as cli_module
 from prop_ev.cli import main
+from prop_ev.cli_config import env_bool_from_runtime, env_int_from_runtime
+from prop_ev.runtime_config import load_runtime_config, set_current_runtime_config
 
 
-def _write_runtime_config(path: Path, *, odds_dir: Path, nba_dir: Path) -> None:
+def _write_runtime_config(
+    path: Path,
+    *,
+    odds_dir: Path,
+    nba_dir: Path,
+    default_max_credits: int = 20,
+    require_fresh_context: bool = True,
+) -> None:
+    fresh_context_value = "true" if require_fresh_context else "false"
     path.write_text(
         "\n".join(
             [
@@ -22,9 +33,13 @@ def _write_runtime_config(path: Path, *, odds_dir: Path, nba_dir: Path) -> None:
                 "",
                 "[odds_api]",
                 'key_files = ["ODDS_API_KEY.ignore"]',
+                f"default_max_credits = {default_max_credits}",
                 "",
                 "[openai]",
                 'key_files = ["OPENAI_KEY.ignore"]',
+                "",
+                "[strategy]",
+                f"require_fresh_context = {fresh_context_value}",
             ]
         )
         + "\n",
@@ -109,3 +124,61 @@ def test_cli_keeps_env_api_keys_for_settings_resolution(
     assert "odds" in payload
     assert os.environ.get("ODDS_API_KEY") == "env-odds-key"
     assert os.environ.get("OPENAI_API_KEY") == "env-openai-key"
+
+
+def test_cli_parser_uses_runtime_max_credits_default(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    odds_dir = tmp_path / "parlay-data" / "odds_api"
+    nba_dir = tmp_path / "parlay-data" / "nba_data"
+    odds_dir.mkdir(parents=True)
+    nba_dir.mkdir(parents=True)
+    config_path = tmp_path / "runtime.toml"
+    _write_runtime_config(
+        config_path,
+        odds_dir=odds_dir,
+        nba_dir=nba_dir,
+        default_max_credits=77,
+    )
+    runtime_config = load_runtime_config(config_path)
+    monkeypatch.setenv("PROP_EV_ODDS_API_DEFAULT_MAX_CREDITS", "5")
+    set_current_runtime_config(runtime_config)
+    try:
+        parser = cli_module._build_parser()
+        args = parser.parse_args(["data", "backfill"])
+    finally:
+        set_current_runtime_config(None)
+    assert args.max_credits == 77
+
+
+def test_cli_runtime_overrides_do_not_fallback_to_env(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    odds_dir = tmp_path / "parlay-data" / "odds_api"
+    nba_dir = tmp_path / "parlay-data" / "nba_data"
+    odds_dir.mkdir(parents=True)
+    nba_dir.mkdir(parents=True)
+    config_path = tmp_path / "runtime.toml"
+    _write_runtime_config(
+        config_path,
+        odds_dir=odds_dir,
+        nba_dir=nba_dir,
+        require_fresh_context=False,
+    )
+    runtime_config = load_runtime_config(config_path)
+    monkeypatch.setenv("PROP_EV_STRATEGY_REQUIRE_FRESH_CONTEXT", "true")
+    monkeypatch.setenv("TEST_INT_SHADOW", "99")
+    set_current_runtime_config(runtime_config)
+    try:
+        resolved_fresh_context = env_bool_from_runtime(
+            "PROP_EV_STRATEGY_REQUIRE_FRESH_CONTEXT",
+            default=True,
+        )
+        unmanaged_value = env_int_from_runtime("TEST_INT_SHADOW", default=11)
+    finally:
+        set_current_runtime_config(None)
+
+    assert resolved_fresh_context is False
+    assert unmanaged_value == 11

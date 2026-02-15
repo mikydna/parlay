@@ -10,8 +10,6 @@ for per-run overrides.
 ## Standard Run (Auto-gated Live/Offline)
 
 ```bash
-ODDS_API_KEY="$(tr -d '\r\n' < ODDS_API_KEY.ignore)" \
-OPENAI_API_KEY="$(tr -d '\r\n' < OPENAI_KEY.ignore)" \
 uv run prop-ev playbook run \
   --markets player_points \
   --max-events 10 \
@@ -214,7 +212,26 @@ Outputs:
 - `<REPORTS_DIR>/by-snapshot/<snapshot_id>/backtest-summary.json`
 - `<REPORTS_DIR>/by-snapshot/<snapshot_id>/backtest-calibration-map.json` (when `--write-calibration-map` is enabled)
 - `<REPORTS_DIR>/analysis/<run_id>/aggregate-scoreboard.json` (when `--write-analysis-scoreboard` is enabled)
+- `<REPORTS_DIR>/analysis/<run_id>/aggregate-scoreboard.pdf` (when `--write-analysis-pdf` is enabled)
 - `backtest-summary.json` includes `power_guidance` with required-day / required-row estimates versus baseline for each strategy.
+
+Multi-cap ablation runner (preferred spelling: `ablation`):
+
+```bash
+uv run prop-ev strategy ablation \
+  --dataset-id <DATASET_ID> \
+  --strategies s007,s008,s016,s017,s018,s019,s020 \
+  --caps 1,2,5 \
+  --mode replay \
+  --offline \
+  --block-paid \
+  --run-id <RUN_ID>
+```
+
+Primary ablation outputs:
+- `<REPORTS_DIR>/ablation/<run_id>/ablation-run.json`
+- `<REPORTS_DIR>/ablation/<run_id>/cap-max*/analysis/<analysis_run_id>/aggregate-scoreboard.json`
+- `<REPORTS_DIR>/ablation/<run_id>/cap-max*/analysis/<analysis_run_id>/aggregate-scoreboard.pdf`
 
 Use calibration map during brief render (optional):
 

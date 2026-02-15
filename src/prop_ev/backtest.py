@@ -10,28 +10,13 @@ from typing import Any
 
 from prop_ev.nba_data.repo import NBARepository
 from prop_ev.time_utils import utc_now_str
+from prop_ev.util.parsing import safe_float as _safe_float
 
 ROW_SELECTIONS = {"eligible", "ranked", "top_ev", "one_source", "all_candidates"}
 
 
 def _now_utc() -> str:
     return utc_now_str()
-
-
-def _safe_float(value: Any) -> float | None:
-    if isinstance(value, bool):
-        return None
-    if isinstance(value, (int, float)):
-        return float(value)
-    if isinstance(value, str):
-        raw = value.strip()
-        if not raw:
-            return None
-        try:
-            return float(raw)
-        except ValueError:
-            return None
-    return None
 
 
 def _safe_int(value: Any) -> int | None:

@@ -15,6 +15,7 @@ import httpx
 from prop_ev.budget import current_month_utc, llm_budget_status
 from prop_ev.data_paths import resolve_runtime_root
 from prop_ev.odds_client import parse_csv
+from prop_ev.runtime_config import current_runtime_config
 from prop_ev.settings import Settings
 from prop_ev.time_utils import utc_now_str
 
@@ -264,9 +265,11 @@ def resolve_openai_api_key(settings: Settings, root: Path | None = None) -> str:
     if settings.openai_api_key:
         return settings.openai_api_key.strip()
 
-    base = root or Path.cwd()
+    runtime_root = current_runtime_config().config_path.parent.resolve()
+    base = root or runtime_root
     for candidate in parse_csv(settings.openai_key_file_candidates):
-        path = base / candidate
+        candidate_path = Path(candidate).expanduser()
+        path = candidate_path if candidate_path.is_absolute() else (base / candidate_path).resolve()
         if not path.exists() or not path.is_file():
             continue
         try:
@@ -296,7 +299,8 @@ class LLMClient:
         self.data_root = data_root.resolve()
         self.runtime_root = resolve_runtime_root(self.data_root)
         self.post_fn = post_fn or _default_post
-        self.key_root = key_root or Path.cwd()
+        default_key_root = current_runtime_config().config_path.parent.resolve()
+        self.key_root = key_root or default_key_root
         self.cache_dir = self.runtime_root / "llm_cache"
         self.usage_dir = self.runtime_root / "llm_usage"
         self.cache_dir.mkdir(parents=True, exist_ok=True)
