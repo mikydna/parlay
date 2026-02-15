@@ -101,6 +101,9 @@ def _cmd_strategy_backtest_summarize(args: argparse.Namespace) -> int:
     )
     if calibration_map_mode not in {"walk_forward", "in_sample"}:
         raise CLIError("--calibration-map-mode must be one of: walk_forward,in_sample")
+    segment_by = str(getattr(args, "segment_by", "none")).strip().lower() or "none"
+    if segment_by not in {"none", "market"}:
+        raise CLIError("--segment-by must be one of: none,market")
     explicit_results = getattr(args, "results", None)
     computed = []
     day_coverage: dict[str, Any] = {}
@@ -265,6 +268,53 @@ def _cmd_strategy_backtest_summarize(args: argparse.Namespace) -> int:
 
     winner = pick_execution_winner(strategy_rows)
     promotion_winner = pick_promotion_winner(strategy_rows)
+    segments: dict[str, Any] = {}
+    if segment_by == "market" and rows_for_map:
+        markets: set[str] = set()
+        rows_by_market: dict[str, dict[str, list[dict[str, str]]]] = {}
+        for strategy_id, rows in rows_for_map.items():
+            for row in rows:
+                market = str(row.get("market", "")).strip().lower() or "unknown"
+                markets.add(market)
+                rows_by_market.setdefault(market, {}).setdefault(strategy_id, []).append(row)
+
+        market_segments: list[dict[str, Any]] = []
+        for market in sorted(markets):
+            segment_summaries = [
+                summarize_backtest_rows(
+                    rows_by_market.get(market, {}).get(strategy_id, []),
+                    strategy_id=strategy_id,
+                    bin_size=bin_size,
+                )
+                for strategy_id in sorted(rows_for_map.keys())
+            ]
+            segment_baseline_summary = next(
+                (item for item in segment_summaries if item.strategy_id == baseline_strategy_id),
+                None,
+            )
+            segment_rows: list[dict[str, Any]] = []
+            for summary in segment_summaries:
+                row = summary.to_dict()
+                row["promotion_gate"] = build_promotion_gate(
+                    summary=summary,
+                    baseline_summary=segment_baseline_summary,
+                    baseline_required=bool(baseline_strategy_id),
+                    thresholds=thresholds,
+                )
+                segment_rows.append(row)
+            segment_winner = pick_execution_winner(segment_rows)
+            segment_promotion_winner = pick_promotion_winner(segment_rows)
+            market_segments.append(
+                {
+                    "market": market,
+                    "strategies": sorted(segment_rows, key=lambda row: row.get("strategy_id", "")),
+                    "winner": segment_winner if segment_winner is not None else {},
+                    "promotion_winner": (
+                        segment_promotion_winner if segment_promotion_winner is not None else {}
+                    ),
+                }
+            )
+        segments["by_market"] = market_segments
     report = {
         "schema_version": 1,
         "report_kind": "backtest_summary",
@@ -272,6 +322,7 @@ def _cmd_strategy_backtest_summarize(args: argparse.Namespace) -> int:
         "summary": {
             "snapshot_id": snapshot_id,
             "strategy_count": len(strategy_rows),
+            "segment_by": segment_by,
             "min_graded": min_graded,
             "bin_size": bin_size,
             "baseline_strategy_id": baseline_strategy_id,
@@ -288,6 +339,8 @@ def _cmd_strategy_backtest_summarize(args: argparse.Namespace) -> int:
         "winner": winner if winner is not None else {},
         "promotion_winner": promotion_winner if promotion_winner is not None else {},
     }
+    if segments:
+        report["segments"] = segments
     if power_guidance:
         report["power_guidance"] = power_guidance
     calibration_map_payload: dict[str, Any] | None = None
@@ -309,6 +362,7 @@ def _cmd_strategy_backtest_summarize(args: argparse.Namespace) -> int:
     md_path = reports_dir / "backtest-summary.md"
     calibration_map_path = reports_dir / "backtest-calibration-map.json"
     analysis_json_path: Path | None = None
+    analysis_market_json_path: Path | None = None
     analysis_md_path: Path | None = None
     analysis_pdf_path: Path | None = None
     analysis_pdf_status = ""
@@ -347,6 +401,20 @@ def _cmd_strategy_backtest_summarize(args: argparse.Namespace) -> int:
             json.dumps(analysis_payload, sort_keys=True, indent=2) + "\n",
             encoding="utf-8",
         )
+        if segments.get("by_market"):
+            analysis_market_json_path = analysis_dir / "aggregate-scoreboard.by-market.json"
+            analysis_market_payload = {
+                "schema_version": 1,
+                "report_kind": "aggregate_scoreboard_by_market",
+                "generated_at_utc": analysis_payload.get("generated_at_utc", ""),
+                "analysis_run_id": analysis_run_id,
+                "summary": analysis_payload.get("summary", {}),
+                "segments": segments,
+            }
+            analysis_market_json_path.write_text(
+                json.dumps(analysis_market_payload, sort_keys=True, indent=2) + "\n",
+                encoding="utf-8",
+            )
         if write_markdown:
             analysis_md_path = analysis_dir / "aggregate-scoreboard.md"
             analysis_md_path.write_text(
@@ -382,6 +450,8 @@ def _cmd_strategy_backtest_summarize(args: argparse.Namespace) -> int:
         print(f"summary_md={md_path}")
     if analysis_json_path is not None:
         print(f"analysis_scoreboard_json={analysis_json_path}")
+    if analysis_market_json_path is not None:
+        print(f"analysis_scoreboard_by_market_json={analysis_market_json_path}")
     if analysis_md_path is not None:
         print(f"analysis_scoreboard_md={analysis_md_path}")
     if analysis_pdf_path is not None:
