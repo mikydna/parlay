@@ -867,6 +867,15 @@ def build_parser(
         help=("Write direct LaTeX/PDF aggregate scoreboard artifacts in the analysis directory."),
     )
     strategy_backtest_summarize.add_argument(
+        "--segment-by",
+        choices=("none", "market"),
+        default="none",
+        help=(
+            "Optional segmentation for additional aggregate scoreboards "
+            "(market writes per-market summaries)."
+        ),
+    )
+    strategy_backtest_summarize.add_argument(
         "--keep-analysis-tex",
         action="store_true",
         help="Keep generated aggregate-scoreboard.tex (otherwise removed on successful compile).",
