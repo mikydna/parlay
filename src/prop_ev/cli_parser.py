@@ -669,6 +669,12 @@ def build_parser(
         help="Target ROI uplift per bet used for per-strategy power gate status.",
     )
     strategy_ablation.add_argument(
+        "--segment-by",
+        choices=("none", "market"),
+        default="none",
+        help="Controls summary segmentation strategy. Choices: none or market.",
+    )
+    strategy_ablation.add_argument(
         "--require-power-gate",
         action="store_true",
         help="Fail promotion gate when the strategy is underpowered at the selected uplift.",
