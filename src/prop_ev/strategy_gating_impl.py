@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from prop_ev.strategy_report_impl import (
+from prop_ev.strategy_report.helpers import (
     _odds_health,
     _parse_quote_time,
     _pre_bet_readiness,
