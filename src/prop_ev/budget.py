@@ -8,6 +8,8 @@ from pathlib import Path
 from typing import Any
 
 from prop_ev.data_paths import resolve_runtime_root
+from prop_ev.util.parsing import safe_float as _safe_float_impl
+from prop_ev.util.parsing import safe_int as _safe_int_impl
 
 
 def current_month_utc() -> str:
@@ -16,37 +18,13 @@ def current_month_utc() -> str:
 
 
 def _safe_int(value: Any) -> int:
-    if isinstance(value, bool):
-        return 0
-    if isinstance(value, int):
-        return value
-    if isinstance(value, float):
-        return int(value)
-    if isinstance(value, str):
-        raw = value.strip()
-        if not raw:
-            return 0
-        try:
-            return int(raw)
-        except ValueError:
-            return 0
-    return 0
+    parsed = _safe_int_impl(value)
+    return parsed if parsed is not None else 0
 
 
 def _safe_float(value: Any) -> float:
-    if isinstance(value, bool):
-        return 0.0
-    if isinstance(value, (int, float)):
-        return float(value)
-    if isinstance(value, str):
-        raw = value.strip()
-        if not raw:
-            return 0.0
-        try:
-            return float(raw)
-        except ValueError:
-            return 0.0
-    return 0.0
+    parsed = _safe_float_impl(value)
+    return parsed if parsed is not None else 0.0
 
 
 def _load_jsonl(path: Path) -> list[dict[str, Any]]:

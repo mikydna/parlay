@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from prop_ev.execution_plan_contract import assert_execution_plan
+from prop_ev.util.parsing import safe_float as _safe_float
 
 
 def _short_game_label(value: str) -> str:
@@ -16,13 +17,6 @@ def _short_game_label(value: str) -> str:
 
 def _prop_label(player: str, side: str, point: float, market: str) -> str:
     return f"{player} {side} {point} {market}".strip()
-
-
-def _safe_float(value: Any) -> float | None:
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return None
 
 
 def _fmt_american(value: Any) -> str:

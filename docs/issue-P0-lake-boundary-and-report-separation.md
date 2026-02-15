@@ -98,7 +98,7 @@ parlay-data/
 ## Closure Evidence (2026-02-14)
 
 - Guardrail pass:
-  - `PROP_EV_DATA_DIR=/Users/andy/Documents/Code/parlay-data/odds_api uv run prop-ev data guardrails --json`
+  - `uv run prop-ev --data-dir /Users/andy/Documents/Code/parlay-data/odds_api data guardrails --json`
   - result: `status=ok`, `violation_count=0`.
 - Filesystem audit:
   - no `odds_api/snapshots/*/reports/` directories,

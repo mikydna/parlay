@@ -10,8 +10,6 @@ for per-run overrides.
 ## Standard Run (Auto-gated Live/Offline)
 
 ```bash
-ODDS_API_KEY="$(tr -d '\r\n' < ODDS_API_KEY.ignore)" \
-OPENAI_API_KEY="$(tr -d '\r\n' < OPENAI_KEY.ignore)" \
 uv run prop-ev playbook run \
   --markets player_points \
   --max-events 10 \

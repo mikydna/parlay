@@ -12,7 +12,6 @@ from collections.abc import Callable, Sequence
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
-from shutil import copy2
 from typing import Any, cast
 from zoneinfo import ZoneInfo
 
@@ -77,6 +76,64 @@ from prop_ev.cli_config import (
 from prop_ev.cli_config import (
     runtime_strategy_probabilistic_profile as _runtime_strategy_probabilistic_profile_impl,
 )
+from prop_ev.cli_data_helpers import (
+    build_status_summary_payload as _build_status_summary_payload_impl,
+)
+from prop_ev.cli_data_helpers import (
+    complete_day_snapshots as _complete_day_snapshots_impl,
+)
+from prop_ev.cli_data_helpers import (
+    dataset_day_names as _dataset_day_names_impl,
+)
+from prop_ev.cli_data_helpers import (
+    dataset_days_dir as _dataset_days_dir_impl,
+)
+from prop_ev.cli_data_helpers import (
+    dataset_dir as _dataset_dir_impl,
+)
+from prop_ev.cli_data_helpers import (
+    dataset_root as _dataset_root_impl,
+)
+from prop_ev.cli_data_helpers import (
+    dataset_spec_from_payload as _dataset_spec_from_payload_impl,
+)
+from prop_ev.cli_data_helpers import (
+    dataset_spec_path as _dataset_spec_path_impl,
+)
+from prop_ev.cli_data_helpers import (
+    day_row_from_status as _day_row_from_status_impl,
+)
+from prop_ev.cli_data_helpers import (
+    discover_dataset_ids as _discover_dataset_ids_impl,
+)
+from prop_ev.cli_data_helpers import (
+    incomplete_reason_code as _incomplete_reason_code_impl,
+)
+from prop_ev.cli_data_helpers import (
+    load_dataset_spec_or_error as _load_dataset_spec_or_error_impl,
+)
+from prop_ev.cli_data_helpers import (
+    load_day_status_for_dataset as _load_day_status_for_dataset_impl,
+)
+from prop_ev.cli_data_helpers import (
+    load_json_object as _load_json_object_impl,
+)
+from prop_ev.cli_data_helpers import (
+    parse_allow_incomplete_days as _parse_allow_incomplete_days_impl,
+)
+from prop_ev.cli_data_helpers import (
+    parse_allow_incomplete_reasons as _parse_allow_incomplete_reasons_impl,
+)
+from prop_ev.cli_data_helpers import (
+    print_day_rows as _print_day_rows_impl,
+)
+from prop_ev.cli_data_helpers import (
+    print_warnings as _print_warnings_impl,
+)
+from prop_ev.cli_data_helpers import (
+    resolve_complete_day_dataset_id as _resolve_complete_day_dataset_id_impl,
+)
+from prop_ev.cli_global_overrides import extract_global_overrides as _extract_global_overrides_impl
 from prop_ev.cli_internal import default_window, teams_in_scope_from_events
 from prop_ev.cli_markdown import (
     render_backtest_summary_markdown as _render_backtest_summary_markdown,
@@ -85,6 +142,10 @@ from prop_ev.cli_markdown import (
     render_strategy_compare_markdown as _render_strategy_compare_markdown,
 )
 from prop_ev.cli_parser import build_parser as _build_parser_impl
+from prop_ev.cli_playbook_publish import (
+    publish_compact_playbook_outputs as _publish_compact_outputs,
+)
+from prop_ev.cli_playbook_publish import snapshot_date as _snapshot_date_impl
 from prop_ev.context_health import (
     official_rows_count,
     official_source_ready,
@@ -98,7 +159,6 @@ from prop_ev.execution_projection import ExecutionProjectionConfig, project_exec
 from prop_ev.identity_map import load_identity_map, update_identity_map
 from prop_ev.lake_guardrails import build_guardrail_report
 from prop_ev.lake_migration import migrate_layout
-from prop_ev.nba_data.date_resolver import resolve_snapshot_date_str
 from prop_ev.nba_data.minutes_prob import load_minutes_prob_index_for_snapshot
 from prop_ev.nba_data.repo import NBARepository
 from prop_ev.nba_data.store.layout import build_layout as build_nba_layout
@@ -114,12 +174,7 @@ from prop_ev.odds_client import (
 )
 from prop_ev.odds_data.backfill import backfill_days
 from prop_ev.odds_data.cache_store import GlobalCacheStore
-from prop_ev.odds_data.day_index import (
-    canonicalize_day_status,
-    compute_day_status_from_cache,
-    load_day_status,
-    primary_incomplete_reason_code,
-)
+from prop_ev.odds_data.day_index import compute_day_status_from_cache, load_day_status
 from prop_ev.odds_data.errors import CreditBudgetExceeded, OfflineCacheMiss, SpendBlockedError
 from prop_ev.odds_data.policy import SpendPolicy
 from prop_ev.odds_data.repo import OddsRepository
@@ -128,7 +183,6 @@ from prop_ev.odds_data.spec import DatasetSpec, dataset_id
 from prop_ev.playbook import budget_snapshot, compute_live_window, generate_brief_for_snapshot
 from prop_ev.quote_table import EVENT_PROPS_TABLE
 from prop_ev.report_paths import (
-    canonical_report_outputs_root,
     report_outputs_root,
     snapshot_reports_dir,
 )
@@ -877,91 +931,45 @@ def _cmd_credits_budget(args: argparse.Namespace) -> int:
 
 
 def _dataset_root(data_root: Path) -> Path:
-    return data_root / "datasets"
+    return _dataset_root_impl(data_root)
 
 
 def _dataset_dir(data_root: Path, dataset_id_value: str) -> Path:
-    return _dataset_root(data_root) / dataset_id_value
+    return _dataset_dir_impl(data_root, dataset_id_value)
 
 
 def _dataset_spec_path(data_root: Path, dataset_id_value: str) -> Path:
-    return _dataset_dir(data_root, dataset_id_value) / "spec.json"
+    return _dataset_spec_path_impl(data_root, dataset_id_value)
 
 
 def _dataset_days_dir(data_root: Path, dataset_id_value: str) -> Path:
-    return _dataset_dir(data_root, dataset_id_value) / "days"
+    return _dataset_days_dir_impl(data_root, dataset_id_value)
 
 
 def _load_json_object(path: Path) -> dict[str, Any] | None:
-    if not path.exists():
-        return None
-    payload = json.loads(path.read_text(encoding="utf-8"))
-    if not isinstance(payload, dict):
-        return None
-    return payload
+    return _load_json_object_impl(path)
 
 
 def _discover_dataset_ids(data_root: Path) -> list[str]:
-    root = _dataset_root(data_root)
-    if not root.exists():
-        return []
-    ids: list[str] = []
-    for entry in root.iterdir():
-        if not entry.is_dir():
-            continue
-        if (entry / "spec.json").exists() or (entry / "days").exists():
-            ids.append(entry.name)
-    return sorted(set(ids))
+    return _discover_dataset_ids_impl(data_root)
 
 
 def _dataset_day_names(data_root: Path, dataset_id_value: str) -> list[str]:
-    days_dir = _dataset_days_dir(data_root, dataset_id_value)
-    if not days_dir.exists():
-        return []
-    names: list[str] = []
-    for path in days_dir.glob("*.json"):
-        candidate = path.stem.strip()
-        try:
-            date.fromisoformat(candidate)
-        except ValueError:
-            continue
-        names.append(candidate)
-    return sorted(set(names))
+    return _dataset_day_names_impl(data_root, dataset_id_value)
 
 
 def _dataset_spec_from_payload(payload: dict[str, Any], *, source: str) -> DatasetSpec:
-    sport_key = str(payload.get("sport_key", "")).strip() or "basketball_nba"
-    markets_raw = payload.get("markets", [])
-    markets: list[str]
-    if isinstance(markets_raw, list):
-        markets = [str(item).strip() for item in markets_raw if str(item).strip()]
-    else:
-        markets = parse_csv(str(markets_raw))
-    if not markets:
-        raise CLIError(f"invalid dataset spec at {source}: markets must be a non-empty list")
-    regions = str(payload.get("regions", "")).strip() or None
-    bookmakers = str(payload.get("bookmakers", "")).strip() or None
-    return DatasetSpec(
-        sport_key=sport_key,
-        markets=markets,
-        regions=regions,
-        bookmakers=bookmakers,
-        include_links=bool(payload.get("include_links", False)),
-        include_sids=bool(payload.get("include_sids", False)),
-        odds_format=str(payload.get("odds_format", "american")).strip() or "american",
-        date_format=str(payload.get("date_format", "iso")).strip() or "iso",
-        historical=bool(payload.get("historical", False)),
-        historical_anchor_hour_local=int(payload.get("historical_anchor_hour_local", 12)),
-        historical_pre_tip_minutes=int(payload.get("historical_pre_tip_minutes", 60)),
-    )
+    try:
+        return _dataset_spec_from_payload_impl(payload, source=source)
+    except RuntimeError as exc:
+        raise CLIError(str(exc)) from exc
 
 
 def _load_dataset_spec_or_error(data_root: Path, dataset_id_value: str) -> tuple[DatasetSpec, Path]:
-    path = _dataset_spec_path(data_root, dataset_id_value)
-    payload = _load_json_object(path)
-    if payload is None:
-        raise CLIError(f"missing dataset spec: {path}")
-    return _dataset_spec_from_payload(payload, source=str(path)), path
+    try:
+        return _load_dataset_spec_or_error_impl(data_root, dataset_id_value)
+    except RuntimeError as exc:
+        raise CLIError(str(exc)) from exc
 
 
 def _load_day_status_for_dataset(
@@ -970,81 +978,26 @@ def _load_day_status_for_dataset(
     dataset_id_value: str,
     day: str,
 ) -> dict[str, Any] | None:
-    return _load_json_object(_dataset_days_dir(data_root, dataset_id_value) / f"{day}.json")
+    return _load_day_status_for_dataset_impl(data_root, dataset_id_value=dataset_id_value, day=day)
 
 
 def _day_row_from_status(day: str, status: dict[str, Any]) -> dict[str, Any]:
-    normalized = canonicalize_day_status(status, day=day)
-    return {
-        "day": day,
-        "complete": bool(normalized.get("complete", False)),
-        "missing_count": int(normalized.get("missing_count", 0)),
-        "total_events": int(normalized.get("total_events", 0)),
-        "snapshot_id": str(normalized.get("snapshot_id_for_day", "")),
-        "note": str(normalized.get("note", "")),
-        "error": str(normalized.get("error", "")),
-        "error_code": str(normalized.get("error_code", "")),
-        "status_code": str(normalized.get("status_code", "")),
-        "reason_codes": [
-            str(item)
-            for item in normalized.get("reason_codes", [])
-            if isinstance(item, str) and str(item).strip()
-        ],
-        "odds_coverage_ratio": float(normalized.get("odds_coverage_ratio", 0.0)),
-        "updated_at_utc": str(normalized.get("updated_at_utc", "")),
-    }
+    return _day_row_from_status_impl(day, status)
 
 
 def _incomplete_reason_code(row: dict[str, Any]) -> str:
-    error_code = str(row.get("error_code", "")).strip()
-    if error_code:
-        return error_code
-    reason_codes_raw = row.get("reason_codes", [])
-    if isinstance(reason_codes_raw, list):
-        reason_codes = [str(item).strip() for item in reason_codes_raw if str(item).strip()]
-        if reason_codes:
-            return primary_incomplete_reason_code(reason_codes)
-    status_code = str(row.get("status_code", "")).strip()
-    if status_code.startswith("incomplete_"):
-        return status_code.removeprefix("incomplete_")
-    error_text = str(row.get("error", "")).strip().lower()
-    if error_text:
-        if "404" in error_text:
-            return "upstream_404"
-        if "exceed remaining budget" in error_text:
-            return "budget_exceeded"
-        if "blocked" in error_text:
-            return "spend_blocked"
-        return "error"
-    note_text = str(row.get("note", "")).strip().lower()
-    if note_text == "missing events list response":
-        return "missing_events_list"
-    if note_text == "missing day status":
-        return "missing_day_status"
-    if note_text:
-        return "note"
-    if int(row.get("missing_count", 0)) > 0:
-        return "missing_event_odds"
-    return "incomplete_unknown"
+    return _incomplete_reason_code_impl(row)
 
 
 def _parse_allow_incomplete_days(raw_values: list[str]) -> set[str]:
-    allowed_days: set[str] = set()
-    for raw_value in raw_values:
-        for value in parse_csv(str(raw_value)):
-            try:
-                date.fromisoformat(value)
-            except ValueError as exc:
-                raise CLIError(f"invalid --allow-incomplete-day value: {value}") from exc
-            allowed_days.add(value)
-    return allowed_days
+    try:
+        return _parse_allow_incomplete_days_impl(raw_values)
+    except RuntimeError as exc:
+        raise CLIError(str(exc)) from exc
 
 
 def _parse_allow_incomplete_reasons(raw_values: list[str]) -> set[str]:
-    allowed_reasons: set[str] = set()
-    for raw_value in raw_values:
-        allowed_reasons.update(parse_csv(str(raw_value)))
-    return allowed_reasons
+    return _parse_allow_incomplete_reasons_impl(raw_values)
 
 
 def _build_status_summary_payload(
@@ -1057,77 +1010,24 @@ def _build_status_summary_payload(
     tz_name: str,
     warnings: list[dict[str, str]],
 ) -> dict[str, Any]:
-    complete_days = [row["day"] for row in rows if bool(row["complete"])]
-    incomplete_days = [row["day"] for row in rows if not bool(row["complete"])]
-    incomplete_reason_counts: Counter[str] = Counter(
-        _incomplete_reason_code(row) for row in rows if not bool(row["complete"])
+    return _build_status_summary_payload_impl(
+        dataset_id_value=dataset_id_value,
+        spec=spec,
+        rows=rows,
+        from_day=from_day,
+        to_day=to_day,
+        tz_name=tz_name,
+        warnings=warnings,
+        generated_at_utc=iso_z(_utc_now()),
     )
-    incomplete_error_code_counts: Counter[str] = Counter(
-        (str(row.get("error_code", "")).strip() or _incomplete_reason_code(row))
-        for row in rows
-        if not bool(row["complete"])
-    )
-    coverage_values = [float(row.get("odds_coverage_ratio", 0.0)) for row in rows]
-    payload: dict[str, Any] = {
-        "dataset_id": dataset_id_value,
-        "sport_key": spec.sport_key,
-        "markets": sorted(set(spec.markets)),
-        "regions": spec.regions,
-        "bookmakers": spec.bookmakers,
-        "historical": bool(spec.historical),
-        "from_day": from_day,
-        "to_day": to_day,
-        "tz_name": tz_name,
-        "total_days": len(rows),
-        "complete_count": len(complete_days),
-        "incomplete_count": len(incomplete_days),
-        "missing_events_total": sum(int(row["missing_count"]) for row in rows),
-        "avg_odds_coverage_ratio": (
-            sum(coverage_values) / len(coverage_values) if coverage_values else 0.0
-        ),
-        "minimum_odds_coverage_ratio": min(coverage_values) if coverage_values else 0.0,
-        "complete_days": complete_days,
-        "incomplete_days": incomplete_days,
-        "incomplete_reason_counts": dict(sorted(incomplete_reason_counts.items())),
-        "incomplete_error_code_counts": dict(sorted(incomplete_error_code_counts.items())),
-        "days": rows,
-        "generated_at_utc": iso_z(_utc_now()),
-    }
-    if warnings:
-        payload["warnings"] = warnings
-    return payload
 
 
 def _print_day_rows(rows: list[dict[str, Any]]) -> None:
-    for row in rows:
-        reason_code = (
-            _incomplete_reason_code(row) if not bool(row.get("complete", False)) else "complete"
-        )
-        error_code = str(row.get("error_code", "")).strip() or reason_code
-        print(
-            (
-                "day={} complete={} reason={} error_code={} missing={} events={} coverage={} "
-                "snapshot_id={} note={}"
-            ).format(
-                row["day"],
-                str(row["complete"]).lower(),
-                reason_code,
-                error_code,
-                row["missing_count"],
-                row["total_events"],
-                f"{float(row.get('odds_coverage_ratio', 0.0)):.3f}",
-                row["snapshot_id"],
-                row["note"],
-            )
-        )
+    _print_day_rows_impl(rows)
 
 
 def _print_warnings(warnings: list[dict[str, str]]) -> None:
-    for warning in warnings:
-        code = str(warning.get("code", "")).strip()
-        detail = str(warning.get("detail", "")).strip()
-        hint = str(warning.get("hint", "")).strip()
-        print(f"warning={code} detail={detail} hint={hint}")
+    _print_warnings_impl(warnings)
 
 
 def _cmd_data_datasets_ls(args: argparse.Namespace) -> int:
@@ -3200,37 +3100,14 @@ def _cmd_strategy_compare(args: argparse.Namespace) -> int:
 
 
 def _resolve_complete_day_dataset_id(data_root: Path, requested: str) -> str:
-    dataset_id_value = requested.strip()
-    if dataset_id_value:
-        _load_dataset_spec_or_error(data_root, dataset_id_value)
-        return dataset_id_value
-
-    discovered = _discover_dataset_ids(data_root)
-    if not discovered:
-        raise CLIError("no datasets found under data root; run data backfill first")
-    if len(discovered) == 1:
-        return discovered[0]
-    choices = ",".join(discovered[:6])
-    raise CLIError(
-        f"multiple datasets found; pass --dataset-id with --all-complete-days (examples: {choices})"
-    )
+    try:
+        return _resolve_complete_day_dataset_id_impl(data_root, requested)
+    except RuntimeError as exc:
+        raise CLIError(str(exc)) from exc
 
 
 def _complete_day_snapshots(data_root: Path, dataset_id_value: str) -> list[tuple[str, str]]:
-    complete_rows: list[tuple[str, str]] = []
-    for day in _dataset_day_names(data_root, dataset_id_value):
-        status = _load_day_status_for_dataset(data_root, dataset_id_value=dataset_id_value, day=day)
-        if not isinstance(status, dict):
-            continue
-        row = _day_row_from_status(day, status)
-        if not bool(row.get("complete", False)):
-            continue
-        snapshot_id = str(row.get("snapshot_id", "")).strip()
-        if not snapshot_id:
-            continue
-        complete_rows.append((day, snapshot_id))
-    complete_rows.sort(key=lambda item: item[0])
-    return complete_rows
+    return _complete_day_snapshots_impl(data_root, dataset_id_value)
 
 
 def _parse_positive_int_csv(value: str, *, default: list[int], flag_name: str) -> list[int]:
@@ -4928,68 +4805,20 @@ def _cmd_playbook_render(args: argparse.Namespace) -> int:
     return 0
 
 
-_COMPACT_PLAYBOOK_REPORTS: tuple[str, ...] = (
-    "strategy-report.json",
-    "strategy-brief.meta.json",
-    "strategy-brief.pdf",
-)
-
-
 def _snapshot_date(snapshot_id: str) -> str:
-    return resolve_snapshot_date_str(snapshot_id)
-
-
-def _publish_compact_playbook_outputs(
-    *, store: SnapshotStore, snapshot_id: str
-) -> tuple[list[str], Path, Path, Path]:
-    reports_dir = snapshot_reports_dir(
-        store,
-        snapshot_id,
-        reports_root=canonical_report_outputs_root(store),
-    )
-    if not reports_dir.exists():
-        raise CLIError(f"missing reports directory: {reports_dir}")
-
-    snapshot_day = _snapshot_date(snapshot_id)
-    reports_root = report_outputs_root(store)
-    daily_dir = reports_root / "daily" / snapshot_day / f"snapshot={snapshot_id}"
-    latest_dir = reports_root / "latest"
-    daily_dir.mkdir(parents=True, exist_ok=True)
-    latest_dir.mkdir(parents=True, exist_ok=True)
-
-    published: list[str] = []
-    for filename in _COMPACT_PLAYBOOK_REPORTS:
-        src = reports_dir / filename
-        if not src.exists():
-            continue
-        copy2(src, daily_dir / filename)
-        copy2(src, latest_dir / filename)
-        published.append(filename)
-
-    if not published:
-        raise CLIError(
-            "no compact reports found; run `prop-ev playbook run` or "
-            "`prop-ev playbook render` first"
-        )
-
-    pointer = {
-        "snapshot_id": snapshot_id,
-        "updated_at_utc": _iso(_utc_now()),
-        "files": published,
-    }
-    latest_json = latest_dir / "latest.json"
-    latest_json.write_text(json.dumps(pointer, sort_keys=True, indent=2) + "\n", encoding="utf-8")
-    publish_json = daily_dir / "publish.json"
-    publish_json.write_text(json.dumps(pointer, sort_keys=True, indent=2) + "\n", encoding="utf-8")
-    return published, daily_dir, latest_dir, latest_json
+    return _snapshot_date_impl(snapshot_id)
 
 
 def _cmd_playbook_publish(args: argparse.Namespace) -> int:
     store = SnapshotStore(_runtime_odds_data_dir())
-    published, daily_dir, latest_dir, latest_json = _publish_compact_playbook_outputs(
-        store=store,
-        snapshot_id=args.snapshot_id,
-    )
+    try:
+        published, daily_dir, latest_dir, latest_json = _publish_compact_outputs(
+            store=store,
+            snapshot_id=args.snapshot_id,
+            now_utc_iso=_iso(_utc_now()),
+        )
+    except RuntimeError as exc:
+        raise CLIError(str(exc)) from exc
     print(f"snapshot_id={args.snapshot_id}")
     print(f"published_files={','.join(published)}")
     print(f"daily_dir={daily_dir}")
@@ -5215,68 +5044,10 @@ def _cmd_playbook_discover_execute(args: argparse.Namespace) -> int:
 
 
 def _extract_global_overrides(argv: list[str]) -> tuple[list[str], str, str, str, str, str]:
-    cleaned: list[str] = []
-    config_path = ""
-    data_dir = ""
-    reports_dir = ""
-    nba_data_dir = ""
-    runtime_dir = ""
-    idx = 0
-    while idx < len(argv):
-        token = argv[idx]
-        if token == "--config":
-            if idx + 1 >= len(argv):
-                raise CLIError("--config requires a value")
-            config_path = str(argv[idx + 1]).strip()
-            idx += 2
-            continue
-        if token.startswith("--config="):
-            config_path = token.split("=", 1)[1].strip()
-            idx += 1
-            continue
-        if token == "--data-dir":
-            if idx + 1 >= len(argv):
-                raise CLIError("--data-dir requires a value")
-            data_dir = str(argv[idx + 1]).strip()
-            idx += 2
-            continue
-        if token.startswith("--data-dir="):
-            data_dir = token.split("=", 1)[1].strip()
-            idx += 1
-            continue
-        if token == "--reports-dir":
-            if idx + 1 >= len(argv):
-                raise CLIError("--reports-dir requires a value")
-            reports_dir = str(argv[idx + 1]).strip()
-            idx += 2
-            continue
-        if token.startswith("--reports-dir="):
-            reports_dir = token.split("=", 1)[1].strip()
-            idx += 1
-            continue
-        if token == "--nba-data-dir":
-            if idx + 1 >= len(argv):
-                raise CLIError("--nba-data-dir requires a value")
-            nba_data_dir = str(argv[idx + 1]).strip()
-            idx += 2
-            continue
-        if token.startswith("--nba-data-dir="):
-            nba_data_dir = token.split("=", 1)[1].strip()
-            idx += 1
-            continue
-        if token == "--runtime-dir":
-            if idx + 1 >= len(argv):
-                raise CLIError("--runtime-dir requires a value")
-            runtime_dir = str(argv[idx + 1]).strip()
-            idx += 2
-            continue
-        if token.startswith("--runtime-dir="):
-            runtime_dir = token.split("=", 1)[1].strip()
-            idx += 1
-            continue
-        cleaned.append(token)
-        idx += 1
-    return cleaned, config_path, data_dir, reports_dir, nba_data_dir, runtime_dir
+    try:
+        return _extract_global_overrides_impl(argv)
+    except RuntimeError as exc:
+        raise CLIError(str(exc)) from exc
 
 
 def _build_parser() -> argparse.ArgumentParser:

@@ -15,8 +15,6 @@ import prop_ev.strategy_output_impl as _strategy_output_impl
 from prop_ev.brief_builder import TEAM_ABBREVIATIONS
 from prop_ev.context_health import official_rows_count
 from prop_ev.execution_plan_contract import EXECUTION_PLAN_SCHEMA_VERSION, assert_execution_plan
-from prop_ev.identity_map import name_aliases
-from prop_ev.models.core_minutes_usage import market_side_adjustment_core, minutes_usage_core
 from prop_ev.nba_data.normalize import canonical_team_name, normalize_person_name
 from prop_ev.odds_math import (
     american_to_decimal,
@@ -34,6 +32,21 @@ from prop_ev.pricing_core import (
 from prop_ev.pricing_reference import ReferencePoint, estimate_reference_probability
 from prop_ev.rolling_priors import calibration_feedback
 from prop_ev.state_keys import strategy_report_state_key
+from prop_ev.strategy_context_impl import count_team_status as _count_team_status_impl
+from prop_ev.strategy_context_impl import injuries_by_team as _injuries_by_team_impl
+from prop_ev.strategy_context_impl import injury_index as _injury_index_impl
+from prop_ev.strategy_context_impl import injury_source_rows as _injury_source_rows_impl
+from prop_ev.strategy_context_impl import merged_injury_rows as _merged_injury_rows_impl
+from prop_ev.strategy_context_impl import resolve_player_team as _resolve_player_team_impl
+from prop_ev.strategy_context_impl import roster_status as _roster_status_impl
+from prop_ev.strategy_minutes_impl import market_minutes_weight as _market_minutes_weight_impl
+from prop_ev.strategy_minutes_impl import market_side_adjustment as _market_side_adjustment_impl
+from prop_ev.strategy_minutes_impl import (
+    minutes_prob_adjustment_over as _minutes_prob_adjustment_over_impl,
+)
+from prop_ev.strategy_minutes_impl import minutes_prob_lookup as _minutes_prob_lookup_impl
+from prop_ev.strategy_minutes_impl import minutes_usage as _minutes_usage_impl
+from prop_ev.strategy_minutes_impl import probability_adjustment as _probability_adjustment_impl
 from prop_ev.time_utils import parse_iso_z, utc_now_str
 from prop_ev.util.parsing import safe_float as _safe_float
 from prop_ev.util.parsing import to_price as _to_price
@@ -295,59 +308,11 @@ def _best_side(
 
 
 def _injury_source_rows(source: Any, *, default_source: str) -> list[dict[str, Any]]:
-    if not isinstance(source, dict):
-        return []
-    rows = source.get("rows", [])
-    if not isinstance(rows, list):
-        return []
-    cleaned: list[dict[str, Any]] = []
-    for row in rows:
-        if not isinstance(row, dict):
-            continue
-        player = str(row.get("player", "")).strip()
-        player_norm = str(row.get("player_norm", "")).strip() or normalize_person_name(player)
-        if not player_norm:
-            continue
-        team_norm = canonical_team_name(str(row.get("team_norm", row.get("team", ""))))
-        item = dict(row)
-        item["player"] = player
-        item["player_norm"] = player_norm
-        item["team_norm"] = team_norm
-        item["source"] = str(row.get("source", default_source))
-        cleaned.append(item)
-    return cleaned
+    return _injury_source_rows_impl(source, default_source=default_source)
 
 
 def _merged_injury_rows(injuries: dict[str, Any] | None) -> list[dict[str, Any]]:
-    if not isinstance(injuries, dict):
-        return []
-    official_rows = _injury_source_rows(
-        injuries.get("official"),
-        default_source="official_nba_pdf",
-    )
-    secondary_rows = _injury_source_rows(
-        injuries.get("secondary"),
-        default_source="secondary_injuries",
-    )
-    merged: dict[str, dict[str, Any]] = {}
-    for row in secondary_rows:
-        merged[str(row.get("player_norm", ""))] = row
-    for row in official_rows:
-        key = str(row.get("player_norm", ""))
-        previous = merged.get(key)
-        if previous is not None:
-            item = dict(previous)
-            item.update(row)
-            # Keep structured team identity from secondary when available.
-            # Official rows drive status and note fields.
-            item["team"] = str(previous.get("team", row.get("team", "")))
-            item["team_norm"] = canonical_team_name(
-                str(previous.get("team_norm", previous.get("team", "")))
-            )
-            merged[key] = item
-        else:
-            merged[key] = row
-    return list(merged.values())
+    return _merged_injury_rows_impl(injuries)
 
 
 def _official_rows_count(official: dict[str, Any] | None) -> int:
@@ -355,57 +320,11 @@ def _official_rows_count(official: dict[str, Any] | None) -> int:
 
 
 def _injury_index(injuries: dict[str, Any] | None) -> dict[str, dict[str, str]]:
-    index: dict[str, dict[str, str]] = {}
-    rows = _merged_injury_rows(injuries)
-    if not rows:
-        return index
-    severity = {
-        "unknown": 0,
-        "available": 1,
-        "day_to_day": 1,
-        "probable": 2,
-        "questionable": 3,
-        "doubtful": 4,
-        "out": 5,
-        "out_for_season": 6,
-    }
-    for row in rows:
-        if not isinstance(row, dict):
-            continue
-        key = str(row.get("player_norm", "")) or normalize_person_name(str(row.get("player", "")))
-        if not key:
-            continue
-        status = str(row.get("status", "unknown"))
-        date_update = str(row.get("date_update", ""))
-        team_norm = canonical_team_name(str(row.get("team_norm", row.get("team", ""))))
-        current = index.get(key)
-        candidate = {
-            "status": status,
-            "date_update": date_update,
-            "source": str(row.get("source", "")),
-            "note": str(row.get("note", "")),
-            "team_norm": team_norm,
-            "team": str(row.get("team", "")),
-        }
-        if current is None:
-            index[key] = candidate
-            continue
-        if severity.get(status, 0) > severity.get(current.get("status", "unknown"), 0):
-            index[key] = candidate
-            continue
-        if date_update > current.get("date_update", ""):
-            index[key] = candidate
-    return index
+    return _injury_index_impl(injuries)
 
 
 def _injuries_by_team(injuries: dict[str, Any] | None) -> dict[str, list[dict[str, Any]]]:
-    grouped: dict[str, list[dict[str, Any]]] = {}
-    for row in _merged_injury_rows(injuries):
-        team_norm = canonical_team_name(str(row.get("team_norm", row.get("team", ""))))
-        if not team_norm:
-            continue
-        grouped.setdefault(team_norm, []).append(row)
-    return grouped
+    return _injuries_by_team_impl(injuries)
 
 
 def _roster_status(
@@ -416,51 +335,13 @@ def _roster_status(
     roster: dict[str, Any] | None,
     player_identity_map: dict[str, Any] | None = None,
 ) -> str:
-    if not isinstance(event_context, dict):
-        return "unknown_event"
-    ctx = event_context.get(event_id)
-    if not isinstance(ctx, dict):
-        return "unknown_event"
-    if not isinstance(roster, dict):
-        return "unknown_roster"
-    teams = roster.get("teams", {})
-    if not isinstance(teams, dict):
-        return "unknown_roster"
-
-    home = canonical_team_name(str(ctx.get("home_team", "")))
-    away = canonical_team_name(str(ctx.get("away_team", "")))
-    if not home or not away:
-        return "unknown_event"
-    home_row = teams.get(home)
-    away_row = teams.get(away)
-    if not isinstance(home_row, dict) or not isinstance(away_row, dict):
-        return "unknown_roster"
-
-    player_norm = normalize_person_name(player_name)
-    aliases = set(name_aliases(player_name)) | {player_norm}
-    if isinstance(player_identity_map, dict):
-        player_rows = player_identity_map.get("players", {})
-        if isinstance(player_rows, dict):
-            for alias in list(aliases):
-                row = player_rows.get(alias)
-                if isinstance(row, dict):
-                    alias_rows = row.get("aliases", [])
-                    if isinstance(alias_rows, list):
-                        aliases.update(item for item in alias_rows if isinstance(item, str))
-    home_active = set(home_row.get("active", []))
-    away_active = set(away_row.get("active", []))
-    home_inactive = set(home_row.get("inactive", []))
-    away_inactive = set(away_row.get("inactive", []))
-    home_all = set(home_row.get("all", []))
-    away_all = set(away_row.get("all", []))
-
-    if aliases & home_inactive or aliases & away_inactive:
-        return "inactive"
-    if aliases & home_active or aliases & away_active:
-        return "active"
-    if aliases & home_all or aliases & away_all:
-        return "rostered"
-    return "not_on_roster"
+    return _roster_status_impl(
+        player_name=player_name,
+        event_id=event_id,
+        event_context=event_context,
+        roster=roster,
+        player_identity_map=player_identity_map,
+    )
 
 
 def _resolve_player_team(
@@ -472,73 +353,18 @@ def _resolve_player_team(
     injury_row: dict[str, Any],
     player_identity_map: dict[str, Any] | None = None,
 ) -> str:
-    ctx = event_context.get(event_id, {}) if isinstance(event_context, dict) else {}
-    home = canonical_team_name(str(ctx.get("home_team", "")))
-    away = canonical_team_name(str(ctx.get("away_team", "")))
-
-    if isinstance(roster, dict):
-        teams = roster.get("teams", {})
-        if isinstance(teams, dict) and home and away:
-            home_row = teams.get(home, {})
-            away_row = teams.get(away, {})
-            if isinstance(home_row, dict) and isinstance(away_row, dict):
-                player_norm = normalize_person_name(player_name)
-                aliases = set(name_aliases(player_name)) | {player_norm}
-                if isinstance(player_identity_map, dict):
-                    player_rows = player_identity_map.get("players", {})
-                    if isinstance(player_rows, dict):
-                        for alias in list(aliases):
-                            row = player_rows.get(alias)
-                            if isinstance(row, dict):
-                                alias_rows = row.get("aliases", [])
-                                if isinstance(alias_rows, list):
-                                    aliases.update(
-                                        item for item in alias_rows if isinstance(item, str)
-                                    )
-                home_all = set(home_row.get("all", []))
-                away_all = set(away_row.get("all", []))
-                if aliases & home_all and not (aliases & away_all):
-                    return home
-                if aliases & away_all and not (aliases & home_all):
-                    return away
-
-    injury_team = canonical_team_name(str(injury_row.get("team_norm", "")))
-    if injury_team and injury_team in {home, away}:
-        return injury_team
-
-    if isinstance(player_identity_map, dict):
-        players = player_identity_map.get("players", {})
-        if isinstance(players, dict):
-            for alias in name_aliases(player_name):
-                row = players.get(alias)
-                if not isinstance(row, dict):
-                    continue
-                teams = row.get("teams", [])
-                if not isinstance(teams, list):
-                    continue
-                for team in teams:
-                    team_norm = canonical_team_name(str(team))
-                    if team_norm in {home, away}:
-                        return team_norm
-    return ""
+    return _resolve_player_team_impl(
+        player_name=player_name,
+        event_id=event_id,
+        event_context=event_context,
+        roster=roster,
+        injury_row=injury_row,
+        player_identity_map=player_identity_map,
+    )
 
 
 def _count_team_status(rows: list[dict[str, Any]], exclude_player_norm: str) -> dict[str, int]:
-    counts = {
-        "out": 0,
-        "out_for_season": 0,
-        "doubtful": 0,
-        "questionable": 0,
-    }
-    for row in rows:
-        if not isinstance(row, dict):
-            continue
-        if normalize_person_name(str(row.get("player", ""))) == exclude_player_norm:
-            continue
-        status = str(row.get("status", "unknown"))
-        if status in counts:
-            counts[status] += 1
-    return counts
+    return _count_team_status_impl(rows, exclude_player_norm)
 
 
 def _minutes_usage_core(
@@ -549,7 +375,7 @@ def _minutes_usage_core(
     teammate_counts: dict[str, int],
     spread_abs: float | None,
 ) -> dict[str, float]:
-    return minutes_usage_core(
+    return _minutes_usage_impl(
         market=market,
         injury_status=injury_status,
         roster_status=roster_status,
@@ -564,7 +390,7 @@ def _market_side_adjustment_core(
     minutes_projection: dict[str, float],
     opponent_counts: dict[str, int],
 ) -> float:
-    return market_side_adjustment_core(
+    return _market_side_adjustment_impl(
         market=market,
         minutes_projection=minutes_projection,
         opponent_counts=opponent_counts,
@@ -572,20 +398,7 @@ def _market_side_adjustment_core(
 
 
 def _market_minutes_weight(market: str) -> float:
-    return {
-        "player_points": 0.008,
-        "player_rebounds": 0.007,
-        "player_assists": 0.008,
-        "player_threes": 0.006,
-        "player_points_rebounds_assists": 0.009,
-        "player_points_rebounds": 0.008,
-        "player_points_assists": 0.008,
-        "player_rebounds_assists": 0.007,
-        "player_turnovers": 0.005,
-        "player_blocks": 0.004,
-        "player_steals": 0.004,
-        "player_blocks_steals": 0.004,
-    }.get(market, 0.007)
+    return _market_minutes_weight_impl(market)
 
 
 def _minutes_prob_lookup(
@@ -595,23 +408,12 @@ def _minutes_prob_lookup(
     player: str,
     market: str,
 ) -> dict[str, Any]:
-    if not isinstance(minutes_probabilities, dict):
-        return {}
-    player_norm = normalize_person_name(player)
-    if not player_norm:
-        return {}
-    exact = minutes_probabilities.get("exact", {})
-    if isinstance(exact, dict):
-        key = f"{event_id}|{player_norm}|{market.strip().lower()}"
-        payload = exact.get(key)
-        if isinstance(payload, dict):
-            return payload
-    by_player = minutes_probabilities.get("player", {})
-    if isinstance(by_player, dict):
-        payload = by_player.get(player_norm)
-        if isinstance(payload, dict):
-            return payload
-    return {}
+    return _minutes_prob_lookup_impl(
+        minutes_probabilities,
+        event_id=event_id,
+        player=player,
+        market=market,
+    )
 
 
 def _minutes_prob_adjustment_over(
@@ -622,14 +424,13 @@ def _minutes_prob_adjustment_over(
     p_active: float | None,
     confidence_score: float | None,
 ) -> float:
-    if projected_minutes is None or minutes_p50 is None:
-        return 0.0
-    market_weight = _market_minutes_weight(market)
-    minutes_delta = (minutes_p50 - projected_minutes) * market_weight * 0.75
-    active_penalty = ((p_active if p_active is not None else 1.0) - 1.0) * 0.2
-    confidence = 0.0 if confidence_score is None else _clamp(confidence_score, 0.0, 1.0)
-    adjusted = (minutes_delta + active_penalty) * max(0.1, confidence)
-    return _clamp(adjusted, -0.08, 0.08)
+    return _minutes_prob_adjustment_over_impl(
+        market=market,
+        projected_minutes=projected_minutes,
+        minutes_p50=minutes_p50,
+        p_active=p_active,
+        confidence_score=confidence_score,
+    )
 
 
 def _probability_adjustment(
@@ -640,40 +441,13 @@ def _probability_adjustment(
     opponent_counts: dict[str, int],
     spread_abs: float | None,
 ) -> float:
-    if roster_status in {"inactive", "not_on_roster"}:
-        return -0.49
-    if injury_status in {"out_for_season", "out"}:
-        return -0.49
-
-    adjustment = 0.0
-    if injury_status == "doubtful":
-        adjustment -= 0.12
-    elif injury_status == "questionable":
-        adjustment -= 0.06
-    elif injury_status == "day_to_day":
-        adjustment -= 0.04
-    elif injury_status == "probable":
-        adjustment -= 0.02
-
-    teammate_boost = (
-        (teammate_counts.get("out", 0) * 0.015)
-        + (teammate_counts.get("out_for_season", 0) * 0.015)
-        + (teammate_counts.get("doubtful", 0) * 0.01)
-        + (teammate_counts.get("questionable", 0) * 0.005)
+    return _probability_adjustment_impl(
+        injury_status=injury_status,
+        roster_status=roster_status,
+        teammate_counts=teammate_counts,
+        opponent_counts=opponent_counts,
+        spread_abs=spread_abs,
     )
-    opponent_boost = (
-        (opponent_counts.get("out", 0) * 0.008)
-        + (opponent_counts.get("out_for_season", 0) * 0.008)
-        + (opponent_counts.get("doubtful", 0) * 0.005)
-    )
-    adjustment += min(teammate_boost, 0.05)
-    adjustment += min(opponent_boost, 0.03)
-
-    if spread_abs is not None and spread_abs >= 8.0:
-        adjustment -= 0.015
-    if spread_abs is not None and spread_abs >= 12.0:
-        adjustment -= 0.01
-    return adjustment
 
 
 def _ev_and_kelly(
