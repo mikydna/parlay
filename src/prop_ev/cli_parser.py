@@ -19,6 +19,7 @@ def build_parser(
     _cmd_data_datasets_ls = handlers._cmd_data_datasets_ls
     _cmd_data_datasets_show = handlers._cmd_data_datasets_show
     _cmd_data_done_days = handlers._cmd_data_done_days
+    _cmd_data_export_denorm = handlers._cmd_data_export_denorm
     _cmd_data_guardrails = handlers._cmd_data_guardrails
     _cmd_data_migrate_layout = handlers._cmd_data_migrate_layout
     _cmd_data_repair_derived = handlers._cmd_data_repair_derived
@@ -313,6 +314,35 @@ def build_parser(
     data_repair.add_argument("--to", dest="to_day", default="")
     data_repair.add_argument("--tz", dest="tz_name", default="America/New_York")
     data_repair.add_argument(
+        "--json",
+        dest="json_output",
+        action="store_true",
+        help="Emit machine-readable JSON payload",
+    )
+
+    data_export_denorm = data_subparsers.add_parser(
+        "export-denorm",
+        help="Export split-table denormalized Parquet data for one dataset id",
+    )
+    data_export_denorm.set_defaults(func=_cmd_data_export_denorm)
+    data_export_denorm.add_argument("--dataset-id", required=True)
+    data_export_denorm.add_argument("--from", dest="from_day", default="")
+    data_export_denorm.add_argument("--to", dest="to_day", default="")
+    data_export_denorm.add_argument("--tz", dest="tz_name", default="America/New_York")
+    data_export_denorm.add_argument(
+        "--out",
+        default="",
+        help=(
+            "Output root for split Parquet tables. "
+            "Default: <data_home>/exports/odds/export_denorm/v1."
+        ),
+    )
+    data_export_denorm.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="Overwrite existing day partitions at the output root.",
+    )
+    data_export_denorm.add_argument(
         "--json",
         dest="json_output",
         action="store_true",

@@ -48,6 +48,7 @@ _cmd_data_datasets_ls = _data_impl._cmd_data_datasets_ls
 _cmd_data_datasets_show = _data_impl._cmd_data_datasets_show
 _cmd_data_status = _data_impl._cmd_data_status
 _cmd_data_done_days = _data_impl._cmd_data_done_days
+_cmd_data_export_denorm = _data_impl._cmd_data_export_denorm
 _cmd_data_backfill = _data_impl._cmd_data_backfill
 _cmd_data_verify = _data_impl._cmd_data_verify
 _cmd_data_repair_derived = _data_impl._cmd_data_repair_derived

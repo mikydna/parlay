@@ -33,6 +33,7 @@ from prop_ev.lake_migration import migrate_layout
 from prop_ev.odds_data.backfill import backfill_days
 from prop_ev.odds_data.cache_store import GlobalCacheStore
 from prop_ev.odds_data.day_index import compute_day_status_from_cache, load_day_status
+from prop_ev.odds_data.denorm_export import export_dataset_denorm
 from prop_ev.odds_data.spec import dataset_id
 from prop_ev.quote_table import EVENT_PROPS_TABLE
 from prop_ev.snapshot_artifacts import (
@@ -253,6 +254,80 @@ def _cmd_data_datasets_show(args: argparse.Namespace) -> int:
         f"available_days={len(available_days)}"
     )
     _print_day_rows(rows)
+    return 0
+
+
+def _cmd_data_export_denorm(args: argparse.Namespace) -> int:
+    data_root = Path(_runtime_odds_data_dir())
+    dataset_id_value = str(getattr(args, "dataset_id", "")).strip()
+    if not dataset_id_value:
+        raise CLIError("--dataset-id is required")
+
+    _load_dataset_spec_or_error(data_root, dataset_id_value)
+    available_days = _dataset_day_names(data_root, dataset_id_value)
+    from_day = str(getattr(args, "from_day", "")).strip()
+    to_day = str(getattr(args, "to_day", "")).strip()
+    if (from_day and not to_day) or (to_day and not from_day):
+        raise CLIError("--from and --to must be provided together")
+
+    if from_day and to_day:
+        selected_days = _resolve_days(
+            days=1,
+            from_day=from_day,
+            to_day=to_day,
+            tz_name=str(getattr(args, "tz_name", "America/New_York")),
+        )
+    else:
+        selected_days = available_days
+
+    out_value = str(getattr(args, "out", "")).strip()
+    out_root = Path(out_value).expanduser() if out_value else None
+    try:
+        report = export_dataset_denorm(
+            data_root=data_root,
+            dataset_id_value=dataset_id_value,
+            days=selected_days,
+            out_root=out_root,
+            overwrite=bool(getattr(args, "overwrite", False)),
+        )
+    except FileExistsError as exc:
+        raise CLIError(str(exc)) from exc
+
+    if bool(getattr(args, "json_output", False)):
+        print(json.dumps(report, sort_keys=True))
+        return 0
+
+    warnings = report.get("warnings", [])
+    if isinstance(warnings, list) and warnings:
+        warning_rows = [row for row in warnings if isinstance(row, dict)]
+        if warning_rows:
+            _print_warnings(warning_rows)
+
+    print(
+        (
+            "dataset_id={} selected_days={} eligible_complete_days={} exported_days={} "
+            "skipped_incomplete_days={} warning_count={} output_root={}"
+        ).format(
+            dataset_id_value,
+            int(report.get("selected_days", 0)),
+            int(report.get("eligible_complete_days", 0)),
+            int(report.get("exported_days", 0)),
+            int(report.get("skipped_incomplete_days", 0)),
+            int(report.get("warning_count", 0)),
+            str(report.get("output_root", "")),
+        )
+    )
+    tables = report.get("tables", {})
+    if isinstance(tables, dict):
+        for table_name in ("fact_outcomes", "dim_request", "dim_day_status"):
+            row = tables.get(table_name, {})
+            if not isinstance(row, dict):
+                continue
+            print(
+                f"table={table_name} "
+                f"partitions_written={int(row.get('partitions_written', 0))} "
+                f"rows={int(row.get('rows', 0))}"
+            )
     return 0
 
 
