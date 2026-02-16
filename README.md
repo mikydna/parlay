@@ -173,7 +173,14 @@ uv run prop-ev data status --dataset-id <DATASET_ID> --from 2026-02-01 --to 2026
 uv run prop-ev data verify --dataset-id <DATASET_ID> --from 2026-02-01 --to 2026-02-12 --require-complete --require-parquet --json
 uv run prop-ev data verify --dataset-id <DATASET_ID> --from 2026-02-01 --to 2026-02-12 --require-complete --require-parquet --require-canonical-jsonl --json
 uv run prop-ev data repair-derived --dataset-id <DATASET_ID> --from 2026-02-01 --to 2026-02-12 --json
+uv run prop-ev data export-denorm --dataset-id <DATASET_ID> --from 2026-02-01 --to 2026-02-12 --json
 ```
+
+`data export-denorm` writes split Parquet tables under
+`<data_home>/exports/odds/export_denorm/v1`:
+- `fact_outcomes/day=YYYY-MM-DD/part-00000.parquet`
+- `dim_request/day=YYYY-MM-DD/part-00000.parquet`
+- `dim_day_status/day=YYYY-MM-DD/part-00000.parquet`
 
 No-spend completeness check (cache-only, no paid calls):
 
