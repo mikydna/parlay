@@ -1,0 +1,243 @@
+\documentclass[10pt]{article}
+\usepackage[margin=1in,landscape]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage{hyperref}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{ragged2e}
+\newcolumntype{L}[1]{>{\RaggedRight\arraybackslash}p{#1}}
+\newcolumntype{R}[1]{>{\RaggedLeft\arraybackslash}p{#1}}
+\renewcommand{\arraystretch}{1.05}
+\setlength{\parskip}{4pt}
+\setlength{\parindent}{0pt}
+\sloppy
+\begin{document}
+\begin{center}\LARGE\textbf{NBA Strategy Brief}\end{center}
+\vspace{0.5em}
+\subsection*{Snapshot}
+\begin{itemize}
+\item snapshot\_id: \texttt{daily-20260219T233551Z}
+\item modeled\_date\_et: \texttt{Thursday, Feb 19, 2026 (ET)}
+\item generated\_at\_et: \texttt{2026-02-19 06:36:00 PM EST}
+\item source\_data: \texttt{snapshot\_inputs}
+\item scoring: \texttt{deterministic}
+\item narrative: \texttt{llm}
+\end{itemize}
+Generated: 2026-02-19 06:36:00 PM ET (America/New\_York)
+Modeled date: Thursday, Feb 19, 2026 (ET)
+Execution\_books: []
+
+Top plays (tip times ET):
+\begin{itemize}
+\item Jarace Walker OVER 27.5 points+rebounds+assists — IND @ WAS — tip: 07:10 PM ET — ticket: Jarace Walker OVER 27.5 points+rebounds+assists @ -104 (fanduel)
+\item Jalen Green OVER 14.5 points — PHX @ SAS — tip: 08:40 PM ET — ticket: Jalen Green OVER 14.5 points @ +100 (fanduel)
+\end{itemize}
+
+Note: This brief covers player-prop over/under betting only (not game-winner or spread bets).
+
+\subsection*{What The Bet Is}
+Two A-tier player-prop over plays (both recommended as GO in the model payload):
+\begin{itemize}
+\item Jarace Walker — Over 27.5 points+rebounds+assists (IND @ WAS) — book: fanduel — price: -104
+\item Jalen Green — Over 14.5 points (PHX @ SAS) — book: fanduel — price: +100
+\end{itemize}
+
+Both tickets are player-prop over/under wagers (player totals), not game outcome bets.
+
+\subsection*{Executive Summary}
+\begin{itemize}
+\item Model recommends GO on two A-tier player props with sizable estimated positive EVs and verified active roster status in the input.
+\item Jarace Walker 3-stat over: model\_prob 0.6932, calibrated 0.6423, EV \textasciitilde{} +36.0\% (best\_ev 0.3598). Tip 07:10 PM ET.
+\item Jalen Green points over: model\_prob 0.6862, calibrated 0.6359, EV \textasciitilde{} +37.2\% (best\_ev 0.3725). Tip 08:40 PM ET.
+\item Data gaps exist for other candidates (watchlist and tier-B items) where roster/injury checks failed — those are NO-GO until confirmed. Uncertainty bands \textasciitilde{}0.05 suggest moderate model variance; size bets accordingly.
+\end{itemize}
+
+
+\newpage
+
+\subsection*{Analyst Take}
+
+\begin{itemize}
+\item mode: \texttt{llm\_web}
+\end{itemize}
+
+\subsubsection*{Read This First}
+
+Checked injury reports, team news, and recent game logs for the two top plays (Jalen Green O14.5 pts, Jarace Walker O27.5 3-stat). Evidence is mixed for Jalen Green: some outlets list him available/off the report for the Suns vs Spurs game (supporting the model edge that he’ll play and can reach 14.5), while multiple injury updates and historical hamstring setbacks suggest limited floor and managed minutes (which...
+
+\subsubsection*{News Signals}
+
+\begin{itemize}
+\item Supports:
+\item [S1] Fox Sports' February 19 Suns vs Spurs injury report lists Jalen Green as 'off the injury report' (available) for the Feb 19 game, indicating he was expected to be in the lineup.
+\item [S2] NBA.com player news shows Jalen Green on the Suns roster with recent game activity and multiple status updates (questionable / not listed), consistent with the player being active in recent team reports.
+\item [S3] Jarace Walker posted a 23-point, 5-assist effort on Feb 11, 2026 (game log), demonstrating he can put up a large counting-stats performance when given extended minutes/usage.
+\item [S4] Recent Pacers vs Wizards previews and injury reports list Walker as an active rotational starter for Indiana and show he averages meaningful minutes, supporting the model's assumption that he will have opportunity to accumulate counting stats.
+\item Refutes/Risks:
+\item [S5] Multiple news pieces document Jalen Green's hamstring issues (including reports he aggravated the hamstring and was out for re-evaluation), indicating ongoing injury risk and potential minutes/usage management that could depress scoring volume.
+\item [S6] Analyses and team-updates (Bright Side of the Sun and others) report hamstring setbacks and re-evaluations for Green, including multi-week re-evaluation timetables earlier in the season, which undermines confidence that he will play normal minutes needed to hit scoring lines reliably.
+\item [S7] Jarace Walker's 2025-26 season averages (approx. 10.5 points, 4.5 rebounds, 2.0 assists = \textasciitilde{}17 combined) make a 27.5 combined line a substantial outlier versus his typical production.
+\item [S8] Multiple Pacers/Wizards injury-report previews note several team injuries and line-up fluctuations; those roster instabilities can both help (more opportunity) or hurt (rotations change, minutes reduced) Walker's ability to reach an unusually high 27.5 3-stat total—introducing uncertainty rather than a clear push toward the model's optimistic EV.
+\end{itemize}
+
+\subsubsection*{Bottom Line}
+
+\begin{itemize}
+\item \textbf{Best Bet:} \textbf{Jalen Green OVER 14.5 points @ +100 (fanduel)}
+\item \textbf{Lookup Line:} \texttt{PHX @ SAS} | \texttt{OVER 14.5 points} | \texttt{fanduel +100}
+\end{itemize}
+Evidence is mixed. For Jalen Green O14.5: there is explicit, same-day reporting (Fox Sports, NBA player news) that he was off/questionable on the injury report and likely available, which supports the model edge that the line is playable if he actually plays starter minutes.
+
+\subsubsection*{Source Index}
+
+\begin{itemize}
+\item [S1] Phoenix Suns vs. San Antonio Spurs - Live Score - February 19, 2026 | FOX Sports (www.foxsports.com)
+\item [S2] Jalen Green | Guard | Phoenix Suns | NBA.com (www.nba.com)
+\item [S3] Jarace Walker 2025-26 Basic Game Log - NBA Players Stats (Land of Basketball) (www.landofbasketball.com)
+\item [S4] Pacers vs. Wizards Injury Report – Feb. 19 | Fox Sports 1360 (foxsports1360.iheart.com)
+\item [S5] Suns’ Jalen Green leaves game vs. Clippers, apparently aggravating hamstring injury | NBA.com (www.nba.com)
+\item [S6] Injury Update: Jalen Green leaves game with hamstring tightness | Bright Side of the Sun (www.brightsideofthesun.com)
+\item [S7] Jarace Walker Profile and 2025-26 season averages - Land of Basketball (www.landofbasketball.com)
+\item [S8] Pacers vs Wizards injury report for February 19 - TalkBasket.net (www.talkbasket.net)
+\item Full source URLs are stored in \texttt{brief-analyst.json} for audit/debug use.
+\end{itemize}
+
+\newpage
+
+\subsection*{Best Available Bet Right Now}
+
+\begin{itemize}
+\item \textbf{Decision:} \textbf{GO} (meets clean GO gates in this snapshot.)
+\item \textbf{Bet:} \textbf{Jalen Green OVER 14.5 points @ +100 (fanduel)}
+\item \textbf{Lookup Line:} \texttt{PHX @ SAS} | \texttt{OVER 14.5 points} | \texttt{fanduel +100}
+\item \textbf{Model Edge:} \texttt{+37.2\% est.}
+\item why: Go: verified availability with tier A market depth and positive edge (EV 0.372).
+\end{itemize}
+
+\newpage
+
+\subsection*{Action Plan (GO / LEAN / NO-GO)}
+
+\subsubsection*{Top 2 Across All Games}
+
+{\small
+\setlength{\tabcolsep}{2pt}
+\setlength{\LTleft}{0pt}
+\setlength{\LTright}{0pt}
+\begin{longtable}{|L{0.089\linewidth}|L{0.164\linewidth}|L{0.089\linewidth}|L{0.150\linewidth}|R{0.068\linewidth}|L{0.150\linewidth}|L{0.150\linewidth}|}
+\hline
+\textbf{Action} & \textbf{Game} & \textbf{Tier} & \textbf{Ticket} & \textbf{p(hit)} & \textbf{Edge Note} & \textbf{Why} \\
+\hline
+\endfirsthead
+\hline
+\textbf{Action} & \textbf{Game} & \textbf{Tier} & \textbf{Ticket} & \textbf{p(hit)} & \textbf{Edge Note} & \textbf{Why} \\
+\hline
+\endhead
+\hline
+\endfoot
+\hline
+\endlastfoot
+GO & PHX @ SAS & A & Jalen Green OVER 14.5 points @ +100 (fanduel) & 63.6\% & Strong edge (+37.2\% est.), Higher stake & Go: verified availability with tier A market depth and positive edge (EV 0.372). (tier=A; injury=available\_unlisted; roster=active; quality=69.8\%; uncertainty=5.0\%) \\
+\hline
+GO & IND @ WAS & A & Jarace Walker OVER 27.5 points+rebounds+assists @ -104 (fanduel) & 64.2\% & Strong edge (+36.0\% est.), Higher stake & Go: verified availability with tier A market depth and positive edge (EV 0.360). (tier=A; injury=available\_unlisted; roster=active; quality=68.9\%; uncertainty=5.1\%) \\
+\hline
+\end{longtable}
+}
+
+
+Order: GO first, then NO-GO. There are no LEAN recommendations in the provided payload.
+
+
+
+\newpage
+
+\subsection*{Game Cards by Matchup}
+
+\subsubsection*{IND @ WAS}
+\begin{itemize}
+\item Tip (ET): \texttt{07:10 PM ET}
+\item Listed plays: \texttt{1}
+\end{itemize}
+
+{\small
+\setlength{\tabcolsep}{2pt}
+\setlength{\LTleft}{0pt}
+\setlength{\LTright}{0pt}
+\begin{longtable}{|L{0.112\linewidth}|L{0.112\linewidth}|L{0.190\linewidth}|R{0.086\linewidth}|L{0.190\linewidth}|L{0.190\linewidth}|}
+\hline
+\textbf{Action} & \textbf{Tier} & \textbf{Ticket} & \textbf{p(hit)} & \textbf{Edge Note} & \textbf{Why} \\
+\hline
+\endfirsthead
+\hline
+\textbf{Action} & \textbf{Tier} & \textbf{Ticket} & \textbf{p(hit)} & \textbf{Edge Note} & \textbf{Why} \\
+\hline
+\endhead
+\hline
+\endfoot
+\hline
+\endlastfoot
+GO & A & Jarace Walker OVER 27.5 points+rebounds+assists @ -104 (fanduel) & 64.2\% & Strong edge (+36.0\% est.), Higher stake & Go: verified availability with tier A market depth and positive edge (EV 0.360). \\
+\hline
+\end{longtable}
+}
+
+
+\newpage
+
+\subsubsection*{PHX @ SAS}
+\begin{itemize}
+\item Tip (ET): \texttt{08:40 PM ET}
+\item Listed plays: \texttt{1}
+\end{itemize}
+
+{\small
+\setlength{\tabcolsep}{2pt}
+\setlength{\LTleft}{0pt}
+\setlength{\LTright}{0pt}
+\begin{longtable}{|L{0.112\linewidth}|L{0.112\linewidth}|L{0.190\linewidth}|R{0.086\linewidth}|L{0.190\linewidth}|L{0.190\linewidth}|}
+\hline
+\textbf{Action} & \textbf{Tier} & \textbf{Ticket} & \textbf{p(hit)} & \textbf{Edge Note} & \textbf{Why} \\
+\hline
+\endfirsthead
+\hline
+\textbf{Action} & \textbf{Tier} & \textbf{Ticket} & \textbf{p(hit)} & \textbf{Edge Note} & \textbf{Why} \\
+\hline
+\endhead
+\hline
+\endfoot
+\hline
+\endlastfoot
+GO & A & Jalen Green OVER 14.5 points @ +100 (fanduel) & 63.6\% & Strong edge (+37.2\% est.), Higher stake & Go: verified availability with tier A market depth and positive edge (EV 0.372). \\
+\hline
+\end{longtable}
+}
+
+
+\newpage
+
+\subsection*{Data Quality}
+\begin{itemize}
+\item Strengths: Provided payload includes model probabilities, calibrated probabilities, uncertainty bands, and roster\_status for top A-tier plays. Injuries flagged from official/secondary sources per summary.
+\item Limitations (present in payload): execution\_books list is empty (no additional book scanning beyond listed best\_book). Some players in watchlist/tier-B have injury\_status=unknown or roster\_status=not\_on\_roster, so those plays were correctly gated. Model uses deterministic minutes/usage and deterministic SGP correlations (not learned distributions), which may understate real-world variance. Uncertainty\_band values (\textasciitilde{}0.05) are non-negligible.
+\end{itemize}
+
+If you need larger stakes or added plays, confirm live roster/injury feeds and line shopping across books (execution\_books currently empty).
+
+\subsection*{Confidence}
+\begin{itemize}
+\item Overall confidence for the two recommended A-tier plays: moderate-high based on provided payload (roster\_status=active, Tier A market depth, calibrated probabilities still > line-implied).
+\item Caveats: uncertainty\_band ≈ 0.05 reduces confidence on tight lines; missing external book checks and the deterministic modeling choices lower confidence versus a fully cross-checked live workflow. If data is missing or weak for any ticket, that is stated above and those tickets are NO-GO until confirmed.
+\end{itemize}
+
+\subsubsection*{Interpreting p(hit)}
+
+\begin{itemize}
+\item \texttt{p(hit)} = estimated chance the recommended side wins at that line.
+\item When shown as \texttt{X\% → Y\%}, it is conservative \texttt{p(hit)} mapped through calibration history.
+\item Built from no-vig odds + small injury/roster/spread adjustments (clamped 1\%-99\%).
+\item Use it to rank EV, not as a guarantee; judge it by calibration over many bets.
+\item Can be wrong when odds are stale, coverage is thin, or minutes/role are uncertain.
+\end{itemize}
+\end{document}

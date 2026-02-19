@@ -1,0 +1,48 @@
+{
+  "analysis_summary": "Checked injury reports, team news, and recent game logs for the two top plays (Jalen Green O14.5 pts, Jarace Walker O27.5 3-stat). Evidence is mixed for Jalen Green: some outlets list him available/off the report for the Suns vs Spurs game (supporting the model edge that he\u2019ll play and can reach 14.5), while multiple injury updates and historical hamstring setbacks suggest limited floor and managed minutes (which could reduce scoring volume). For Jarace Walker, recent single-game outbursts (including a 23-point, 5-assist game) show he can approach a high 3-stat total in favorable minutes, but his season averages (~10.5 pts, 4.5 reb, 2.0 ast = ~17 combined) and typical role make a 27.5 3-stat line a large step up and therefore risky.",
+  "bottom_line": "Evidence is mixed. For Jalen Green O14.5: there is explicit, same-day reporting (Fox Sports, NBA player news) that he was off/questionable on the injury report and likely available, which supports the model edge that the line is playable if he actually plays starter minutes. However, multiple documented hamstring setbacks and prior re-evaluations create real risk of limited minutes or managed usage\u2014if the Suns restrict his minutes, the edge will evaporate. For Jarace Walker O27.5 3-stat: while Walker has shown he can produce big single-game totals (e.g., 23 points + ancillary stats) and team injuries could boost his opportunity, his season average combined 3-stat (~17) is far below 27.5, making this line a large positive-variance bet. Overall: both plays have some supporting evidence of availability/opportunity, but the evidence for sustainable volume (especially for Walker) is weak \u2014 treat the model edges as conditional on confirmed full minutes; if either team issues a late minutes/injury update, reduce or remove exposure. If you want, I can monitor/refresh these reports for the final pre-game injury/minutes confirmations.",
+  "refuting_facts": [
+    {
+      "fact": "Multiple news pieces document Jalen Green's hamstring issues (including reports he aggravated the hamstring and was out for re-evaluation), indicating ongoing injury risk and potential minutes/usage management that could depress scoring volume.",
+      "source_title": "Suns\u2019 Jalen Green leaves game vs. Clippers, apparently aggravating hamstring injury | NBA.com",
+      "source_url": "https://www.nba.com/news/suns-jalen-green-injury"
+    },
+    {
+      "fact": "Analyses and team-updates (Bright Side of the Sun and others) report hamstring setbacks and re-evaluations for Green, including multi-week re-evaluation timetables earlier in the season, which undermines confidence that he will play normal minutes needed to hit scoring lines reliably.",
+      "source_title": "Injury Update: Jalen Green leaves game with hamstring tightness | Bright Side of the Sun",
+      "source_url": "https://www.brightsideofthesun.com/suns-injury-report/97268/jalen-green-injury-setback-hamstring-return-questions-trade-impact"
+    },
+    {
+      "fact": "Jarace Walker's 2025-26 season averages (approx. 10.5 points, 4.5 rebounds, 2.0 assists = ~17 combined) make a 27.5 combined line a substantial outlier versus his typical production.",
+      "source_title": "Jarace Walker Profile and 2025-26 season averages - Land of Basketball",
+      "source_url": "https://www.landofbasketball.com/nba_players/jarace_walker.htm"
+    },
+    {
+      "fact": "Multiple Pacers/Wizards injury-report previews note several team injuries and line-up fluctuations; those roster instabilities can both help (more opportunity) or hurt (rotations change, minutes reduced) Walker's ability to reach an unusually high 27.5 3-stat total\u2014introducing uncertainty rather than a clear push toward the model's optimistic EV.",
+      "source_title": "Pacers vs Wizards injury report for February 19 - TalkBasket.net",
+      "source_url": "https://www.talkbasket.net/212449-pacers-vs-wizards-injury-report-for-february-19"
+    }
+  ],
+  "supporting_facts": [
+    {
+      "fact": "Fox Sports' February 19 Suns vs Spurs injury report lists Jalen Green as 'off the injury report' (available) for the Feb 19 game, indicating he was expected to be in the lineup.",
+      "source_title": "Phoenix Suns vs. San Antonio Spurs - Live Score - February 19, 2026 | FOX Sports",
+      "source_url": "https://www.foxsports.com/nba/phoenix-suns-vs-san-antonio-spurs-feb-19-2026-game-boxscore-44681"
+    },
+    {
+      "fact": "NBA.com player news shows Jalen Green on the Suns roster with recent game activity and multiple status updates (questionable / not listed), consistent with the player being active in recent team reports.",
+      "source_title": "Jalen Green | Guard | Phoenix Suns | NBA.com",
+      "source_url": "https://www.nba.com/player/1630224/jalen-green"
+    },
+    {
+      "fact": "Jarace Walker posted a 23-point, 5-assist effort on Feb 11, 2026 (game log), demonstrating he can put up a large counting-stats performance when given extended minutes/usage.",
+      "source_title": "Jarace Walker 2025-26 Basic Game Log - NBA Players Stats (Land of Basketball)",
+      "source_url": "https://www.landofbasketball.com/nba_players_game_logs/2026/jarace_walker.htm"
+    },
+    {
+      "fact": "Recent Pacers vs Wizards previews and injury reports list Walker as an active rotational starter for Indiana and show he averages meaningful minutes, supporting the model's assumption that he will have opportunity to accumulate counting stats.",
+      "source_title": "Pacers vs. Wizards Injury Report \u2013 Feb. 19 | Fox Sports 1360",
+      "source_url": "https://foxsports1360.iheart.com/content/2026-02-19-pacers-vs-wizards-injury-report-feb-19/"
+    }
+  ]
+}

@@ -1,0 +1,48 @@
+{
+  "confidence_notes": [
+    "Top plays are labeled pre_bet_ready=true and roster_status=active in payload; confidence tiers are empty in the input so no additional confidence grading is available.",
+    "Uncertainty_band values provided (~0.050\u20130.051) indicate non-negligible model uncertainty that should be considered when sizing bets."
+  ],
+  "data_quality_flags": [
+    "No external books/lines beyond those listed in payload may have been checked \u2014 best_book and best_price are taken solely from input.",
+    "Injury_status values include 'available_unlisted' and 'unknown' for some players; those gaps are present in the payload and affect recommendations.",
+    "Model notes indicate deterministic (not learned) minutes/usage and SGP correlation rules which may understate variance."
+  ],
+  "slate_summary": "Two A-tier top plays flagged GO: Jalen Green points over 14.5 at +100 and Jarace Walker 3-stat over 27.5 at -104. Both have positive estimated EV and verified roster availability in the payload.",
+  "top_plays_explained": [
+    {
+      "action": "GO",
+      "best_book": "fanduel",
+      "best_price": 100,
+      "edge_note": "Strong edge (+37.2% est.), Higher stake",
+      "ev": 0.372477,
+      "game": "PHX @ SAS",
+      "kelly": 0.372477,
+      "market": "player_points",
+      "player": "Jalen Green",
+      "point": 14.5,
+      "side": "over",
+      "ticket": "Jalen Green OVER 14.5 points @ +100 (fanduel)",
+      "why": "Model shows a sizable positive edge and the data indicates the player is active and the market depth is tier A, so the recommendation is to take the over."
+    },
+    {
+      "action": "GO",
+      "best_book": "fanduel",
+      "best_price": -104,
+      "edge_note": "Strong edge (+36.0% est.), Higher stake",
+      "ev": 0.359787,
+      "game": "IND @ WAS",
+      "kelly": 0.374179,
+      "market": "player_points_rebounds_assists",
+      "player": "Jarace Walker",
+      "point": 27.5,
+      "side": "over",
+      "ticket": "Jarace Walker OVER 27.5 points+rebounds+assists @ -104 (fanduel)",
+      "why": "Model probability and calibrated probability produce a positive EV and roster status is active in the payload, supporting a GO on the 3-stat over."
+    }
+  ],
+  "watchouts": [
+    "Roster/availability gates flagged NO-GO for several tier-B and watchlist items\u2014confirm roster/injury updates before expanding stake beyond these top A-tier plays.",
+    "Model uses deterministic minutes/usage and correlation rules; uncertainty bands present (~0.05) which affect marginal lines."
+  ]
+}
