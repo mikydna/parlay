@@ -1,0 +1,39 @@
+{
+  "all_top_plays": [],
+  "execution_books": [],
+  "game_cards": [],
+  "gaps": [
+    "Official NBA injury report data was not cleanly parsed (missing links, download failure, or empty parse rows).",
+    "Roster verification feed was not available.",
+    "Slate spreads/totals were unavailable in this snapshot.",
+    "Health gates triggered watchlist-only mode for this snapshot.",
+    "Model uses market-implied fair probabilities with injury/roster/opponent adjustments.",
+    "Minutes/usage projection uses deterministic core rules, not learned distributions.",
+    "SGP/SGPx correlation uses deterministic haircut rules (core model)."
+  ],
+  "generated_at_et": "2026-07-03 02:09:35 PM EDT",
+  "generated_at_utc": "2026-07-03T18:09:35Z",
+  "modeled_date_et": "Friday, Jul 03, 2026 (ET)",
+  "snapshot_id": "daily-20260703T180915Z",
+  "strategy_status": "modeled_with_gates",
+  "summary": {
+    "allow_tier_b": true,
+    "candidate_lines": 0,
+    "eligible_lines": 0,
+    "events": 0,
+    "injury_source_official": "no",
+    "injury_source_secondary": "yes",
+    "quota": {
+      "last": "0",
+      "remaining": "500",
+      "used": "0"
+    },
+    "roster_source": "no",
+    "roster_team_rows": 0,
+    "tier_a_lines": 0,
+    "tier_b_lines": 0
+  },
+  "tier_b_spotlight": [],
+  "top_plays": [],
+  "watchlist": []
+}

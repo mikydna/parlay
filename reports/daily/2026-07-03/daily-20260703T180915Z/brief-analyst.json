@@ -1,0 +1,33 @@
+{
+  "analysis_summary": "The model snapshot (daily-20260703T180915Z) reported no candidate lines because official game/roster/injury data was missing. Web evidence shows (A) the NBA regular season concluded in April 2026 and there is not a normal regular-season slate on July 3, 2026 (supporting the absence of a standard sportsbook slate), (B) the NBA and third-party sites list 2026 Summer League events on July 3 (showing there are playable games outside the regular-season schedule), and (C) official NBA game-day injury reports are published only on game days and historically appear as per-game PDFs \u2014 so if no game-day feeds were present the model would legitimately be gated. Conversely, multiple public third-party schedules and injury trackers show entries for July 3/Summer League and updated injury lists, indicating relevant data sources exist outside the snapshot and could be used to un-gate the model if ingested. Overall: the model\u2019s watchlist-only outcome is consistent with missing official game-day/roster feeds for a regular-season slate in early July, but external evidence (Summer League schedules and third-party injury pages) refutes the notion that there are absolutely no game or injury data available anywhere; the snapshot\u2019s missing integrations appear to be the limiting factor.",
+  "bottom_line": "The model\u2019s watchlist-only result is plausible given missing official game-day roster/injury feed ingestion (official NBA injury reports are game-day PDFs and the regular season ended April 12, 2026). However, public sources (NBA Summer League pages, RealGM, Sporting News, Covers, SportBusy, ESPN injury pages) confirm there are Summer League games on July 3, 2026 and third-party injury/schedule data exists. This means the snapshot\u2019s gating was likely caused by missing integrations (roster/injury/slate feeds), not by an absolute lack of any external data. Evidence from third-party feeds is strong enough to consider re-ingesting Summer League schedules and non-game-day transaction feeds to un-gate the model; if you want, I can (A) fetch specific Summer League game-level schedules/boxscore targets for July 3, 2026 and (B) check the top third-party injury/roster feeds for named players to produce candidate player-prop lines \u2014 but the snapshot itself legitimately lacked the official game/roster/injury inputs. Note: if you require direct verification against official game-day NBA injury PDFs for specific games, those are only published on active game days and will be absent for non-regular-season slates.",
+  "refuting_facts": [
+    {
+      "fact": "The NBA lists 2026 Summer League events (including California/San Francisco games) with dates that include July 3, 2026 \u2014 third-party slates exist even though they are not regular-season games.",
+      "source_title": "2026 Summer League | Latest (NBA.com)",
+      "source_url": "https://www.nba.com/summer-league/2026"
+    },
+    {
+      "fact": "Multiple independent schedule aggregators (RealGM, Sporting News, Sporting schedules) show NBA/Summer League games on July 3, 2026, meaning there are public game schedules available for that date.",
+      "source_title": "NBA Basketball Scoreboard - July 3, 2026 (RealGM) / Sporting News Summer League schedule",
+      "source_url": "https://basketball.realgm.com/nba/scores/2026-07-03/All"
+    },
+    {
+      "fact": "Third-party injury pages (Covers, SportBusy, ESPN injury pages) are publishing injury listings/updates in early July 2026 \u2014 indicating injury data is available outside the model snapshot.",
+      "source_title": "NBA Injuries \u2014 Full Injury Report for Jul 03, 2026 (Covers) and SportBusy injury list",
+      "source_url": "https://www.covers.com/sport/basketball/nba/injuries"
+    }
+  ],
+  "supporting_facts": [
+    {
+      "fact": "The NBA regular season for 2025\u201326 concluded in April 2026, so there is no standard regular-season slate on July 3, 2026.",
+      "source_title": "NBA announces schedule for 2025-26 regular season",
+      "source_url": "https://www.nba.com/news/2025-26-nba-regular-season-schedule"
+    },
+    {
+      "fact": "The NBA\u2019s injury-report policy and distribution are game-day centric (teams must report participation status prior to each game), so if game-day feeds were not available the model would lack official injury rows to parse.",
+      "source_title": "NBA Injury Report: 2025-26 Season (official NBA guidance)",
+      "source_url": "https://official.nba.com/nba-injury-report-2025-26-season/"
+    }
+  ]
+}

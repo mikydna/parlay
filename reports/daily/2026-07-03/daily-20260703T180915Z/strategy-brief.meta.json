@@ -1,0 +1,93 @@
+{
+  "brief_analyst_path": "/Users/andy/Documents/Code/parlay-data/reports/odds/by-snapshot/daily-20260703T180915Z/brief-analyst.json",
+  "brief_input_path": "/Users/andy/Documents/Code/parlay-data/reports/odds/by-snapshot/daily-20260703T180915Z/brief-input.json",
+  "brief_markdown_path": "/Users/andy/Documents/Code/parlay-data/reports/odds/by-snapshot/daily-20260703T180915Z/strategy-brief.md",
+  "brief_pass1_path": "/Users/andy/Documents/Code/parlay-data/reports/odds/by-snapshot/daily-20260703T180915Z/brief-pass1.json",
+  "brief_pdf_path": "/Users/andy/Documents/Code/parlay-data/reports/odds/by-snapshot/daily-20260703T180915Z/strategy-brief.pdf",
+  "brief_tex_path": "/Users/andy/Documents/Code/parlay-data/reports/odds/by-snapshot/daily-20260703T180915Z/strategy-brief.tex",
+  "calibration_map_applied": false,
+  "calibration_map_path": "",
+  "generated_at_et": "2026-07-03 02:10:19 PM EDT",
+  "generated_at_utc": "2026-07-03T18:10:19Z",
+  "keep_tex": true,
+  "latest": {
+    "latest.json": "/Users/andy/Documents/Code/parlay-data/reports/odds/latest/latest.json",
+    "strategy-brief.meta.json": "/Users/andy/Documents/Code/parlay-data/reports/odds/latest/strategy-brief.meta.json",
+    "strategy-brief.pdf": "/Users/andy/Documents/Code/parlay-data/reports/odds/latest/strategy-brief.pdf",
+    "strategy-report.json": "/Users/andy/Documents/Code/parlay-data/reports/odds/latest/strategy-report.json"
+  },
+  "llm": {
+    "analyst": {
+      "attempts": 1,
+      "cache_key": "e58764690760a30a8cab134f1b6bba19bc1bf941ef4edb626e6378b36e5327d9",
+      "cached": false,
+      "errors": [],
+      "mode": "llm_web",
+      "status": "ok",
+      "usage": {
+        "cost_usd": 0.004932,
+        "input_tokens": 12486,
+        "output_tokens": 1810,
+        "total_tokens": 14296
+      },
+      "web_source_count": 38
+    },
+    "budget": {
+      "cap_reached": false,
+      "cap_usd": 5.0,
+      "month": "2026-07",
+      "remaining_usd": 4.993821,
+      "request_count": 3,
+      "total_input_tokens": 14037,
+      "total_output_tokens": 2669,
+      "usage_path": "/Users/andy/Documents/Code/parlay-data/runtime/llm_usage/usage-2026-07.jsonl",
+      "used_usd": 0.006179
+    },
+    "pass1": {
+      "attempts": 1,
+      "cache_key": "dc95f26e42173d51fee76cf730d8650a2261dccd49d50eacb2453cfa8d1271ea",
+      "cached": false,
+      "errors": [],
+      "status": "ok",
+      "usage": {
+        "cost_usd": 0.00045,
+        "input_tokens": 750,
+        "output_tokens": 262,
+        "total_tokens": 1012
+      }
+    },
+    "pass2": {
+      "attempts": 1,
+      "cache_key": "72eddbf9a96be7e9eece6dd8182d359fa17ca457f81a4f09ba679a423225908f",
+      "cached": false,
+      "errors": [],
+      "status": "ok",
+      "usage": {
+        "cost_usd": 0.000797,
+        "input_tokens": 801,
+        "output_tokens": 597,
+        "total_tokens": 1398
+      }
+    }
+  },
+  "model": "gpt-5-mini",
+  "odds_budget": {
+    "cap_credits": 450,
+    "cap_reached": false,
+    "month": "2026-07",
+    "provider_remaining": "500",
+    "remaining_credits": 450,
+    "usage_path": "/Users/andy/Documents/Code/parlay-data/odds_api/usage/usage-2026-07.jsonl",
+    "used_credits": 0
+  },
+  "pdf": {
+    "message": "pdf generated",
+    "pdf_path": "/Users/andy/Documents/Code/parlay-data/reports/odds/by-snapshot/daily-20260703T180915Z/strategy-brief.pdf",
+    "returncode": 0,
+    "status": "ok"
+  },
+  "schema_version": 1,
+  "snapshot_id": "daily-20260703T180915Z",
+  "strategy_report_path": "/Users/andy/Documents/Code/parlay-data/reports/odds/by-snapshot/daily-20260703T180915Z/strategy-report.json",
+  "write_markdown": true
+}

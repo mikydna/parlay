@@ -1,0 +1,22 @@
+{
+  "confidence_notes": [
+    "No actionable plays due to lack of input markets and roster/injury confirmation.",
+    "Any downstream betting decisions require fresh snapshot with complete injury and roster feeds and available market lines."
+  ],
+  "data_quality_flags": [
+    "Official NBA injury report data not parsed or missing.",
+    "Roster verification feed unavailable (roster_team_rows = 0).",
+    "Slate spreads/totals absent (candidate_lines = 0, eligible_lines = 0).",
+    "Health gates limited model to watchlist-only mode (strategy_status = modeled_with_gates).",
+    "No top plays were generated (all_top_plays empty)."
+  ],
+  "slate_summary": "No playable lines or candidate events available in this snapshot due to missing game/roster/injury data; model ran in watchlist-only gated mode.",
+  "top_plays_explained": [],
+  "watchouts": [
+    "Official NBA injury report unavailable in this snapshot.",
+    "Roster verification feed missing; player availability may be unknown.",
+    "Slate spreads and totals were not present, so no markets could be evaluated.",
+    "Model operated in health-gated watchlist-only mode; outputs are non-actionable.",
+    "Minutes/usage and SGP correlation use deterministic rules rather than learned distributions, which can bias projections."
+  ]
+}
