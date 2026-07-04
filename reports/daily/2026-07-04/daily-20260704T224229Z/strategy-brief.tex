@@ -1,0 +1,127 @@
+\documentclass[10pt]{article}
+\usepackage[margin=1in,landscape]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage{hyperref}
+\usepackage{longtable}
+\usepackage{array}
+\usepackage{ragged2e}
+\newcolumntype{L}[1]{>{\RaggedRight\arraybackslash}p{#1}}
+\newcolumntype{R}[1]{>{\RaggedLeft\arraybackslash}p{#1}}
+\renewcommand{\arraystretch}{1.05}
+\setlength{\parskip}{4pt}
+\setlength{\parindent}{0pt}
+\sloppy
+\begin{document}
+\begin{center}\LARGE\textbf{NBA Strategy Brief}\end{center}
+\vspace{0.5em}
+\subsection*{Snapshot}
+\begin{itemize}
+\item snapshot\_id: \texttt{daily-20260704T224229Z}
+\item modeled\_date\_et: \texttt{Saturday, Jul 04, 2026 (ET)}
+\item generated\_at\_et: \texttt{2026-07-04 06:42:47 PM EDT}
+\item source\_data: \texttt{snapshot\_inputs}
+\item scoring: \texttt{deterministic}
+\item narrative: \texttt{llm}
+\end{itemize}
+Generated: 2026-07-04 06:42:47 PM ET (America/New\_York)
+Modeled date: Saturday, Jul 04, 2026 (ET)
+Snapshot ID: daily-20260704T224229Z
+Strategy status: modeled\_with\_gates (watchlist-only)
+execution\_books: []
+
+Key gaps flagged:
+\begin{itemize}
+\item Official NBA injury report data was not cleanly parsed.
+\item Roster verification feed unavailable.
+\item Slate spreads/totals unavailable.
+\item Health gates triggered watchlist-only mode.
+\item Minutes/usage and correlation modules use deterministic rules (not learned distributions).
+\end{itemize}
+
+\subsection*{What The Bet Is}
+This brief concerns player prop over/under bets (individual player statistics totals), not game-winner or team-outcome bets.
+
+\subsection*{Executive Summary}
+No candidate or eligible player-prop lines were generated in this snapshot. Because official injury and roster feeds failed and health gates placed the model in watchlist-only mode, this snapshot is for review only and not actionable for wagering. Do not execute bets based on this snapshot.
+
+
+\newpage
+
+\subsection*{Analyst Take}
+
+\begin{itemize}
+\item mode: \texttt{llm\_web}
+\end{itemize}
+
+\subsubsection*{Read This First}
+
+The snapshot (daily-20260704T224229Z) shows no top plays because core external feeds (injury report, roster verification, and slate lines) were unavailable or failed to parse. Public web evidence confirms that the primary sources needed by the model do exist and were actively publishing NBA roster/injury and odds information on July 4, 2026 — meaning the problem appears to be a local ingestion/parse/watchlist gati...
+
+\subsubsection*{News Signals}
+
+\begin{itemize}
+\item Supports:
+\item [S1] ESPN maintains a continuously updated NBA injuries page (data provided by Rotowire), indicating that an authoritative injury feed exists and is updated independently of the snapshot.
+\item [S2] The NBA's official site has active offseason and transaction pages updated on July 4, 2026, showing broad roster movement across teams — supporting the model’s need for roster verification to correctly adjust player-prop projections.
+\item Refutes/Risks:
+\item [S3] Major sportsbooks (e.g., DraftKings Sportsbook) are publishing NBA odds and game lines (spreads/totals) publicly, contradicting the snapshot claim that slate spreads/totals were unavailable.
+\item [S4] NBA.com publishes schedules and summer-league schedules (July 9–19, 2026) and has published injury/transaction documents (injury report PDFs are accessible on nba.com), which indicates upstream schedule/injury documents were present on league sites despite the snapshot's parse failure.
+\end{itemize}
+
+\subsubsection*{Bottom Line}
+
+Public sources show the upstream data the model depends on (official NBA injury/transaction pages and sportsbook odds/schedules) were available on July 4, 2026. The snapshot’s 'no playable top plays' outcome therefore most likely stems from local ingestion/parse failures, missing roster verification feed, or the snapshot being placed into watchlist-only health-gate mode — not from an absolute absence of public inj...
+
+\subsubsection*{Source Index}
+
+\begin{itemize}
+\item [S1] NBA Injury Status - ESPN (www.espn.com)
+\item [S2] NBA Offseason: Every free agency deal, extension \& trade for all 30 teams | NBA.com (www.nba.com)
+\item [S3] NBA Betting Odds \& Lines | DraftKings Sportsbook (sportsbook.draftkings.com)
+\item [S4] 2026 NBA Summer League: What to watch and key dates | NBA.com (www.nba.com)
+\item Full source URLs are stored in \texttt{brief-analyst.json} for audit/debug use.
+\end{itemize}
+
+\newpage
+
+\subsection*{Best Available Bet Right Now}
+
+\begin{itemize}
+\item status: no actionable GO/LEAN play passed pre-bet availability checks.
+\item action: wait for injury/roster updates, then rerun.
+\end{itemize}
+
+\newpage
+
+\subsection*{Action Plan (GO / LEAN / NO-GO)}
+
+\subsubsection*{Top 5 Across All Games}
+
+This is player-prop over/under betting, not game winner bets.
+
+\begin{itemize}
+\item none
+\end{itemize}
+
+Note: If future snapshots restore official injury and roster feeds and lift health gates, re-evaluate for GO/LEAN opportunities.
+
+\newpage
+
+\subsection*{Data Quality}
+Plain statement: Data is missing or weak. Official injury report parsing failed; roster verification feed and slate spreads/totals are unavailable. Health gates restricted execution to watchlist-only. Minutes/usage and SGP correlation use deterministic rules rather than learned distributions, limiting uncertainty modeling.
+
+\subsection*{Confidence}
+Low. The snapshot explicitly states modeled\_with\_gates and contains no candidate lines; confidence in any derived betting signal would be unreliable.
+
+\subsubsection*{Interpreting p(hit)}
+
+\begin{itemize}
+\item \texttt{p(hit)} = estimated chance the recommended side wins at that line.
+\item When shown as \texttt{X\% → Y\%}, it is conservative \texttt{p(hit)} mapped through calibration history.
+\item Built from no-vig odds + small injury/roster/spread adjustments (clamped 1\%-99\%).
+\item Use it to rank EV, not as a guarantee; judge it by calibration over many bets.
+\item Can be wrong when odds are stale, coverage is thin, or minutes/role are uncertain.
+\end{itemize}
+\end{document}

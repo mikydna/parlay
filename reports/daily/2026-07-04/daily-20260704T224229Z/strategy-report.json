@@ -1,0 +1,530 @@
+{
+  "audit": {
+    "allow_tier_b": true,
+    "audit_trail": [
+      {
+        "category": "injury",
+        "label": "official_nba_injury_report",
+        "note": "status=error",
+        "timestamp_utc": "2026-07-04T22:42:34Z",
+        "url": "https://official.nba.com/nba-injury-report-2025-26-season/"
+      },
+      {
+        "category": "injury",
+        "label": "secondary_injury_source",
+        "note": "status=ok",
+        "timestamp_utc": "2026-07-04T22:42:46Z",
+        "url": "https://www.basketball-reference.com/friv/injuries.fcgi"
+      },
+      {
+        "category": "odds_api",
+        "label": "events_list",
+        "note": "status=ok",
+        "timestamp_utc": "2026-07-04T22:42:33Z",
+        "url": "/sports/basketball_nba/events"
+      },
+      {
+        "category": "odds_api",
+        "label": "slate_odds",
+        "note": "status=skipped",
+        "timestamp_utc": "2026-07-04T22:42:34Z",
+        "url": "/sports/basketball_nba/odds"
+      },
+      {
+        "category": "roster",
+        "label": "roster_context",
+        "note": "status=error",
+        "timestamp_utc": "2026-07-04T22:42:47Z",
+        "url": "https://cdn.nba.com/static/json/liveData/scoreboard/todaysScoreboard_00.json"
+      }
+    ],
+    "exclude_selected_book_from_baseline": false,
+    "hold_cap": null,
+    "manifest_created_at_utc": "2026-07-04T22:42:32Z",
+    "manifest_schema_version": 1,
+    "market_baseline_fallback": "best_sides",
+    "market_baseline_method": "best_sides",
+    "max_minutes_band": null,
+    "max_picks": 5,
+    "max_uncertainty_band": null,
+    "min_book_pairs": 0,
+    "min_ev": 0.01,
+    "min_ev_low": null,
+    "min_prob_confidence": null,
+    "min_quality_score": null,
+    "p_over_iqr_cap": null,
+    "portfolio_max_per_game": 2,
+    "portfolio_max_per_player": 1,
+    "portfolio_ranking": "default",
+    "probabilistic_profile": "off",
+    "probabilistic_rows_used": 0,
+    "report_schema_version": 5,
+    "rolling_priors_as_of_day": "",
+    "rolling_priors_rows_used": 0,
+    "rolling_priors_window_days": 0,
+    "strategy_config": {
+      "allow_tier_b": true,
+      "max_picks": 5,
+      "min_ev": 0.01,
+      "probabilistic_profile": "off",
+      "quote_now_utc": null,
+      "require_fresh_context": true,
+      "require_official_injuries": false,
+      "stale_quote_minutes": 20,
+      "top_n": 25
+    },
+    "strategy_description": "Best-over/best-under no-vig baseline with deterministic minutes/usage and context gates.",
+    "strategy_id": "s001",
+    "strategy_name": "Baseline Core",
+    "tier_a_min_ev": 0.03,
+    "tier_b_min_ev": 0.05,
+    "tier_b_min_other_books_for_baseline": null,
+    "timezone": "ET"
+  },
+  "availability": {
+    "key_injuries": [
+      {
+        "date_update": "2025-09-22",
+        "note": "Out For Season (ACL) - The Rockets said on Monday (Sept. 22) that VanVleet suffered a torn ACL and may be out for the entire 2025-26 campaign, per Shams Charania of ESPN.",
+        "player": "Fred VanVleet",
+        "status": "out_for_season",
+        "team": "Houston Rockets"
+      },
+      {
+        "date_update": "2025-09-25",
+        "note": "Out For Season (Achilles) - The Trail Blazers said on Thursday (Sept. 25) that Lillard won't be back on the court for the 2025-26 season due to his achilles injury.",
+        "player": "Damian Lillard",
+        "status": "out_for_season",
+        "team": "Portland Trail Blazers"
+      },
+      {
+        "date_update": "2025-11-05",
+        "note": "Out For Season (Shoulder) - Kessler will undergo left shoulder surgery to address a torn labrum and will miss the remainder of the 2025-26 season, as per Tony Jones of The Athletic.",
+        "player": "Walker Kessler",
+        "status": "out_for_season",
+        "team": "Utah Jazz"
+      },
+      {
+        "date_update": "2025-12-03",
+        "note": "Out For Season (Shoulder) - The Bulls reported on Wednesday (Dec. 3) that Essengue will have shoulder surgery and miss the remainder of the season, per HC Billy Donovan.",
+        "player": "Noa Essengue",
+        "status": "out_for_season",
+        "team": "Chicago Bulls"
+      },
+      {
+        "date_update": "2026-01-20",
+        "note": "Out For Season (Knee) - Butler's injury from Monday (Jan. 19) Night's game involves a torn right ACL and he will be out for the rest of the season, as per Shams Charania of ESPN.",
+        "player": "Jimmy Butler",
+        "status": "out_for_season",
+        "team": "Golden State Warriors"
+      },
+      {
+        "date_update": "2026-01-27",
+        "note": "Out For Season (Achilles) - The Pacers said on Tuesday (Jan. 27) that Haliburton will likely be in line for a relatively normal offseason and should be free of restrictions for the start of training camp next fall.",
+        "player": "Tyrese Haliburton",
+        "status": "out_for_season",
+        "team": "Indiana Pacers"
+      },
+      {
+        "date_update": "2026-01-28",
+        "note": "Out For Season (Ankle) - The Rockets said on Wednesday (Jan. 28) that Adams underwent season-ending ankle surgery.",
+        "player": "Steven Adams",
+        "status": "out_for_season",
+        "team": "Houston Rockets"
+      },
+      {
+        "date_update": "2026-02-04",
+        "note": "Out For Season (Ankle) - The Spurs announced on Wednesday (Feb. 4) that Jones Garcia underwent ankle surgery and will miss the remainder of the 2025-26 season, per Tom Orsborn of the San Antonio Express-News.",
+        "player": "David Jones Garc\u00eda",
+        "status": "out_for_season",
+        "team": "San Antonio Spurs"
+      },
+      {
+        "date_update": "2026-02-09",
+        "note": "Out For Season (Knee) - Furphy was diagnosed with a torn right ACL on Monday and will miss the remainder of the season, Michael Scotto of USA Today",
+        "player": "Johnny Furphy",
+        "status": "out_for_season",
+        "team": "Indiana Pacers"
+      },
+      {
+        "date_update": "2026-02-12",
+        "note": "Out For Season (Knee) - The Jazz said on Thursday (Feb. 12) that Jackson Jr. will miss the rest of the season to undergo knee surgery.",
+        "player": "Jaren Jackson Jr.",
+        "status": "out_for_season",
+        "team": "Utah Jazz"
+      },
+      {
+        "date_update": "2026-02-13",
+        "note": "Out For Season (Finger) - LaVine will undergo season-ending surgery on his right hand after the All-Star break, per Chris Haynes of NBA TV.",
+        "player": "Zach LaVine",
+        "status": "out_for_season",
+        "team": "Sacramento Kings"
+      },
+      {
+        "date_update": "2026-02-15",
+        "note": "Out For Season (Shoulder) - The Wizards announced Wednesday (Jan. 15) that Whitmore will miss the remainder of the 2025-26 season while he begins the recovery process for a diagnosed venous condition.",
+        "player": "Cam Whitmore",
+        "status": "out_for_season",
+        "team": "Washington Wizards"
+      },
+      {
+        "date_update": "2026-02-18",
+        "note": "Out For Season (Back) - Sabonis underwent season-ending knee surgery Wednesday (Feb. 18) to repair a torn left meniscus, Shams Charania of ESPN.",
+        "player": "Domantas Sabonis",
+        "status": "out_for_season",
+        "team": "Sacramento Kings"
+      },
+      {
+        "date_update": "2026-02-18",
+        "note": "Out For Season (Knee) - The Mavericks said on Wednesday (Feb. 18) that Irving is OUT for the season, per ESPN's Shams Charania.",
+        "player": "Kyrie Irving",
+        "status": "out_for_season",
+        "team": "Dallas Mavericks"
+      },
+      {
+        "date_update": "2026-02-19",
+        "note": "Out For Season (Finger) - The Grizzlies announced Thursday that Caldwell-Pope underwent surgery to address the misalignment of his right pinky finger and will miss the remainder of the 2025-26 campaign.",
+        "player": "Kentavious Caldwell-Pope",
+        "status": "out_for_season",
+        "team": "Memphis Grizzlies"
+      },
+      {
+        "date_update": "2026-02-20",
+        "note": "Out For Season (Eye) - Hunter is set to undergo season-ending eye surgery, according to Chris Haynes of NBA TV.",
+        "player": "De'Andre Hunter",
+        "status": "out_for_season",
+        "team": "Sacramento Kings"
+      },
+      {
+        "date_update": "2026-02-23",
+        "note": "Out For Season (Nose) - The Jazz reported on Monday (Feb. 23) that Nurkic will undergo season-ending nose surgery.",
+        "player": "Jusuf Nurki\u0107",
+        "status": "out_for_season",
+        "team": "Utah Jazz"
+      },
+      {
+        "date_update": "2026-03-03",
+        "note": "Out For Season (Ankle) - The Grizzlies said that Edey will miss the remainder of the season.",
+        "player": "Zach Edey",
+        "status": "out_for_season",
+        "team": "Memphis Grizzlies"
+      },
+      {
+        "date_update": "2026-03-05",
+        "note": "Out For Season (Foot) - Niederhauser has been diagnosed with a Lisfranc injury in his right foot and will require surgery. He's been ruled out for the remainder of the 2025-26 season, according to Joey Linn of SI.com.",
+        "player": "Yanic Konan Niederh\u00e4user",
+        "status": "out_for_season",
+        "team": "Los Angeles Clippers"
+      },
+      {
+        "date_update": "2026-03-09",
+        "note": "Out For Season (Foot) - The Nets reported Egor Demin will miss rest of season with plantar fasciitis.",
+        "player": "Egor D\u0451min",
+        "status": "out_for_season",
+        "team": "Brooklyn Nets"
+      }
+    ],
+    "official": {
+      "count": 75,
+      "fetched_at_utc": "2026-07-04T22:42:34Z",
+      "parse_coverage": 0.0,
+      "parse_status": "error",
+      "pdf_cached_path": "/Users/andy/Documents/Code/parlay-data/nba_data/context/snapshots/daily-20260704T224229Z/official_injury_pdf/official-injury-2026-07-04T22-42-46Z.pdf",
+      "pdf_download_status": "ok",
+      "pdf_links": [
+        "https://ak-static.cms.nba.com/referee/injury/Injury-Report_2026-07-04_01_00AM.pdf",
+        "https://ak-static.cms.nba.com/referee/injury/Injury-Report_2026-07-04_01_00PM.pdf",
+        "https://ak-static.cms.nba.com/referee/injury/Injury-Report_2026-07-04_01_15AM.pdf",
+        "https://ak-static.cms.nba.com/referee/injury/Injury-Report_2026-07-04_01_15PM.pdf",
+        "https://ak-static.cms.nba.com/referee/injury/Injury-Report_2026-07-04_01_30AM.pdf",
+        "https://ak-static.cms.nba.com/referee/injury/Injury-Report_2026-07-04_01_30PM.pdf",
+        "https://ak-static.cms.nba.com/referee/injury/Injury-Report_2026-07-04_01_45AM.pdf",
+        "https://ak-static.cms.nba.com/referee/injury/Injury-Report_2026-07-04_01_45PM.pdf",
+        "https://ak-static.cms.nba.com/referee/injury/Injury-Report_2026-07-04_02_00AM.pdf",
+        "https://ak-static.cms.nba.com/referee/injury/Injury-Report_2026-07-04_02_00PM.pdf",
+        "https://ak-static.cms.nba.com/referee/injury/Injury-Report_2026-07-04_02_15AM.pdf",
+        "https://ak-static.cms.nba.com/referee/injury/Injury-Report_2026-07-04_02_15PM.pdf",
+        "https://ak-static.cms.nba.com/referee/injury/Injury-Report_2026-07-04_02_30AM.pdf",
+        "https://ak-static.cms.nba.com/referee/injury/Injury-Report_2026-07-04_02_30PM.pdf",
+        "https://ak-static.cms.nba.com/referee/injury/Injury-Report_2026-07-04_02_45AM.pdf",
+        "https://ak-static.cms.nba.com/referee/injury/Injury-Report_2026-07-04_02_45PM.pdf",
+        "https://ak-static.cms.nba.com/referee/injury/Injury-Report_2026-07-04_03_00AM.pdf",
+        "https://ak-static.cms.nba.com/referee/injury/Injury-Report_2026-07-04_03_00PM.pdf",
+        "https://ak-static.cms.nba.com/referee/injury/Injury-Report_2026-07-04_03_15AM.pdf",
+        "https://ak-static.cms.nba.com/referee/injury/Injury-Report_2026-07-04_03_15PM.pdf",
+        "https://ak-static.cms.nba.com/referee/injury/Injury-Report_2026-07-04_03_30AM.pdf",
+        "https://ak-static.cms.nba.com/referee/injury/Injury-Report_2026-07-04_03_30PM.pdf",
+        "https://ak-static.cms.nba.com/referee/injury/Injury-Report_2026-07-04_03_45AM.pdf",
+        "https://ak-static.cms.nba.com/referee/injury/Injury-Report_2026-07-04_03_45PM.pdf",
+        "https://ak-static.cms.nba.com/referee/injury/Injury-Report_2026-07-04_04_00AM.pdf",
+        "https://ak-static.cms.nba.com/referee/injury/Injury-Report_2026-07-04_04_00PM.pdf",
+        "https://ak-static.cms.nba.com/referee/injury/Injury-Report_2026-07-04_04_15AM.pdf",
+        "https://ak-static.cms.nba.com/referee/injury/Injury-Report_2026-07-04_04_15PM.pdf",
+        "https://ak-static.cms.nba.com/referee/injury/Injury-Report_2026-07-04_04_30AM.pdf",
+        "https://ak-static.cms.nba.com/referee/injury/Injury-Report_2026-07-04_04_30PM.pdf",
+        "https://ak-static.cms.nba.com/referee/injury/Injury-Report_2026-07-04_04_45AM.pdf",
+        "https://ak-static.cms.nba.com/referee/injury/Injury-Report_2026-07-04_04_45PM.pdf",
+        "https://ak-static.cms.nba.com/referee/injury/Injury-Report_2026-07-04_05_00AM.pdf",
+        "https://ak-static.cms.nba.com/referee/injury/Injury-Report_2026-07-04_05_00PM.pdf",
+        "https://ak-static.cms.nba.com/referee/injury/Injury-Report_2026-07-04_05_15AM.pdf",
+        "https://ak-static.cms.nba.com/referee/injury/Injury-Report_2026-07-04_05_15PM.pdf",
+        "https://ak-static.cms.nba.com/referee/injury/Injury-Report_2026-07-04_05_30AM.pdf",
+        "https://ak-static.cms.nba.com/referee/injury/Injury-Report_2026-07-04_05_30PM.pdf",
+        "https://ak-static.cms.nba.com/referee/injury/Injury-Report_2026-07-04_05_45AM.pdf",
+        "https://ak-static.cms.nba.com/referee/injury/Injury-Report_2026-07-04_05_45PM.pdf",
+        "https://ak-static.cms.nba.com/referee/injury/Injury-Report_2026-07-04_06_00AM.pdf",
+        "https://ak-static.cms.nba.com/referee/injury/Injury-Report_2026-07-04_06_00PM.pdf",
+        "https://ak-static.cms.nba.com/referee/injury/Injury-Report_2026-07-04_06_15AM.pdf",
+        "https://ak-static.cms.nba.com/referee/injury/Injury-Report_2026-07-04_06_15PM.pdf",
+        "https://ak-static.cms.nba.com/referee/injury/Injury-Report_2026-07-04_06_30AM.pdf",
+        "https://ak-static.cms.nba.com/referee/injury/Injury-Report_2026-07-04_06_30PM.pdf",
+        "https://ak-static.cms.nba.com/referee/injury/Injury-Report_2026-07-04_06_45AM.pdf",
+        "https://ak-static.cms.nba.com/referee/injury/Injury-Report_2026-07-04_07_00AM.pdf",
+        "https://ak-static.cms.nba.com/referee/injury/Injury-Report_2026-07-04_07_15AM.pdf",
+        "https://ak-static.cms.nba.com/referee/injury/Injury-Report_2026-07-04_07_30AM.pdf",
+        "https://ak-static.cms.nba.com/referee/injury/Injury-Report_2026-07-04_07_45AM.pdf",
+        "https://ak-static.cms.nba.com/referee/injury/Injury-Report_2026-07-04_08_00AM.pdf",
+        "https://ak-static.cms.nba.com/referee/injury/Injury-Report_2026-07-04_08_15AM.pdf",
+        "https://ak-static.cms.nba.com/referee/injury/Injury-Report_2026-07-04_08_30AM.pdf",
+        "https://ak-static.cms.nba.com/referee/injury/Injury-Report_2026-07-04_08_45AM.pdf",
+        "https://ak-static.cms.nba.com/referee/injury/Injury-Report_2026-07-04_09_00AM.pdf",
+        "https://ak-static.cms.nba.com/referee/injury/Injury-Report_2026-07-04_09_15AM.pdf",
+        "https://ak-static.cms.nba.com/referee/injury/Injury-Report_2026-07-04_09_30AM.pdf",
+        "https://ak-static.cms.nba.com/referee/injury/Injury-Report_2026-07-04_09_45AM.pdf",
+        "https://ak-static.cms.nba.com/referee/injury/Injury-Report_2026-07-04_10_00AM.pdf",
+        "https://ak-static.cms.nba.com/referee/injury/Injury-Report_2026-07-04_10_15AM.pdf",
+        "https://ak-static.cms.nba.com/referee/injury/Injury-Report_2026-07-04_10_30AM.pdf",
+        "https://ak-static.cms.nba.com/referee/injury/Injury-Report_2026-07-04_10_45AM.pdf",
+        "https://ak-static.cms.nba.com/referee/injury/Injury-Report_2026-07-04_11_00AM.pdf",
+        "https://ak-static.cms.nba.com/referee/injury/Injury-Report_2026-07-04_11_15AM.pdf",
+        "https://ak-static.cms.nba.com/referee/injury/Injury-Report_2026-07-04_11_30AM.pdf",
+        "https://ak-static.cms.nba.com/referee/injury/Injury-Report_2026-07-04_11_45AM.pdf",
+        "https://ak-static.cms.nba.com/referee/injury/Injury-Report_2026-07-04_12_00AM.pdf",
+        "https://ak-static.cms.nba.com/referee/injury/Injury-Report_2026-07-04_12_00PM.pdf",
+        "https://ak-static.cms.nba.com/referee/injury/Injury-Report_2026-07-04_12_15AM.pdf",
+        "https://ak-static.cms.nba.com/referee/injury/Injury-Report_2026-07-04_12_15PM.pdf",
+        "https://ak-static.cms.nba.com/referee/injury/Injury-Report_2026-07-04_12_30AM.pdf",
+        "https://ak-static.cms.nba.com/referee/injury/Injury-Report_2026-07-04_12_30PM.pdf",
+        "https://ak-static.cms.nba.com/referee/injury/Injury-Report_2026-07-04_12_45AM.pdf",
+        "https://ak-static.cms.nba.com/referee/injury/Injury-Report_2026-07-04_12_45PM.pdf"
+      ],
+      "rows_count": 0,
+      "selected_pdf_url": "https://ak-static.cms.nba.com/referee/injury/Injury-Report_2026-07-04_12_00AM.pdf",
+      "status": "error",
+      "url": "https://official.nba.com/nba-injury-report-2025-26-season/"
+    },
+    "roster": {
+      "count_teams": 0,
+      "fetched_at_utc": "2026-07-04T22:42:47Z",
+      "source": "nba_live_scoreboard",
+      "status": "error",
+      "url": "https://cdn.nba.com/static/json/liveData/scoreboard/todaysScoreboard_00.json"
+    },
+    "secondary": {
+      "count": 38,
+      "fetched_at_utc": "2026-07-04T22:42:46Z",
+      "status": "ok",
+      "url": "https://www.basketball-reference.com/friv/injuries.fcgi"
+    }
+  },
+  "candidates": [],
+  "execution_plan": {
+    "constraints": {
+      "max_per_game": 2,
+      "max_per_player": 1,
+      "max_picks": 5
+    },
+    "counts": {
+      "candidate_lines": 0,
+      "eligible_lines": 0,
+      "excluded_lines": 0,
+      "selected_lines": 0
+    },
+    "excluded": [],
+    "exclusion_reason_counts": {},
+    "generated_at_utc": "2026-07-04T22:42:47Z",
+    "schema_version": 1,
+    "selected": [],
+    "snapshot_id": "daily-20260704T224229Z",
+    "strategy_id": "s001"
+  },
+  "gaps": [
+    "Official NBA injury report data was not cleanly parsed (missing links, download failure, or empty parse rows).",
+    "Roster verification feed was not available.",
+    "Slate spreads/totals were unavailable in this snapshot.",
+    "Health gates triggered watchlist-only mode for this snapshot.",
+    "Model uses market-implied fair probabilities with injury/roster/opponent adjustments.",
+    "Minutes/usage projection uses deterministic core rules, not learned distributions.",
+    "SGP/SGPx correlation uses deterministic haircut rules (core model)."
+  ],
+  "generated_at_utc": "2026-07-04T22:42:47Z",
+  "health_report": {
+    "contracts": {
+      "missing_event_mappings": [],
+      "props_rows": {
+        "invalid_count": 0,
+        "invalid_examples": [],
+        "row_count": 0,
+        "status": "ok"
+      }
+    },
+    "excluded_games": [],
+    "feeds": {
+      "injuries_stale": "no",
+      "official_injuries": "error",
+      "official_injuries_parse": "error",
+      "official_injuries_rows": 0,
+      "roster": "error",
+      "roster_stale": "no",
+      "secondary_injuries": "ok"
+    },
+    "health_gates": [
+      "odds_snapshot_stale"
+    ],
+    "identity_map_entries": 371,
+    "odds": {
+      "age_latest_min": null,
+      "age_oldest_min": null,
+      "latest_quote_utc": "",
+      "odds_stale": true,
+      "oldest_quote_utc": "",
+      "stale_after_min": 20,
+      "status": "missing_last_update"
+    },
+    "require_fresh_context": true,
+    "require_official_injuries": false,
+    "strategy_mode": "watchlist_only"
+  },
+  "kelly_summary": [],
+  "modeled_date_et": "Saturday, Jul 04, 2026 (ET)",
+  "one_source_edges": [],
+  "portfolio_watchlist": [],
+  "price_dependent_watchlist": [],
+  "ranked_plays": [],
+  "roster_status_warnings": [],
+  "sgp_candidates": [],
+  "slate_snapshot": [],
+  "snapshot_id": "daily-20260704T224229Z",
+  "state_key": {
+    "health_gates": {
+      "injuries_context_stale": "Injury context cache exceeds configured freshness TTL.",
+      "odds_snapshot_stale": "Latest quote timestamp exceeds configured staleness threshold.",
+      "official_injury_missing": "Official NBA injury source is unavailable or unusable.",
+      "roster_context_stale": "Roster context cache exceeds configured freshness TTL."
+    },
+    "strategy_description": {
+      "s001": "Best-over/best-under no-vig baseline with deterministic minutes/usage and context gates.",
+      "s002": "Same core model as s001, but includes tier-B single-book edges with stricter EV floor.",
+      "s003": "Uses median per-book no-vig baseline, with fallback to best-sides baseline.",
+      "s004": "Skips lines unless at least 2 books post both over and under at the same point.",
+      "s005": "Skips lines when median per-book hold exceeds the configured cap.",
+      "s006": "Skips lines when per-book no-vig probability IQR exceeds the configured cap.",
+      "s007": "Composes median no-vig baseline with min-2 book-pair and hold-cap gates (s003 + s004 + s005).",
+      "s008": "Extends quality composite gating with conservative uncertainty and EV-low floors for more stable execution picks.",
+      "s009": "Extends s008 with rolling settled-outcome prior tilt for ranking while keeping the same conservative gates.",
+      "s010": "Extends baseline with tier-B single-book edges while enforcing conservative quality/uncertainty gates (best-sides baseline).",
+      "s011": "Extends s010 with rolling settled-outcome prior tilt for ranking while keeping the same conservative gates.",
+      "s012": "Extends s002 but ranks portfolio candidates primarily by best-EV (more aggressive than conservative EV-low selection).",
+      "s013": "Extends s002 but ranks portfolio candidates by EV-low weighted by quote quality, favoring deeper/cleaner markets when edges are similar.",
+      "s014": "Extends s003 median no-vig baseline to include tier-B single-book edges with the same stricter EV floor.",
+      "s015": "Extends s010 with rolling historical calibration feedback and ranks picks by calibrated conservative EV-low.",
+      "s016": "Tier-B conservative stack with leave-one-out baseline exclusion and EV-low quality-weighted ranking.",
+      "s017": "Tier-B conservative stack using median-book baseline with leave-one-out book exclusion and baseline independence gating.",
+      "s018": "Tier-A conservative stack with minutes probabilistic profile enabled for clean overlay validation.",
+      "s019": "Tier-A conservative gates with best-sides baseline for median-vs-best baseline ablation.",
+      "s020": "Tier-B enabled strategy using minutes-probability profile with confidence/band gates and conservative quality floors."
+    },
+    "strategy_id": {
+      "s001": "Baseline Core",
+      "s002": "Baseline Core + Tier B",
+      "s003": "Median No-Vig Baseline",
+      "s004": "Min-2 Book-Pair Gate",
+      "s005": "Hold-Cap Gate",
+      "s006": "Dispersion-IQR Gate",
+      "s007": "Quality Composite Gate",
+      "s008": "Conservative Quality Floor",
+      "s009": "Conservative Quality + Rolling Priors",
+      "s010": "Tier B + Quality Floor",
+      "s011": "Tier B + Quality + Rolling Priors",
+      "s012": "Tier B + Aggressive Best EV",
+      "s013": "Tier B + Quality-Weighted EV Low",
+      "s014": "Median No-Vig + Tier B",
+      "s015": "Tier B + Calibrated EV Low",
+      "s016": "Tier B + LOO Quality Weighted",
+      "s017": "Tier B + Median LOO",
+      "s018": "Tier A Minutes Validation",
+      "s019": "Tier A Best-Sides Ablation",
+      "s020": "Probabilistic Minutes v1"
+    },
+    "strategy_mode": {
+      "full_board": "No global health gate blocks; ranked eligible board is active.",
+      "watchlist_only": "One or more global health gates are active; all candidates are watchlist-only."
+    },
+    "strategy_status": {
+      "modeled_with_gates": "Deterministic strategy report generated with reliability gates applied."
+    }
+  },
+  "strategy": {
+    "description": "Best-over/best-under no-vig baseline with deterministic minutes/usage and context gates.",
+    "id": "s001",
+    "name": "Baseline Core",
+    "title": "Baseline Core"
+  },
+  "strategy_id": "s001",
+  "strategy_mode": "watchlist_only",
+  "strategy_status": "modeled_with_gates",
+  "summary": {
+    "actionability_rate": 0.0,
+    "avg_ev_low_eligible": null,
+    "avg_quality_score_all": null,
+    "avg_quality_score_eligible": null,
+    "candidate_lines": 0,
+    "eligible_lines": 0,
+    "eligible_pre_bet_ready": 0,
+    "eligible_tier_a": 0,
+    "eligible_tier_b": 0,
+    "events": 0,
+    "health_gate_count": 1,
+    "injury_source_official": "no",
+    "injury_source_secondary": "yes",
+    "max_picks": 5,
+    "portfolio_excluded_lines": 0,
+    "probabilistic_profile": "off",
+    "probabilistic_rows_missing": 0,
+    "probabilistic_rows_used": 0,
+    "qualified_unders": 0,
+    "quota": {
+      "last": "0",
+      "remaining": "500",
+      "used": "0"
+    },
+    "ranked_lines": 0,
+    "request_counts": {
+      "ok": 1,
+      "skipped": 1
+    },
+    "rolling_priors_rows_used": 0,
+    "rolling_priors_window_days": 0,
+    "roster_source": "no",
+    "roster_team_rows": 0,
+    "sgp_candidates": 0,
+    "strategy_id": "s001",
+    "strategy_mode": "watchlist_only",
+    "tier_a_lines": 0,
+    "tier_b_lines": 0,
+    "under_sweep_status": "insufficient",
+    "watchlist_only": "yes"
+  },
+  "timezone": "ET",
+  "top_ev_plays": [],
+  "under_sweep": {
+    "closest_misses": [],
+    "note": "No Unders >= threshold; showing closest misses with PLAY-TO numbers.",
+    "qualified": [],
+    "qualified_count": 0,
+    "status": "insufficient"
+  },
+  "unresolved_players": [],
+  "verified_players": [],
+  "watchlist": []
+}

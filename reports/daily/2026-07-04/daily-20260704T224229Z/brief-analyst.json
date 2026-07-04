@@ -1,0 +1,28 @@
+{
+  "analysis_summary": "The snapshot (daily-20260704T224229Z) shows no top plays because core external feeds (injury report, roster verification, and slate lines) were unavailable or failed to parse. Public web evidence confirms that the primary sources needed by the model do exist and were actively publishing NBA roster/injury and odds information on July 4, 2026 \u2014 meaning the problem appears to be a local ingestion/parse/watchlist gating issue in the snapshot rather than an absolute absence of upstream data. However, sportsbooks and league sites also show active offseason and summer-league activity (roster moves, schedules, and live odds), so the snapshot\u2019s statement that no slates/lines were available is contradicted by live public sources.",
+  "bottom_line": "Public sources show the upstream data the model depends on (official NBA injury/transaction pages and sportsbook odds/schedules) were available on July 4, 2026. The snapshot\u2019s 'no playable top plays' outcome therefore most likely stems from local ingestion/parse failures, missing roster verification feed, or the snapshot being placed into watchlist-only health-gate mode \u2014 not from an absolute absence of public injury reports or market lines. Evidence is mixed: authoritative feeds exist (ESPN/Rotowire, nba.com) and sportsbooks publish odds (DraftKings), so re-running the model after fixing the injury-parsing and roster verification ingestion (and confirming access to sportsbook/slate endpoints) is recommended. If you want, I can (1) fetch the specific injury/inactive status for any player(s) you care about for July 4\u20135, 2026, or (2) run a targeted check of the model\u2019s data endpoints (injury API, roster feed, and sportsbook feed) to identify which ingestion step failed.",
+  "refuting_facts": [
+    {
+      "fact": "Major sportsbooks (e.g., DraftKings Sportsbook) are publishing NBA odds and game lines (spreads/totals) publicly, contradicting the snapshot claim that slate spreads/totals were unavailable.",
+      "source_title": "NBA Betting Odds & Lines | DraftKings Sportsbook",
+      "source_url": "https://sportsbook.draftkings.com/leagues/basketball/nba/"
+    },
+    {
+      "fact": "NBA.com publishes schedules and summer-league schedules (July 9\u201319, 2026) and has published injury/transaction documents (injury report PDFs are accessible on nba.com), which indicates upstream schedule/injury documents were present on league sites despite the snapshot's parse failure.",
+      "source_title": "2026 NBA Summer League: What to watch and key dates | NBA.com",
+      "source_url": "https://www.nba.com/news/2026-nba-summer-league-what-to-watch-key-dates"
+    }
+  ],
+  "supporting_facts": [
+    {
+      "fact": "ESPN maintains a continuously updated NBA injuries page (data provided by Rotowire), indicating that an authoritative injury feed exists and is updated independently of the snapshot.",
+      "source_title": "NBA Injury Status - ESPN",
+      "source_url": "https://www.espn.com/nba/injuries"
+    },
+    {
+      "fact": "The NBA's official site has active offseason and transaction pages updated on July 4, 2026, showing broad roster movement across teams \u2014 supporting the model\u2019s need for roster verification to correctly adjust player-prop projections.",
+      "source_title": "NBA Offseason: Every free agency deal, extension & trade for all 30 teams | NBA.com",
+      "source_url": "https://www.nba.com/news/nba-offseason-deals-2026"
+    }
+  ]
+}

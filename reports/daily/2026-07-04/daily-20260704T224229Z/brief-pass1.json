@@ -1,0 +1,23 @@
+{
+  "confidence_notes": [
+    "No candidate or eligible lines present in summary; no edges computed.",
+    "Because injury and roster sources are missing, do not rely on this snapshot for execution.",
+    "Generated snapshot labeled modeled_with_gates and watchlist-only\u2014intended for review, not wagering."
+  ],
+  "data_quality_flags": [
+    "Official NBA injury report data was not cleanly parsed.",
+    "Roster verification feed was unavailable.",
+    "Slate spreads/totals were unavailable in this snapshot.",
+    "Health gates triggered watchlist-only mode for this snapshot.",
+    "Minutes/usage projection uses deterministic core rules, not learned distributions (limits uncertainty modeling).",
+    "SGP/SGPx correlation uses deterministic haircut rules (core model)."
+  ],
+  "slate_summary": "No playable top plays were generated for this snapshot due to missing data and watchlist-only health gates.",
+  "top_plays_explained": [],
+  "watchouts": [
+    "Official injury report data missing or failed parse, so player availability may be incorrect.",
+    "Roster verification feed unavailable; lineup and depth information absent.",
+    "Slate spreads/totals were unavailable, so market context for pricing is missing.",
+    "Health gates placed snapshot in watchlist-only mode; do not treat this as actionable betting advice."
+  ]
+}
